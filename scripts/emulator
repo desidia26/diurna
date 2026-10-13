@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Start the emulator, wait for it to boot, and unlock it.
+#   scripts/emulator              window you can click around in
+#   scripts/emulator --headless   no window (tests, screenshots)
+#   scripts/emulator --stop       shut it down
+source "$(dirname "$0")/_lib.sh"
+
+case "${1:-}" in
+  --stop)
+    serial="$("$ADB" devices | awk '/^emulator-/ {print $1; exit}')"
+    [[ -n "$serial" ]] || { echo "no emulator running"; exit 0; }
+    "$ADB" -s "$serial" emu kill
+    exit 0 ;;
+  --headless) flags=(-no-window -no-audio -no-boot-anim) ;;
+  "") flags=() ;;
+  *) die "usage: scripts/emulator [--headless|--stop]" ;;
+esac
+
+if "$ADB" devices | grep -q '^emulator-'; then
+  echo "emulator already running"
+else
+  log="${TMPDIR:-/tmp}/daybook-emulator.log"
+  nohup "$EMULATOR" -avd "$AVD" -no-snapshot-save "${flags[@]}" >"$log" 2>&1 &
+  echo "starting $AVD (log: $log)"
+fi
+
+serial=""
+for _ in $(seq 1 60); do
+  serial="$("$ADB" devices | awk '/^emulator-/ && $2=="device" {print $1; exit}')"
+  [[ -n "$serial" ]] && break
+  sleep 2
+done
+[[ -n "$serial" ]] || die "emulator didn't appear; see the log"
+
+for _ in $(seq 1 90); do
+  [[ "$("$ADB" -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]] && break
+  sleep 2
+done
+"$ADB" -s "$serial" shell input keyevent KEYCODE_WAKEUP
+"$ADB" -s "$serial" shell wm dismiss-keyguard
+echo "ready: $serial"

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Screenshots into ~/Downloads.
+#   scripts/screenshot          capture what's on the device screen right now
+#   scripts/screenshot --last   copy the newest screenshot you took on the phone
+source "$(dirname "$0")/_lib.sh"
+
+out="$HOME/Downloads"
+mkdir -p "$out"
+pick_device
+
+if [[ "${1:-}" == --last ]]; then
+  for dir in /sdcard/Pictures/Screenshots /sdcard/DCIM/Screenshots; do
+    name="$(adb shell "ls -t $dir 2>/dev/null | head -1" | tr -d '\r')"
+    if [[ -n "$name" ]]; then
+      adb pull "$dir/$name" "$out/" >/dev/null
+      echo "$out/$name"
+      exit 0
+    fi
+  done
+  die "no screenshots found on the device"
+fi
+
+file="$out/daybook-$(date +%Y%m%d-%H%M%S).png"
+adb exec-out screencap -p >"$file"
+echo "$file"

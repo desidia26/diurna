@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Run tests and print pass/fail counts.
+#   scripts/test          unit tests, then device tests if a device is connected
+#   scripts/test unit     alarm rules only (JVM, no device)
+#   scripts/test device   database / repository / lock-screen tests (emulator only)
+#
+# Device tests always run on the emulator, never the phone: Gradle uninstalls the app when they
+# finish, which deletes all of Daybook's data on that device.
+source "$(dirname "$0")/_lib.sh"
+
+mode="${1:-all}"
+
+count() { # prints "<tests> tests, <failures> failed" summed over JUnit XML files
+  find "$1" -name '*.xml' -print0 2>/dev/null | xargs -0 -r cat \
+    | grep -o 'tests="[0-9]*"[^>]*failures="[0-9]*"' \
+    | awk -F'"' '{t+=$2; f+=$(NF-1)} END {printf "%d tests, %d failed\n", t, f}'
+}
+
+if [[ "$mode" == all || "$mode" == unit ]]; then
+  rm -rf "$ROOT/app/build/test-results/testDebugUnitTest"
+  status=0; gradle testDebugUnitTest || status=$?
+  echo "unit:   $(count "$ROOT/app/build/test-results/testDebugUnitTest")"
+  [[ $status -eq 0 ]] || die "unit tests failed; report: app/build/reports/tests/testDebugUnitTest/index.html"
+fi
+
+if [[ "$mode" == all || "$mode" == device ]]; then
+  if [[ "$mode" == all ]] && ! "$ADB" devices | grep -q '^emulator-.*device$'; then
+    echo "device: skipped (no emulator running; start one with scripts/emulator --headless)"
+    exit 0
+  fi
+  pick_device emulator
+  rm -rf "$ROOT/app/build/outputs/androidTest-results"
+  status=0; gradle connectedDebugAndroidTest || status=$?
+  echo "device: $(count "$ROOT/app/build/outputs/androidTest-results")"
+  [[ $status -eq 0 ]] || die "device tests failed; report: app/build/reports/androidTests/connected/debug/index.html"
+fi

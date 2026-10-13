@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Build, install and open Daybook. Prefers the phone over the emulator.
+#   scripts/install               install and launch
+#   scripts/install --no-launch   install only
+source "$(dirname "$0")/_lib.sh"
+
+pick_device
+gradle installDebug
+if [[ "${1:-}" != --no-launch ]]; then
+  adb shell am start -n "$PKG/.MainActivity" >/dev/null
+  echo "launched"
+fi

@@ -1,0 +1,194 @@
+package app.daybook.data
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.daybook.domain.AlarmRules
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class DayRepositoryTest {
+    private val t = TestDb()
+    private val mon = t.mon
+    private val tue = mon.plusDays(1)
+    private val days = t.days
+
+    @After fun tearDown() = t.close()
+
+    private suspend fun workout(date: java.time.LocalDate) = days.observeWorkout(date).first()!!
+    private fun WorkoutWithExercises.ex(name: String) = exercises.first { it.exercise.name.equals(name, ignoreCase = true) }
+
+    // ---- Workouts ----
+
+    @Test fun lastTimeUsesMostRecentFilledSession() = runTest {
+        val push = t.template("Push A", "Bench press", "Dips")
+        val lastWeek = mon.minusDays(7)
+        days.startWorkout(lastWeek, push)
+        t.fill(lastWeek, "Bench press", 185.0, 8, 8, 6)
+
+        days.startWorkout(mon, push)
+        val bench = workout(mon).ex("Bench press")
+        val last = days.lastTime(bench.exercise.id, mon)!!
+        assertEquals(lastWeek, last.date)
+        assertEquals(listOf(8, 8, 6), last.sets.map { it.reps })
+        assertEquals("blank rows match last time's set count", 3, bench.sets.size)
+        assertNull("never filled in, so no last time", days.lastTime(workout(mon).ex("Dips").exercise.id, mon))
+    }
+
+    @Test fun lastTimeSkipsSessionsWithNothingFilledIn() = runTest {
+        val push = t.template("Push A", "Bench press")
+        days.startWorkout(mon.minusDays(14), push)
+        t.fill(mon.minusDays(14), "Bench press", 175.0, 8, 8, 8)
+        days.startWorkout(mon.minusDays(7), push) // started, never filled
+
+        days.startWorkout(mon, push)
+        assertEquals(mon.minusDays(14), days.lastTime(workout(mon).ex("Bench press").exercise.id, mon)!!.date)
+    }
+
+    @Test fun neverDoneExerciseGetsThreeBlankSets() = runTest {
+        days.startWorkout(mon, t.template("Legs", "Squat"))
+        val squat = workout(mon).ex("Squat")
+        assertEquals(3, squat.sets.size)
+        assertTrue(squat.sets.all { it.weight == null && it.reps == null })
+    }
+
+    @Test fun addSetCopiesTheSetAbove() = runTest {
+        days.startWorkout(mon, t.template("Push A", "Bench press"))
+        t.fill(mon, "Bench press", 185.0, 8, 8, 6)
+        days.addSet(workout(mon).ex("Bench press").logged.id)
+        val sets = workout(mon).ex("Bench press").sets.sortedBy { it.position }
+        assertEquals(4, sets.size)
+        assertEquals(185.0, sets.last().weight)
+        assertEquals(6, sets.last().reps)
+    }
+
+    @Test fun sameAsLastReplacesSetsWithLastTimesNumbers() = runTest {
+        val push = t.template("Push A", "Bench press")
+        days.startWorkout(mon.minusDays(7), push)
+        t.fill(mon.minusDays(7), "Bench press", 185.0, 8, 8, 6)
+        days.startWorkout(mon, push)
+        val bench = workout(mon).ex("Bench press")
+        days.useLast(bench.logged.id, bench.exercise.id, mon)
+        val sets = workout(mon).ex("Bench press").sets.sortedBy { it.position }
+        assertEquals(listOf(8, 8, 6), sets.map { it.reps })
+        assertTrue(sets.all { it.weight == 185.0 })
+    }
+
+    @Test fun deletingLastSetRemovesTheExercise() = runTest {
+        days.startWorkout(mon, t.template("Push A", "Bench press", "Dips"))
+        val dips = workout(mon).ex("Dips")
+        dips.sets.forEach { days.deleteSet(it.id, dips.logged.id) }
+        assertEquals(listOf("Bench press"), workout(mon).exercises.map { it.exercise.name })
+    }
+
+    @Test fun removingWorkoutCascadesToSets() = runTest {
+        days.startWorkout(mon, t.template("Push A", "Bench press"))
+        days.removeWorkout(mon)
+        assertNull(days.observeWorkout(mon).first())
+        assertEquals(0, t.db.query("SELECT * FROM exercise_set", null).use { it.count })
+    }
+
+    @Test fun blankWorkoutTakesExercisesAsYouGo() = runTest {
+        days.startBlankWorkout(mon)
+        assertEquals("Workout", workout(mon).workout.name)
+        assertTrue(workout(mon).exercises.isEmpty())
+        days.addExercise(mon, "  Farmer carry ")
+        assertEquals(listOf("Farmer carry"), workout(mon).exercises.map { it.exercise.name })
+    }
+
+    @Test fun exerciseNamesAreCaseInsensitive() = runTest {
+        val push = t.template("Push A", "Bench press")
+        days.startWorkout(mon.minusDays(7), push)
+        t.fill(mon.minusDays(7), "Bench press", 185.0, 8, 8, 8)
+
+        days.startBlankWorkout(mon)
+        days.addExercise(mon, "bench PRESS")
+        val added = workout(mon).ex("bench press")
+        assertEquals("same catalog row as the template's", "Bench press", added.exercise.name)
+        assertEquals(mon.minusDays(7), days.lastTime(added.exercise.id, mon)?.date)
+    }
+
+    // ---- Alarm and morning ----
+
+    @Test fun overrideRefusedOnceLocked() = runTest {
+        assertTrue(days.setAlarmOverride(tue, AlarmRules.OFF))
+        t.now = mon.atTime(22, 1)
+        assertFalse(days.setAlarmOverride(tue, null))
+        assertEquals(AlarmRules.OFF, days.effectiveAlarm(tue))
+    }
+
+    @Test fun overrideMatchingRoutineIsStoredAsNoOverride() = runTest {
+        days.setAlarmOverride(tue, "05:00")
+        days.setAlarmOverride(tue, AppDatabase.DEFAULT_ALARM)
+        assertNull(t.db.dayDao().get(tue.toString())?.alarmOverride)
+    }
+
+    @Test fun routineEditAfterLockKeepsArmedTime() = runTest {
+        days.markScheduled(tue, "06:30")
+        t.now = mon.atTime(22, 30)
+        t.routine.setAlarm(tue.dayOfWeek.value, "08:00")
+        assertEquals("06:30", days.effectiveAlarm(tue))
+        assertEquals("next week's Tuesday follows the new routine", "08:00", days.effectiveAlarm(tue.plusDays(7)))
+    }
+
+    @Test fun routineEditAfterLockFreezesEvenIfNothingWasArmed() = runTest {
+        // Porch code not confirmed yet, so the scheduler never armed Tuesday.
+        t.now = mon.atTime(23, 0)
+        t.routine.setAlarm(tue.dayOfWeek.value, "09:00")
+        assertEquals(AppDatabase.DEFAULT_ALARM, days.effectiveAlarm(tue))
+    }
+
+    @Test fun markScheduledOverwritesOnlyWhileUnlocked() = runTest {
+        days.markScheduled(tue, "06:30")
+        days.markScheduled(tue, "07:00")
+        assertEquals("07:00", t.db.dayDao().get(tue.toString())?.scheduledAlarm)
+        t.now = mon.atTime(22, 0)
+        days.markScheduled(tue, "08:00")
+        assertEquals("07:00", t.db.dayDao().get(tue.toString())?.scheduledAlarm)
+    }
+
+    @Test fun scannedDayTellsSchedulerToSkipIt() = runTest {
+        assertFalse(days.alarmInputs(mon).scanned)
+        days.recordMorning(mon, "06:02", "scan")
+        assertTrue(days.alarmInputs(mon).scanned)
+        days.clearMorning(mon)
+        assertFalse(days.alarmInputs(mon).scanned)
+    }
+
+    @Test fun alarmChangesNotifyTheScheduler() = runTest {
+        var calls = 0
+        days.onAlarmInputsChanged = { calls++ }
+        days.setAlarmOverride(tue, "05:00")
+        days.recordMorning(mon, "06:00", "scan")
+        t.routine.setAlarm(3, "07:00")
+        assertEquals(3, calls)
+    }
+
+    // ---- Food and week ----
+
+    @Test fun foodTimeIsNowForTodayAndNoonWhenBackfilling() = runTest {
+        t.now = mon.atTime(13, 45)
+        t.food.add(mon, "  burrito bowl ")
+        t.food.add(mon.minusDays(2), "pizza")
+        assertEquals("13:45", t.food.observe(mon).first().single().time)
+        assertEquals("burrito bowl", t.food.observe(mon).first().single().text)
+        assertEquals("12:00", t.food.observe(mon.minusDays(2)).first().single().time)
+    }
+
+    @Test fun weekRowsCoverSevenDaysWithCounts() = runTest {
+        t.food.add(mon, "eggs")
+        t.food.add(mon, "coffee")
+        days.startWorkout(mon.plusDays(2), t.template("Pull A", "Row"))
+        val week = days.observeWeek(mon).first()
+        assertEquals(7, week.size)
+        assertEquals(2, week[0].foodCount)
+        assertEquals("Pull A", week[2].workoutName)
+        assertNull(week[1].workoutName)
+    }
+}

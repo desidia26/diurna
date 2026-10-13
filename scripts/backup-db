@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Copy Daybook's database off the device into backups/<timestamp>/ (git-ignored).
+# Works on debug builds without root. Open the result with: sqlite3 backups/<ts>/daybook.db
+source "$(dirname "$0")/_lib.sh"
+
+pick_device
+dest="$ROOT/backups/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$dest"
+
+# Room keeps recent writes in the -wal file; copy all three so nothing is missing.
+for f in daybook.db daybook.db-wal daybook.db-shm; do
+  if adb shell run-as "$PKG" test -f "databases/$f"; then
+    adb exec-out run-as "$PKG" cat "databases/$f" >"$dest/$f"
+  fi
+done
+[[ -s "$dest/daybook.db" ]] || die "no database found; has the app been opened on this device?"
+
+echo "$dest"
+if command -v sqlite3 >/dev/null; then
+  sqlite3 "$dest/daybook.db" "SELECT 'days: '||COUNT(*) FROM day; SELECT 'workouts: '||COUNT(*) FROM day_workout; SELECT 'food entries: '||COUNT(*) FROM food_entry;"
+fi
