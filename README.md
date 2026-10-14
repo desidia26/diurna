@@ -54,6 +54,8 @@ Requires JDK 17 and the Android SDK at `~/Android/Sdk` (platform 36). Day-to-day
 | `scripts/alarm-check` | Show the armed alarm and permissions (`--doze` or `--reboot` to stress-test it) |
 | `LIVE_API=1 ./gradlew testDebugUnitTest --tests '*LiveApiErrorTest*'` | Check a real API error end to end, using a deliberately invalid key (free) |
 
+**Wireless:** the phone is paired for wireless debugging, so the scripts work over home Wi-Fi without a cable. Turn on Developer options → Wireless debugging (or its quick settings tile) and `adb` reconnects on its own; if it doesn't, run `adb connect <IP:port>` with the address shown on that screen. Keep it allowed on the home network only, and off when not in use. Revoking "USB debugging authorizations" in Developer options un-pairs every computer.
+
 **Device tests never run on the phone.** Gradle uninstalls the app after them, which deletes all of Daybook's data, so `scripts/test` refuses anything but the emulator. Run `./gradlew connectedDebugAndroidTest` by hand only if you know which device it will hit.
 
 First run on a phone: open **Setup**, clear the permission checklist, print the porch code and scan it once to arm alarms, and try **Test alarm in 1 minute**.
