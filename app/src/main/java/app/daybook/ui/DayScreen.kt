@@ -1,6 +1,13 @@
 package app.daybook.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import app.daybook.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.OutlinedIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.BorderStroke
+import androidx.annotation.DrawableRes
 import androidx.compose.ui.focus.onFocusChanged
 import app.daybook.domain.suggest
 import app.daybook.data.MealEntity
@@ -89,12 +96,20 @@ fun DayScreen(vm: DayViewModel, contentPadding: PaddingValues) {
 @Composable
 fun DateHeader(eyebrow: String, title: String, onPrev: () -> Unit, onNext: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedButton(onClick = onPrev) { Text("‹") }
+        NavArrow(R.drawable.ic_chevron_left, "Previous", onPrev)
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(eyebrow.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         }
-        OutlinedButton(onClick = onNext) { Text("›") }
+        NavArrow(R.drawable.ic_chevron_right, "Next", onNext)
+    }
+}
+
+/** Round, roomy arrow button for stepping between days or weeks. */
+@Composable
+private fun NavArrow(@DrawableRes icon: Int, description: String, onClick: () -> Unit) {
+    OutlinedIconButton(onClick = onClick, modifier = Modifier.size(52.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+        Icon(painterResource(icon), contentDescription = description, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
     }
 }
 

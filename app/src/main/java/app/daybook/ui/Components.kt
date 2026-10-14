@@ -2,6 +2,12 @@ package app.daybook.ui
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
+import app.daybook.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -86,9 +92,11 @@ fun SectionCard(
             val header = if (fold != null) Modifier.clickable(onClickLabel = if (fold.collapsed) "Expand" else "Collapse", onClick = fold.onToggle) else Modifier
             Row(header.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (fold != null) {
-                    Text(
-                        if (fold.collapsed) "▸" else "▾",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium,
+                    // One chevron that turns: down when open, right when folded.
+                    val angle by animateFloatAsState(if (fold.collapsed) -90f else 0f, label = "fold")
+                    Icon(
+                        painterResource(R.drawable.ic_chevron_down), contentDescription = null,
+                        Modifier.size(26.dp).rotate(angle), tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)

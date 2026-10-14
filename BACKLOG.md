@@ -82,3 +82,4 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | — | Saved meals (Setup → Library → Meals): exact numbers, tap-to-log chips in the food box, servings, "Save as meal" from AI entries. Migration v3 with test | 2026-10-13 |
 | — | Exercise library (Setup → Library → Exercises): add, rename (history follows), hide, delete if unused | 2026-10-13 |
 | — | Food box suggestions stay visible above the keyboard (shared keep-visible-while-typing) | 2026-10-13 |
+| — | Bigger, rounded chevron icons for date arrows, collapse arrows and the Library back button (were small text glyphs) | 2026-10-14 |

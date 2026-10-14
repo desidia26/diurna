@@ -1,6 +1,10 @@
 package app.daybook.ui
 
 import androidx.compose.foundation.clickable
+import app.daybook.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,7 +59,10 @@ fun LibraryCard(mealCount: Int, exerciseCount: Int, onMeals: () -> Unit, onExerc
 @Composable
 private fun PageHeader(title: String, onBack: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onBack) { Text("‹ Setup") }
+        OutlinedButton(onClick = onBack, contentPadding = PaddingValues(start = 10.dp, end = 16.dp)) {
+            Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = null, Modifier.size(22.dp))
+            Text("Setup")
+        }
         Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
     }
 }
