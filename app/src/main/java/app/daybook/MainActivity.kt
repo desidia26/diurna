@@ -3,6 +3,9 @@ package app.daybook
 import android.content.Intent
 import android.os.Bundle
 import app.daybook.data.Backups
+import app.daybook.checkin.CheckInReminder
+import androidx.compose.runtime.LaunchedEffect
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 import app.daybook.alarm.AlarmActivity
 import app.daybook.alarm.AlarmService
@@ -52,6 +55,17 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         backupIfAsked(intent)
+        openCheckInIfAsked(intent)
+    }
+
+    /** Bumped when the check-in notification asks for the Day tab. */
+    private var showDayRequests by mutableStateOf(0)
+
+    /** The check-in notification opens the day it was about, on the Day tab. */
+    private fun openCheckInIfAsked(intent: Intent?) {
+        val date = intent?.getStringExtra(CheckInReminder.EXTRA_DATE) ?: return
+        container.selectedDate.goTo(LocalDate.parse(date))
+        showDayRequests++
     }
 
     /** scripts/backup-db launches the app with this extra to get a fresh backup to pull. */
@@ -78,6 +92,7 @@ class MainActivity : ComponentActivity() {
         )
         val c = container
         backupIfAsked(intent)
+        if (savedInstanceState == null) openCheckInIfAsked(intent)
         setContent {
             DaybookTheme {
                 val dayVm = containerViewModel(c) { DayViewModel(it) }
@@ -86,6 +101,7 @@ class MainActivity : ComponentActivity() {
                 val setupVm = containerViewModel(c) { SetupViewModel(it) }
                 val libraryVm = containerViewModel(c) { LibraryViewModel(it) }
                 var tab by rememberSaveable { mutableStateOf(Tab.Day) }
+                LaunchedEffect(showDayRequests) { if (showDayRequests > 0) tab = Tab.Day }
                 Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
                     bottomBar = {

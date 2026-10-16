@@ -119,4 +119,20 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v4ToV5AddsRatingsAndKeepsDays() {
+        helper.createDatabase(dbName + "-5", 4).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized, scanned_at, steps) VALUES ('2026-10-14', 1, '06:02', 9120)")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-5", 5, true)
+        db.query("SELECT scanned_at, steps, finalized, mood, energy FROM day WHERE date = '2026-10-14'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("06:02", it.getString(0))
+            assertEquals(9120L, it.getLong(1))
+            assertEquals(1, it.getInt(2))
+            assertTrue("no mood yet", it.isNull(3))
+            assertTrue("no energy yet", it.isNull(4))
+        }
+        db.close()
+    }
 }

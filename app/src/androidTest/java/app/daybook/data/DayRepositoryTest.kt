@@ -24,6 +24,25 @@ class DayRepositoryTest {
     private suspend fun workout(date: java.time.LocalDate) = days.observeWorkout(date).first()!!
     private fun WorkoutWithExercises.ex(name: String) = exercises.first { it.exercise.name.equals(name, ignoreCase = true) }
 
+    // ---- Check-in ----
+
+    @Test fun ratingsSaveClearAndStayEditableOnFinalizedDays() = runTest {
+        val changed = mutableListOf<java.time.LocalDate>()
+        days.onRatingChanged = { changed += it }
+        days.setMood(mon, 4)
+        assertFalse("energy still missing", days.isRated(mon))
+        days.setEnergy(mon, 9)
+        assertTrue(days.isRated(mon))
+        assertEquals("clamped to the scale", 5, days.observeDay(mon).first()!!.energy)
+
+        t.db.dayDao().finalize(mon.toString(), "06:00", null, null, null, null, null, null)
+        days.setMood(mon, null)
+        val d = days.observeDay(mon).first()!!
+        assertNull(d.mood)
+        assertTrue("finalizing doesn't touch ratings", d.finalized && d.energy == 5)
+        assertEquals(listOf(mon, mon, mon), changed)
+    }
+
     // ---- Workouts ----
 
     @Test fun lastTimeUsesMostRecentFilledSession() = runTest {

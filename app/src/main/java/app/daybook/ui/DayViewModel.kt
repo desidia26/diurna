@@ -110,6 +110,10 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
     fun setBodyWeight(lb: Double?) = io { c.nutrition.setBodyWeight(date, lb) }
     fun clearMorning() = io { c.days.clearMorning(date) }
 
+    // Check-in
+    fun setMood(value: Int?) = io { c.days.setMood(date, value) }
+    fun setEnergy(value: Int?) = io { c.days.setEnergy(date, value) }
+
     // Workout
     fun startWorkout(templateId: Long) = io { c.days.startWorkout(date, templateId) }
     fun startBlankWorkout() = io { c.days.startBlankWorkout(date) }

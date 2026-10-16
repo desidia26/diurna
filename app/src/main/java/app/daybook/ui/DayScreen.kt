@@ -61,6 +61,10 @@ import app.daybook.alarm.ArmedState
 import app.daybook.data.ExerciseSetEntity
 import app.daybook.domain.AlarmRules
 import app.daybook.domain.DayText
+import app.daybook.domain.Ratings
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.height
 import java.time.Instant
 import java.time.ZoneId
 
@@ -90,6 +94,7 @@ fun DayScreen(vm: DayViewModel, contentPadding: PaddingValues) {
         item { MorningCard(s, vm) }
         item { WorkoutCard(s, vm) }
         item { FoodCard(s, vm) }
+        if (s.date <= s.today) item { CheckInCard(s, vm) }
     }
 }
 
@@ -345,4 +350,47 @@ private fun WeightRow(s: DayUi, vm: DayViewModel) {
 fun rememberFold(vm: DayViewModel, section: String, summary: String): Fold {
     val folded by vm.folded.collectAsStateWithLifecycle()
     return Fold(section in folded, summary) { vm.toggleFold(section) }
+}
+
+@Composable
+private fun CheckInCard(s: DayUi, vm: DayViewModel) {
+    val mood = s.day?.mood
+    val energy = s.day?.energy
+    val rated = mood != null && energy != null
+    SectionCard(
+        "Check-in",
+        chip = { if (rated) Chip("Done", Tone.Good) },
+        fold = rememberFold(vm, "checkin", Ratings.summary(mood, energy)),
+    ) {
+        RatingRow("Mood", mood, Ratings.moodWords, vm::setMood)
+        RatingRow("Energy", energy, Ratings.energyWords, vm::setEnergy)
+    }
+}
+
+/** Five tap targets; tapping the chosen one again clears it. */
+@Composable
+private fun RatingRow(label: String, value: Int?, words: List<String>, onSet: (Int?) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(Ratings.word(words, value) ?: "—", style = MaterialTheme.typography.bodyMedium)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            (1..5).forEach { n ->
+                val selected = n == value
+                Surface(
+                    onClick = { onSet(if (selected) null else n) },
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("$n", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
 }

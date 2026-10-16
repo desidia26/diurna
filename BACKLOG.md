@@ -87,3 +87,4 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | F6 | Steps counted with the phone's own step sensor: sampled every 15 minutes, at 23:59 and at boot; reboot- and midnight-safe (`StepMath`) | 2026-10-16 |
 | — | Lock screen flashed every few seconds: redraw read steps via a sensor look, whose writes triggered another redraw. Redraws now use the saved count, settings flows only emit real changes, and identical pictures are never re-set | 2026-10-16 |
 | — | Self-backups: the app writes a consistent copy of its database and settings daily (keeps 14) and on request to its shared-storage folder; scripts/backup-db pulls those, so it works with release builds too. Setup → Backups shows the last one and has "Back up now" | 2026-10-16 |
+| — | Evening check-in: mood and energy (1–5, a word per step) on each day, editable any time; a 9pm reminder that skips rated days and clears itself once both are in. Database v5 | 2026-10-16 |

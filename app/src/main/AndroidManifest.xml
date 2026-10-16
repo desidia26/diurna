@@ -65,6 +65,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".checkin.CheckInReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".alarm.BootReceiver"
             android:exported="true">
             <intent-filter>

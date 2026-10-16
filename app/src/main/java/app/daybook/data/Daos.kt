@@ -35,6 +35,12 @@ interface DayDao {
     @Query("UPDATE day SET steps = COALESCE(steps, 0) + :add WHERE date = :date")
     suspend fun addSteps(date: String, add: Long)
 
+    @Query("UPDATE day SET mood = :value WHERE date = :date")
+    suspend fun setMood(date: String, value: Int?)
+
+    @Query("UPDATE day SET energy = :value WHERE date = :date")
+    suspend fun setEnergy(date: String, value: Int?)
+
     @Query("UPDATE day SET body_weight = :lb WHERE date = :date")
     suspend fun setBodyWeight(date: String, lb: Double?)
 

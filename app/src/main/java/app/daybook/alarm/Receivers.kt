@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import app.daybook.container
+import app.daybook.checkin.CheckInReminder
 import app.daybook.steps.StepSampling
 import kotlinx.coroutines.launch
 
@@ -38,6 +39,7 @@ private fun BroadcastReceiver.rescheduleAsync(context: Context, alsoWallpaper: B
                 // A reboot resets the step sensor; look now so the new baseline is caught early.
                 c.stepCounter.sample()
                 StepSampling.scheduleBeforeMidnight(context)
+                CheckInReminder.schedule(context)
                 c.lockWallpaper.refresh()
             }
         } finally {

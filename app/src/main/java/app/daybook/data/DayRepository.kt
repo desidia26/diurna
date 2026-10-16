@@ -31,6 +31,9 @@ class DayRepository(
     private val exercises = db.exerciseDao()
     private val food = db.foodDao()
 
+    /** Called after a day's mood or energy changes. */
+    var onRatingChanged: suspend (LocalDate) -> Unit = {}
+
     /** Called after anything that can change which alarm should be armed. */
     var onAlarmInputsChanged: suspend () -> Unit = {}
 
@@ -118,6 +121,24 @@ class DayRepository(
         days.setMorning(date.key(), null, null)
         onAlarmInputsChanged()
     }
+
+    // ---- Check-in ----
+
+    /** 1..5, or null to clear. */
+    suspend fun setMood(date: LocalDate, value: Int?) {
+        ensureDay(date)
+        days.setMood(date.key(), value?.coerceIn(1, 5))
+        onRatingChanged(date)
+    }
+
+    suspend fun setEnergy(date: LocalDate, value: Int?) {
+        ensureDay(date)
+        days.setEnergy(date.key(), value?.coerceIn(1, 5))
+        onRatingChanged(date)
+    }
+
+    suspend fun isRated(date: LocalDate): Boolean =
+        days.get(date.key()).let { it?.mood != null && it.energy != null }
 
     // ---- Workout ----
 

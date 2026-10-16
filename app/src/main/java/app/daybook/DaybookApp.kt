@@ -8,6 +8,7 @@ import app.daybook.ai.EstimateRunner
 import app.daybook.ai.EstimateWorker
 import app.daybook.ai.NetworkMonitor
 import app.daybook.alarm.AlarmScheduler
+import app.daybook.checkin.CheckInReminder
 import app.daybook.data.AppDatabase
 import app.daybook.data.Backups
 import app.daybook.data.DayFinalizer
@@ -51,6 +52,7 @@ class AppContainer(context: Context) {
 
     init {
         days.onAlarmInputsChanged = { scheduler.reschedule() }
+        days.onRatingChanged = { if (days.isRated(it)) CheckInReminder.dismiss(context) }
         food.onPendingEstimates = { EstimateWorker.enqueue(context) }
         lockWallpaper.start(appScope)
     }
@@ -68,6 +70,7 @@ class DaybookApp : Application() {
             container.finalizer.catchUp()
             EstimateWorker.enqueue(this@DaybookApp) // anything logged while offline
             StepSampling.schedule(this@DaybookApp)
+            CheckInReminder.schedule(this@DaybookApp)
             container.backups.scheduleDaily()
             container.scheduler.reschedule()
         }

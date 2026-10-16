@@ -88,6 +88,10 @@ data class DayEntity(
     @ColumnInfo(defaultValue = "0") val finalized: Boolean = false,
     /** The day's step count, frozen when the day is finalized. */
     val steps: Long? = null,
+    // Evening check-in, 1 (worst) to 5 (best). Stays editable after the day is finalized:
+    // it's an opinion of the day, not a record of what was planned.
+    val mood: Int? = null,
+    val energy: Int? = null,
 )
 
 @Entity(
