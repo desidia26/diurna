@@ -9,6 +9,7 @@ import app.daybook.ai.EstimateWorker
 import app.daybook.ai.NetworkMonitor
 import app.daybook.alarm.AlarmScheduler
 import app.daybook.data.AppDatabase
+import app.daybook.data.Backups
 import app.daybook.data.DayFinalizer
 import app.daybook.data.DayRepository
 import app.daybook.data.NutritionRepository
@@ -34,6 +35,7 @@ class AppContainer(context: Context) {
     val days = DayRepository(db)
     val food = FoodRepository(db)
     val library = LibraryRepository(db)
+    val backups = Backups(context, db)
     val apiKeys = ApiKeyStore(context)
     val network = NetworkMonitor(context)
     val estimates = EstimateRunner(db, ClaudeFoodEstimator({ apiKeys.get() }))
@@ -66,6 +68,7 @@ class DaybookApp : Application() {
             container.finalizer.catchUp()
             EstimateWorker.enqueue(this@DaybookApp) // anything logged while offline
             StepSampling.schedule(this@DaybookApp)
+            container.backups.scheduleDaily()
             container.scheduler.reschedule()
         }
     }

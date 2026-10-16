@@ -17,7 +17,6 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | # | P | Item | Notes |
 |---|---|---|---|
 | D3 | P1 | Log alarm events: fired at, scanned at, timed out | Tells "rang and ignored" apart from "never rang", and doubles as a reliability record for the phone. |
-| D4 | P2 | Export everything (JSON or CSV) | Data lives only on the phone; uninstalling or losing it loses the history. |
 | D6 | P3 | Units setting (lb/kg) | Weight is assumed lb. |
 
 ## Logging friction
@@ -87,3 +86,4 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | — | Steps groundwork: Morning card row with progress, Week view, lock-screen line (15-minute refresh), goal in Setup (default 10,000), frozen per day; migration v4. Health Connect was tried and removed: nothing on the phone writes steps into it | 2026-10-16 |
 | F6 | Steps counted with the phone's own step sensor: sampled every 15 minutes, at 23:59 and at boot; reboot- and midnight-safe (`StepMath`) | 2026-10-16 |
 | — | Lock screen flashed every few seconds: redraw read steps via a sensor look, whose writes triggered another redraw. Redraws now use the saved count, settings flows only emit real changes, and identical pictures are never re-set | 2026-10-16 |
+| — | Self-backups: the app writes a consistent copy of its database and settings daily (keeps 14) and on request to its shared-storage folder; scripts/backup-db pulls those, so it works with release builds too. Setup → Backups shows the last one and has "Back up now" | 2026-10-16 |

@@ -49,6 +49,10 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
         todaySteps.value = c.steps.stepsOn(java.time.LocalDate.now())
     }
 
+    // Backups
+    val lastBackup = c.backups.last
+    fun backupNow() = io { c.backups.backupNow() }
+
     // Food estimates
     val apiKeyLastFour = c.apiKeys.lastFour
     fun setApiKey(key: String) = io {

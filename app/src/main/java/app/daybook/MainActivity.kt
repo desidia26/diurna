@@ -2,6 +2,8 @@ package app.daybook
 
 import android.content.Intent
 import android.os.Bundle
+import app.daybook.data.Backups
+import kotlinx.coroutines.launch
 import app.daybook.alarm.AlarmActivity
 import app.daybook.alarm.AlarmService
 import androidx.activity.ComponentActivity
@@ -47,6 +49,18 @@ private enum class Tab(val label: String, @DrawableRes val icon: Int) {
 }
 
 class MainActivity : ComponentActivity() {
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        backupIfAsked(intent)
+    }
+
+    /** scripts/backup-db launches the app with this extra to get a fresh backup to pull. */
+    private fun backupIfAsked(intent: Intent?) {
+        if (intent?.getBooleanExtra(Backups.EXTRA_BACKUP, false) == true) {
+            container.appScope.launch { container.backups.backupNow() }
+        }
+    }
+
     /** If the alarm is ringing (say its notification was swiped away), opening the app leads back to it. */
     override fun onResume() {
         super.onResume()
@@ -63,6 +77,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         val c = container
+        backupIfAsked(intent)
         setContent {
             DaybookTheme {
                 val dayVm = containerViewModel(c) { DayViewModel(it) }

@@ -114,6 +114,7 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
             LibraryCard(meals.size, catalog.size, onMeals = { onOpen("meals") }, onExercises = { onOpen("exercises") })
         }
         item { StepsCard(vm) }
+        item { BackupsCard(vm) }
         item { TargetsCard(vm) }
         item { FoodEstimatesCard(vm) }
         item {

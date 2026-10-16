@@ -1,20 +1,56 @@
 #!/usr/bin/env bash
-# Copy Daybook's database off the device into backups/<timestamp>/ (git-ignored).
-# Works on debug builds without root. Open the result with: sqlite3 backups/<ts>/daybook.db
+# Copy Daybook's data off the device into backups/<timestamp>/ (git-ignored).
+#
+# Asks the app for a fresh backup (it opens briefly to do so), then pulls it from the app's folder
+# in shared storage. That works for release builds too. Builds older than the self-backup feature
+# fall back to reading the database directly, which only debug builds allow.
+# Open the result with: sqlite3 backups/<ts>/daybook.db
 source "$(dirname "$0")/_lib.sh"
 
 pick_device
+remote="/sdcard/Android/data/$PKG/files/backups"
 dest="$ROOT/backups/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$dest"
 
-# Room keeps recent writes in the -wal file; copy all three so nothing is missing.
-for f in daybook.db daybook.db-wal daybook.db-shm; do
-  if adb shell run-as "$PKG" test -f "databases/$f"; then
-    adb exec-out run-as "$PKG" cat "databases/$f" >"$dest/$f"
-  fi
+# No backups yet makes ls fail; that's an empty answer, not an error.
+newest() { { adb shell "ls $remote/daybook-*.db 2>/dev/null" || true; } | tr -d '\r' | sort | tail -1; }
+
+before="$(newest)"
+# single-top: if the app is already open, hand the request to that screen instead of just showing it.
+adb shell am start --activity-single-top -n "$PKG/.MainActivity" --ez backup true >/dev/null 2>&1 || true
+latest=""
+for _ in $(seq 1 20); do
+  sleep 1
+  latest="$(newest)"
+  [[ -n "$latest" && "$latest" != "$before" ]] && break
 done
-[[ -s "$dest/daybook.db" ]] || die "no database found; has the app been opened on this device?"
 
+mkdir -p "$dest"
+pulled=false
+if [[ -n "$latest" && "$latest" != "$before" ]]; then
+  sleep 1 # let the settings copy land next to it
+  stamp="$(basename "$latest" .db)"; stamp="${stamp#daybook-}"
+  if adb pull "$latest" "$dest/daybook.db" >/dev/null 2>&1; then
+    adb pull "$remote/settings-$stamp.preferences_pb" "$dest/settings.preferences_pb" >/dev/null 2>&1 || true
+    echo "fresh backup from the app ($stamp)"
+    pulled=true
+  fi
+fi
+if $pulled; then
+  :
+elif adb shell run-as "$PKG" true 2>/dev/null; then
+  # Older debug build without self-backup: copy the files directly (all three, WAL included).
+  for f in daybook.db daybook.db-wal daybook.db-shm; do
+    if adb shell run-as "$PKG" test -f "databases/$f"; then
+      adb exec-out run-as "$PKG" cat "databases/$f" >"$dest/$f"
+    fi
+  done
+  echo "read directly (the app's own backup wasn't available; works on debug builds only)"
+else
+  rmdir "$dest" 2>/dev/null
+  die "the app didn't produce a backup within 20s. Is it installed and able to start?"
+fi
+
+[[ -s "$dest/daybook.db" ]] || die "backup is empty"
 echo "$dest"
 if command -v sqlite3 >/dev/null; then
   sqlite3 "$dest/daybook.db" "SELECT 'days: '||COUNT(*) FROM day; SELECT 'workouts: '||COUNT(*) FROM day_workout; SELECT 'food entries: '||COUNT(*) FROM food_entry;"
