@@ -36,11 +36,11 @@ class RoutineRepository(
         routine.setTemplate(weekday, templateId)
     }
 
-    /** Returns false if the name is blank or already taken. */
-    suspend fun addTemplate(name: String): Boolean {
+    /** The new workout's id, or null if the name is blank or already taken. */
+    suspend fun addTemplate(name: String): Long? {
         val trimmed = name.trim()
-        if (trimmed.isEmpty()) return false
-        return routine.insertTemplate(WorkoutTemplateEntity(name = trimmed)) != -1L
+        if (trimmed.isEmpty()) return null
+        return routine.insertTemplate(WorkoutTemplateEntity(name = trimmed)).takeIf { it != -1L }
     }
 
     suspend fun deleteTemplate(id: Long) {

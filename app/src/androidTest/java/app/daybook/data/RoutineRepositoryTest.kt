@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -25,9 +26,9 @@ class RoutineRepositoryTest {
     }
 
     @Test fun templateNamesMustBeNonBlankAndUnique() = runTest {
-        assertTrue(routine.addTemplate("Push A"))
-        assertFalse(routine.addTemplate("Push A"))
-        assertFalse(routine.addTemplate("   "))
+        assertNotNull(routine.addTemplate("Push A"))
+        assertNull("duplicate", routine.addTemplate("Push A"))
+        assertNull("blank", routine.addTemplate("   "))
         assertEquals(1, routine.observeTemplates().first().size)
     }
 
