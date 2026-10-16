@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import app.daybook.domain.Activity
 import app.daybook.domain.Goal
@@ -36,7 +37,7 @@ class SettingsStore(private val context: Context) : StepStateStore {
     val porchConfirmed: Flow<Boolean> = context.dataStore.data.map { it[confirmedKey] ?: false }
 
     private val lockWallpaperKey = booleanPreferencesKey("lock_wallpaper")
-    val lockWallpaper: Flow<Boolean> = context.dataStore.data.map { it[lockWallpaperKey] ?: false }
+    val lockWallpaper: Flow<Boolean> = context.dataStore.data.map { it[lockWallpaperKey] ?: false }.distinctUntilChanged()
 
     suspend fun setLockWallpaper(enabled: Boolean) {
         context.dataStore.edit { it[lockWallpaperKey] = enabled }
@@ -44,7 +45,7 @@ class SettingsStore(private val context: Context) : StepStateStore {
 
     // ---- Steps ----
     private val stepGoalKey = intPreferencesKey("step_goal")
-    val stepGoal: Flow<Int> = context.dataStore.data.map { it[stepGoalKey] ?: 10_000 }
+    val stepGoal: Flow<Int> = context.dataStore.data.map { it[stepGoalKey] ?: 10_000 }.distinctUntilChanged()
 
     suspend fun setStepGoal(goal: Int) {
         context.dataStore.edit { it[stepGoalKey] = goal.coerceIn(1_000, 100_000) }
@@ -93,7 +94,7 @@ class SettingsStore(private val context: Context) : StepStateStore {
                 fatPercent = prefs[P.fatPercent] ?: 25,
             )
         }.getOrNull()
-    }
+    }.distinctUntilChanged() // settings are one file: ignore writes to other keys (e.g. the step sensor state)
 
     /** The profile as entered so far, complete or not, for the Setup form. */
     data class ProfileDraft(
@@ -113,7 +114,7 @@ class SettingsStore(private val context: Context) : StepStateStore {
             proteinPerLb = prefs[P.proteinPerLb],
             fatPercent = prefs[P.fatPercent] ?: 25,
         )
-    }
+    }.distinctUntilChanged()
 
     suspend fun saveProfile(d: ProfileDraft) {
         context.dataStore.edit { prefs ->

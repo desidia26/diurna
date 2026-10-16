@@ -20,6 +20,7 @@ import app.daybook.container
 import app.daybook.data.AppDatabase
 import app.daybook.data.DayRepository
 import app.daybook.data.NutritionRepository
+import app.daybook.data.key
 import app.daybook.data.StepSource
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -59,6 +60,7 @@ class LockWallpaper(
     private val settings: SettingsStore,
 ) {
     private val mutex = Mutex()
+    private var lastDrawn: LockSnapshot? = null
     private val wallpapers = WallpaperManager.getInstance(context)
     private val alarms = context.getSystemService(AlarmManager::class.java)
 
@@ -88,9 +90,16 @@ class LockWallpaper(
             val today = LocalDateTime.now().toLocalDate()
             val snapshot = buildSnapshot(
                 db, days, targets = nutrition.observeTargets(today).first(),
-                steps = steps.stepsOn(today), stepGoal = settings.stepGoal.first(),
+                // The saved count, not a fresh sensor look: looking writes to the database, which
+                // would trigger another redraw. The 15-minute sampler does the looking.
+                steps = db.dayDao().get(today.key())?.steps, stepGoal = settings.stepGoal.first(),
             )
-            wallpapers.setBitmap(draw(snapshot, w, h), null, true, WallpaperManager.FLAG_LOCK)
+            // Setting a wallpaper makes the lock screen flash, so only do it when the picture changes.
+            if (snapshot != lastDrawn) {
+                wallpapers.setBitmap(draw(snapshot, w, h), null, true, WallpaperManager.FLAG_LOCK)
+                lastDrawn = snapshot
+                Log.d("DaybookLock", "lock screen redrawn")
+            }
         } catch (e: Exception) {
             Log.w("Daybook", "Lock wallpaper update failed", e)
         }
@@ -99,6 +108,7 @@ class LockWallpaper(
 
     /** Turning it off hands the lock screen back to the home wallpaper. */
     suspend fun disable() = mutex.withLock {
+        lastDrawn = null
         alarms.cancel(tickIntent())
         WorkManager.getInstance(context).cancelUniqueWork(STEPS_WORK)
         try {
