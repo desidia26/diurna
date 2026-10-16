@@ -24,7 +24,8 @@ echo "at $(git log --oneline -1)"
 
 if ! $skip_tests; then
   step "Tests"
-  scripts/test
+  # Device tests wipe app data, so they must never inherit the phone picked above.
+  env -u ANDROID_SERIAL scripts/test
 fi
 
 step "Build release"
