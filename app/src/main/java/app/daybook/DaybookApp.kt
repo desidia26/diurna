@@ -17,8 +17,10 @@ import app.daybook.data.LibraryRepository
 import app.daybook.ui.SelectedDate
 import app.daybook.data.RoutineRepository
 import app.daybook.data.SettingsStore
-import app.daybook.data.NoSteps
+import app.daybook.data.StepCounter
 import app.daybook.data.StepSource
+import app.daybook.steps.AndroidStepSensor
+import app.daybook.steps.StepSampling
 import app.daybook.wallpaper.LockWallpaper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +39,9 @@ class AppContainer(context: Context) {
     val estimates = EstimateRunner(db, ClaudeFoodEstimator({ apiKeys.get() }))
     val selectedDate = SelectedDate()
     val nutrition = NutritionRepository(db, settings.profile)
-    val steps: StepSource = NoSteps
+    val stepSensor = AndroidStepSensor(context)
+    val stepCounter = StepCounter(db, stepSensor, settings, bootedAt = { AndroidStepSensor.bootedAt() })
+    val steps: StepSource = stepCounter
     val finalizer = DayFinalizer(db, days, nutrition, steps)
     val routine = RoutineRepository(db, days, finalizer)
     val scheduler = AlarmScheduler(context, days, settings)
@@ -61,6 +65,7 @@ class DaybookApp : Application() {
             container.settings.ensureSecret()
             container.finalizer.catchUp()
             EstimateWorker.enqueue(this@DaybookApp) // anything logged while offline
+            StepSampling.schedule(this@DaybookApp)
             container.scheduler.reschedule()
         }
     }

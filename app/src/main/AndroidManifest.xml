@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -57,6 +58,10 @@
 
         <receiver
             android:name=".wallpaper.LockWallpaperTickReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".steps.StepMidnightReceiver"
             android:exported="false" />
 
         <receiver

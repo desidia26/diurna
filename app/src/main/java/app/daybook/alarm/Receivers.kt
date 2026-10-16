@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import app.daybook.container
+import app.daybook.steps.StepSampling
 import kotlinx.coroutines.launch
 
 /** Fired by AlarmManager: start ringing, then arm the following alarm. */
@@ -33,7 +34,12 @@ private fun BroadcastReceiver.rescheduleAsync(context: Context, alsoWallpaper: B
             c.finalizer.catchUp()
             c.scheduler.reschedule()
             // The wallpaper's 10pm/midnight ticks are alarms too, and the date may have changed.
-            if (alsoWallpaper) c.lockWallpaper.refresh()
+            if (alsoWallpaper) {
+                // A reboot resets the step sensor; look now so the new baseline is caught early.
+                c.stepCounter.sample()
+                StepSampling.scheduleBeforeMidnight(context)
+                c.lockWallpaper.refresh()
+            }
         } finally {
             pending.finish()
         }

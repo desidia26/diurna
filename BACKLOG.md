@@ -37,7 +37,6 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | F3 | P3 | Home-screen widget with quick actions | Log food or start today's workout without opening the app. |
 | F4 | P3 | Dark-morning handling | In winter the alarm can go off before sunrise; maybe a separate "outside after sunrise" goal. |
 | F5 | P3 | Progress charts | Per-exercise weight over time, on-time mornings by week. |
-| F6 | P1 | Count steps with the phone's step sensor | Phase 2 of steps: Daybook samples the hardware step counter itself (no other app needed) and plugs in behind `StepSource`. Needs care around reboots and midnight. |
 
 ## Alarm and lock screen
 
@@ -86,3 +85,4 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | — | Bigger, rounded chevron icons for date arrows, collapse arrows and the Library back button (were small text glyphs) | 2026-10-14 |
 | — | Routine: workouts fold to a one-line summary; "New workout" moved to a header button with a name dialog, so exercise boxes are clearly inside their workout | 2026-10-16 |
 | — | Steps groundwork: Morning card row with progress, Week view, lock-screen line (15-minute refresh), goal in Setup (default 10,000), frozen per day; migration v4. Health Connect was tried and removed: nothing on the phone writes steps into it | 2026-10-16 |
+| F6 | Steps counted with the phone's own step sensor: sampled every 15 minutes, at 23:59 and at boot; reboot- and midnight-safe (`StepMath`) | 2026-10-16 |

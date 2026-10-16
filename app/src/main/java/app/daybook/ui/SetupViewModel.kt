@@ -40,6 +40,14 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
     // Steps
     val stepGoal = c.settings.stepGoal.state(10_000)
     fun setStepGoal(goal: Int) = io { c.settings.setStepGoal(goal) }
+    val stepSensorPresent get() = c.stepSensor.present()
+    val stepsPermitted = MutableStateFlow(false)
+    val todaySteps = MutableStateFlow<Long?>(null)
+    /** Re-checks permission and takes a look; run on resume and after the permission prompt. */
+    fun refreshSteps() = io {
+        stepsPermitted.value = c.stepSensor.permitted()
+        todaySteps.value = c.steps.stepsOn(java.time.LocalDate.now())
+    }
 
     // Food estimates
     val apiKeyLastFour = c.apiKeys.lastFour

@@ -31,6 +31,10 @@ interface DayDao {
     @Query("UPDATE day SET scanned_at = :at, morning_source = :source WHERE date = :date")
     suspend fun setMorning(date: String, at: String?, source: String?)
 
+    /** Adds to a day's step total, starting it at 0 if it had none. */
+    @Query("UPDATE day SET steps = COALESCE(steps, 0) + :add WHERE date = :date")
+    suspend fun addSteps(date: String, add: Long)
+
     @Query("UPDATE day SET body_weight = :lb WHERE date = :date")
     suspend fun setBodyWeight(date: String, lb: Double?)
 

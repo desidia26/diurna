@@ -9,8 +9,3 @@ import java.time.LocalDate
 interface StepSource {
     suspend fun stepsOn(date: LocalDate): Long?
 }
-
-/** Placeholder until the phone's step sensor is wired in: no counts yet. */
-object NoSteps : StepSource {
-    override suspend fun stepsOn(date: LocalDate): Long? = null
-}

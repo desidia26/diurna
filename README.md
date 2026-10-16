@@ -26,7 +26,7 @@ Daybook is a personal Android app for one person. It treats a *day* as the basic
 | Lock-screen summary: drawn as a lock-only wallpaper, redrawn on data changes, at 10pm and at midnight | `wallpaper/` |
 | Targets: Mifflin–St Jeor × activity + goal, macros from body weight and fat % | `domain/Targets.kt` |
 | Food estimates: one Claude API call per entry (`claude-haiku-5-5`, structured JSON) when logged or its text changes; retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); API key encrypted with the Android Keystore | `ai/` |
-| Steps: a daily count shown against a goal and frozen per day; the source (the phone's step sensor) plugs in behind `StepSource` | `data/StepSource.kt` |
+| Steps: counted from the phone's hardware step sensor (running total since boot), checked every 15 minutes, at 23:59 and at boot; the rules for reboots and midnight are in `domain/StepMath.kt`; shown against a goal and frozen per day | `steps/`, `data/StepCounter.kt` |
 | Library: saved meals (exact numbers, tap to log, servings) and the exercise catalog (rename, hide, delete if unused), under Setup | `data/LibraryRepository.kt`, `ui/LibraryScreens.kt` |
 | Finalizing days: once a day ends, its alarm, planned workout and targets are frozen so later routine or profile edits don't rewrite history | `data/DayFinalizer.kt` |
 | Shared one-line summaries for the Day screen and lock screen | `domain/DayText.kt` |

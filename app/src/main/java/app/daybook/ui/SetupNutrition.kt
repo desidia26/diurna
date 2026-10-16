@@ -1,6 +1,11 @@
 package app.daybook.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.Lifecycle
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.Manifest
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -197,8 +202,32 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
 @Composable
 fun StepsCard(vm: SetupViewModel) {
     val goal by vm.stepGoal.collectAsStateWithLifecycle()
-    SectionCard("Steps") {
-        Hint("Your daily step goal, shown on the Day screen, in the Week view and on the lock screen.")
+    val permitted by vm.stepsPermitted.collectAsStateWithLifecycle()
+    val today by vm.todaySteps.collectAsStateWithLifecycle()
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshSteps() }
+    val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.refreshSteps() }
+
+    SectionCard("Steps", chip = {
+        when {
+            !vm.stepSensorPresent -> Chip("No sensor", Tone.Warn)
+            permitted -> Chip("Counting", Tone.Good)
+            else -> Chip("Off", Tone.Warn)
+        }
+    }) {
+        when {
+            !vm.stepSensorPresent -> Hint("This phone has no step sensor.")
+            !permitted -> {
+                Hint("Daybook counts steps with the phone's own step sensor. Android asks for \"Physical activity\" access first.")
+                Button(onClick = { request.launch(Manifest.permission.ACTIVITY_RECOGNITION) }) { Text("Allow step counting") }
+            }
+            else -> {
+                Hint("Counted with the phone's step sensor, checked every 15 minutes. Steps only count while the phone is with you.")
+                Text(
+                    today?.let { "Today: %,d steps".format(it) } ?: "Counting starts from now",
+                    fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
         NumberField("Daily goal", goal.toString(), suffix = "steps", modifier = Modifier.width(180.dp)) {
             it?.toInt()?.let { g -> if (g >= 1_000) vm.setStepGoal(g) }
         }

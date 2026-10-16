@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -15,7 +16,9 @@ import app.daybook.domain.Activity
 import app.daybook.domain.Goal
 import app.daybook.domain.Profile
 import app.daybook.domain.Sex
+import app.daybook.domain.StepMath
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -25,7 +28,7 @@ private val Context.dataStore by preferencesDataStore("settings")
  * printed code has been scanned once ([porchConfirmed]), so an alarm can't ring with no
  * way to stop it.
  */
-class SettingsStore(private val context: Context) {
+class SettingsStore(private val context: Context) : StepStateStore {
     private val secretKey = stringPreferencesKey("porch_secret")
     private val confirmedKey = booleanPreferencesKey("porch_confirmed")
 
@@ -45,6 +48,23 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setStepGoal(goal: Int) {
         context.dataStore.edit { it[stepGoalKey] = goal.coerceIn(1_000, 100_000) }
+    }
+
+    private val stepCounterKey = longPreferencesKey("step_last_counter")
+    private val stepAtKey = stringPreferencesKey("step_last_at")
+
+    override suspend fun loadStepState(): StepMath.State? {
+        val prefs = context.dataStore.data.first()
+        val counter = prefs[stepCounterKey] ?: return null
+        val at = prefs[stepAtKey]?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() } ?: return null
+        return StepMath.State(counter, at)
+    }
+
+    override suspend fun saveStepState(state: StepMath.State) {
+        context.dataStore.edit {
+            it[stepCounterKey] = state.counter
+            it[stepAtKey] = state.at.toString()
+        }
     }
 
     // ---- Profile, for calorie and macro targets ----
