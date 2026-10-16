@@ -47,15 +47,23 @@ interface DayDao {
     @Query("SELECT MAX(date) FROM day WHERE finalized = 1")
     suspend fun lastFinalizedDate(): String?
 
+    /** Finished days with no step count yet, e.g. from before steps were connected. */
+    @Query("SELECT date FROM day WHERE finalized = 1 AND steps IS NULL AND date >= :since ORDER BY date")
+    suspend fun finalizedWithoutSteps(since: String): List<String>
+
+    @Query("UPDATE day SET steps = :steps WHERE date = :date")
+    suspend fun setSteps(date: String, steps: Long)
+
     @Query("SELECT date FROM day WHERE finalized = 0 AND date <= :through ORDER BY date")
     suspend fun unfinalizedThrough(through: String): List<String>
 
     @Query(
         """UPDATE day SET finalized = 1, scheduled_alarm = :alarm, planned_workout = :planned,
-           target_kcal = :kcal, target_protein_g = :protein, target_carbs_g = :carbs, target_fat_g = :fat
+           target_kcal = :kcal, target_protein_g = :protein, target_carbs_g = :carbs, target_fat_g = :fat,
+           steps = :steps
            WHERE date = :date"""
     )
-    suspend fun finalize(date: String, alarm: String, planned: String?, kcal: Int?, protein: Int?, carbs: Int?, fat: Int?)
+    suspend fun finalize(date: String, alarm: String, planned: String?, kcal: Int?, protein: Int?, carbs: Int?, fat: Int?, steps: Long?)
 }
 
 @Dao

@@ -6,6 +6,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.mapLatest
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -16,6 +17,8 @@ data class WeekDayUi(
     val workoutName: String?,
     val plannedName: String?,
     val foodCount: Int,
+    val steps: Long? = null,
+    val stepGoal: Int = 10_000,
 )
 
 data class WeekUi(val start: LocalDate, val today: LocalDate, val days: List<WeekDayUi>) {
@@ -28,7 +31,12 @@ data class WeekUi(val start: LocalDate, val today: LocalDate, val days: List<Wee
 class WeekViewModel(private val c: AppContainer) : ScreenViewModel() {
     val week: StateFlow<WeekUi?> = c.selectedDate.value.flatMapLatest { d ->
         val start = d.with(DayOfWeek.MONDAY)
-        combine(c.days.observeWeek(start), c.routine.observeRoutine(), c.routine.observeTemplates(), minuteTicker) { rows, routineDays, tpls, now ->
+        combine(
+            combine(c.days.observeWeek(start), c.routine.observeRoutine(), c.routine.observeTemplates(), ::Triple),
+            c.settings.stepGoal, minuteTicker,
+        ) { (rows, routineDays, tpls), goal, now -> Triple(Triple(rows, routineDays, tpls), goal, now) }
+            .mapLatest { (data, goal, now) ->
+            val (rows, routineDays, tpls) = data
             WeekUi(start, now.toLocalDate(), rows.map { r ->
                 val rd = routineDays.find { it.weekday == r.date.dayOfWeek.value }
                 val alarm = AlarmRules.effective(r.date, now, r.day?.alarmOverride, rd?.alarmTime ?: "06:30", r.day?.scheduledAlarm)
@@ -40,6 +48,9 @@ class WeekViewModel(private val c: AppContainer) : ScreenViewModel() {
                     // A finished day keeps the workout it had planned, even if the routine changed since.
                     plannedName = if (r.day?.finalized == true) r.day.plannedWorkout else tpls.find { it.id == rd?.templateId }?.name,
                     foodCount = r.foodCount,
+                    // Finished days use their frozen count; today reads live; future days have none.
+                    steps = r.day?.steps ?: if (r.date == now.toLocalDate()) c.steps.stepsOn(r.date) else null,
+                    stepGoal = goal,
                 )
             })
         }

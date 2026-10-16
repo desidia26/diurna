@@ -1,6 +1,7 @@
 package app.daybook.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import app.daybook.steps.HealthConnectSteps
 import app.daybook.R
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.OutlinedIconButton
@@ -158,6 +159,7 @@ private fun MorningCard(s: DayUi, vm: DayViewModel) {
         if (s.date <= s.today) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             WeightRow(s, vm)
+            StepsRow(vm)
         }
         if (s.date <= s.today && !off) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
@@ -294,6 +296,36 @@ private fun SetRow(n: Int, set: ExerciseSetEntity, placeholder: ExerciseSetEntit
         )
         TextButton(onClick = onDelete, contentPadding = PaddingValues(4.dp)) { Text("×") }
     }
+}
+
+@Composable
+private fun StepsRow(vm: DayViewModel) {
+    val ui by vm.steps.collectAsStateWithLifecycle()
+    val st = ui ?: return
+    LabeledRow(
+        "Steps",
+        value = {
+            val count = st.count
+            if (count == null) {
+                Hint(
+                    if (st.status == HealthConnectSteps.Status.NEEDS_PERMISSION || st.status == HealthConnectSteps.Status.UNAVAILABLE)
+                        "Connect Health Connect in Setup" else "No steps recorded"
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("%,d / %,d".format(count, st.goal), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium)
+                    LinearProgressIndicator(
+                        progress = { (count.toFloat() / st.goal).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = if (count >= st.goal) LocalStatusColors.current.good else MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        drawStopIndicator = {},
+                    )
+                }
+            }
+        },
+        trailing = {},
+    )
 }
 
 @Composable

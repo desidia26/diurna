@@ -23,12 +23,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FoodEntryEntity::class,
         MealEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
         // v3: saved meals, meal entries with servings, hideable exercises.
         AutoMigration(from = 2, to = 3),
+        // v4: each day's step count.
+        AutoMigration(from = 3, to = 4),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {

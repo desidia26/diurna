@@ -20,7 +20,12 @@ class TestDb {
     val days = DayRepository(db) { now }
     val profile = MutableStateFlow<Profile?>(null)
     val nutrition = NutritionRepository(db, profile)
-    val finalizer = DayFinalizer(db, days, nutrition) { now }
+    /** Fake step counts by date; missing dates have no data. */
+    val stepCounts = mutableMapOf<LocalDate, Long>()
+    val steps = object : StepSource {
+        override suspend fun stepsOn(date: LocalDate): Long? = stepCounts[date]
+    }
+    val finalizer = DayFinalizer(db, days, nutrition, steps) { now }
     val routine = RoutineRepository(db, days, finalizer)
     val food = FoodRepository(db) { now }
     val library = LibraryRepository(db) { now }

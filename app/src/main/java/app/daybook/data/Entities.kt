@@ -86,6 +86,8 @@ data class DayEntity(
     @ColumnInfo(name = "target_carbs_g") val targetCarbsG: Int? = null,
     @ColumnInfo(name = "target_fat_g") val targetFatG: Int? = null,
     @ColumnInfo(defaultValue = "0") val finalized: Boolean = false,
+    /** The day's step count from Health Connect, frozen when the day is finalized. */
+    val steps: Long? = null,
 )
 
 @Entity(

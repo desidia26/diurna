@@ -39,6 +39,14 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[lockWallpaperKey] = enabled }
     }
 
+    // ---- Steps ----
+    private val stepGoalKey = intPreferencesKey("step_goal")
+    val stepGoal: Flow<Int> = context.dataStore.data.map { it[stepGoalKey] ?: 10_000 }
+
+    suspend fun setStepGoal(goal: Int) {
+        context.dataStore.edit { it[stepGoalKey] = goal.coerceIn(1_000, 100_000) }
+    }
+
     // ---- Profile, for calorie and macro targets ----
     private object P {
         val sex = stringPreferencesKey("profile_sex")

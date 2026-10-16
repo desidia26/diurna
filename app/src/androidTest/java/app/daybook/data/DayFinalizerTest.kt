@@ -110,4 +110,25 @@ class DayFinalizerTest {
         t.finalizer.catchUp()
         assertEquals(first, day(mon))
     }
+
+    @Test fun stepsAreFrozenWithTheDay() = runTest {
+        t.food.add(mon, "eggs")
+        t.stepCounts[mon] = 8_420
+        t.now = mon.plusDays(1).atTime(9, 0)
+        t.finalizer.catchUp()
+        assertEquals(8_420L, day(mon)!!.steps)
+        t.stepCounts[mon] = 1 // Health Connect changing later doesn't touch the frozen count
+        t.finalizer.catchUp()
+        assertEquals(8_420L, day(mon)!!.steps)
+    }
+
+    @Test fun stepsAreFilledInForDaysFinalizedWithoutThem() = runTest {
+        t.food.add(mon, "eggs")
+        t.now = mon.plusDays(2).atTime(9, 0)
+        t.finalizer.catchUp() // no step data yet, e.g. before Health Connect was connected
+        assertNull(day(mon)!!.steps)
+        t.stepCounts[mon] = 11_002
+        t.finalizer.catchUp()
+        assertEquals(11_002L, day(mon)!!.steps)
+    }
 }

@@ -104,4 +104,19 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v3ToV4AddsStepsAndKeepsDays() {
+        helper.createDatabase(dbName + "-4", 3).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized, scanned_at, body_weight) VALUES ('2026-10-13', 1, '06:05', 176.0)")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-4", 4, true)
+        db.query("SELECT scanned_at, body_weight, finalized, steps FROM day WHERE date = '2026-10-13'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("06:05", it.getString(0))
+            assertEquals(176.0, it.getDouble(1), 0.0)
+            assertEquals(1, it.getInt(2))
+            assertTrue("no steps yet", it.isNull(3))
+        }
+        db.close()
+    }
 }

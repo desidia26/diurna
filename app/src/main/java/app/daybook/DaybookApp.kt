@@ -17,6 +17,7 @@ import app.daybook.data.LibraryRepository
 import app.daybook.ui.SelectedDate
 import app.daybook.data.RoutineRepository
 import app.daybook.data.SettingsStore
+import app.daybook.steps.HealthConnectSteps
 import app.daybook.wallpaper.LockWallpaper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,10 +36,11 @@ class AppContainer(context: Context) {
     val estimates = EstimateRunner(db, ClaudeFoodEstimator({ apiKeys.get() }))
     val selectedDate = SelectedDate()
     val nutrition = NutritionRepository(db, settings.profile)
-    val finalizer = DayFinalizer(db, days, nutrition)
+    val steps = HealthConnectSteps(context)
+    val finalizer = DayFinalizer(db, days, nutrition, steps)
     val routine = RoutineRepository(db, days, finalizer)
     val scheduler = AlarmScheduler(context, days, settings)
-    val lockWallpaper = LockWallpaper(context, db, days, nutrition, settings)
+    val lockWallpaper = LockWallpaper(context, db, days, nutrition, steps, settings)
 
     init {
         days.onAlarmInputsChanged = { scheduler.reschedule() }

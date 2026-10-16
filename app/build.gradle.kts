@@ -70,6 +70,9 @@ dependencies {
     implementation(libs.zxing.core)
     implementation(libs.anthropic.java)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.health.connect)
+    // Health Connect pulls in an empty "listenablefuture" stub; CameraX needs the real class from Guava.
+    implementation(libs.guava)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 

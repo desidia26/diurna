@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -111,5 +112,13 @@ class LockSnapshotTest {
         val bmp = draw(snap(), 1080, 2424)
         assertEquals(1080, bmp.width)
         assertEquals(2424, bmp.height)
+    }
+
+    @Test fun stepsLineAndGoal() = runTest {
+        assertNull(buildSnapshot(t.db, t.days, t.now).stepsLine)
+        val under = buildSnapshot(t.db, t.days, t.now, steps = 6_240, stepGoal = 10_000)
+        assertEquals("6,240 / 10,000 steps", under.stepsLine)
+        assertFalse(under.stepsReached)
+        assertTrue(buildSnapshot(t.db, t.days, t.now, steps = 10_000, stepGoal = 10_000).stepsReached)
     }
 }

@@ -84,3 +84,4 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | — | Food box suggestions stay visible above the keyboard (shared keep-visible-while-typing) | 2026-10-13 |
 | — | Bigger, rounded chevron icons for date arrows, collapse arrows and the Library back button (were small text glyphs) | 2026-10-14 |
 | — | Routine: workouts fold to a one-line summary; "New workout" moved to a header button with a name dialog, so exercise boxes are clearly inside their workout | 2026-10-16 |
+| — | Step count from Health Connect: Morning card row with progress, Week view, lock-screen line (15-minute refresh), goal in Setup (default 10,000), frozen per day; migration v4 | 2026-10-16 |

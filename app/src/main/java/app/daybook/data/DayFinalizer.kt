@@ -18,6 +18,7 @@ class DayFinalizer(
     private val db: AppDatabase,
     private val days: DayRepository,
     private val nutrition: NutritionRepository,
+    private val steps: StepSource,
     private val now: () -> LocalDateTime = LocalDateTime::now,
 ) {
     private val mutex = Mutex()
@@ -36,6 +37,18 @@ class DayFinalizer(
         // ...plus older days that got their first row later (e.g. backfilled food).
         dao.unfinalizedThrough(yesterday.key()).mapTo(dates, LocalDate::parse)
         dates.forEach { finalize(it) }
+        backfillSteps(yesterday)
+    }
+
+    /**
+     * Fills in step counts for finished days that have none, e.g. days finalized before Health
+     * Connect was connected. Health Connect keeps about 30 days, so look back that far.
+     */
+    private suspend fun backfillSteps(through: LocalDate) {
+        for (key in dao.finalizedWithoutSteps(through.minusDays(STEPS_LOOKBACK_DAYS).key())) {
+            val count = runCatching { steps.stepsOn(LocalDate.parse(key)) }.getOrNull() ?: continue
+            dao.setSteps(key, count)
+        }
     }
 
     private suspend fun finalize(date: LocalDate) {
@@ -48,11 +61,14 @@ class DayFinalizer(
             alarm = days.effectiveAlarm(date), // already the frozen value if one was armed
             planned = planned,
             kcal = targets?.kcal, protein = targets?.proteinG, carbs = targets?.carbsG, fat = targets?.fatG,
+            // Keep a count already saved (e.g. by an earlier run) if Health Connect has nothing now.
+            steps = runCatching { steps.stepsOn(date) }.getOrNull() ?: dao.get(date.key())?.steps,
         )
     }
 
     private companion object {
         /** Bounds the first run on a long-idle install. */
         const val MAX_CATCH_UP_DAYS = 400L
+        const val STEPS_LOOKBACK_DAYS = 30L
     }
 }

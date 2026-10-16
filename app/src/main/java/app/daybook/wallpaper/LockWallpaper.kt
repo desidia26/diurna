@@ -20,6 +20,13 @@ import app.daybook.container
 import app.daybook.data.AppDatabase
 import app.daybook.data.DayRepository
 import app.daybook.data.NutritionRepository
+import app.daybook.data.StepSource
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import java.util.concurrent.TimeUnit
 import app.daybook.data.SettingsStore
 import app.daybook.domain.AlarmRules
 import app.daybook.domain.AlarmRules.Morning
@@ -48,6 +55,7 @@ class LockWallpaper(
     private val db: AppDatabase,
     private val days: DayRepository,
     private val nutrition: NutritionRepository,
+    private val steps: StepSource,
     private val settings: SettingsStore,
 ) {
     private val mutex = Mutex()
@@ -59,7 +67,18 @@ class LockWallpaper(
         // Targets come from the profile, which lives in settings rather than the database.
         combine(settings.lockWallpaper, db.invalidationTracker.createFlow(*TABLES), settings.profile) { enabled, _, _ -> enabled }
             .debounce(2_000) // typing into a set field writes on every keystroke
-            .collectLatest { enabled -> if (enabled) refresh() }
+            .collectLatest { enabled ->
+                if (enabled) {
+                    refresh()
+                    // Steps change all day without any app event, so redraw on a schedule too.
+                    WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                        STEPS_WORK, ExistingPeriodicWorkPolicy.KEEP,
+                        PeriodicWorkRequestBuilder<LockWallpaperStepsWorker>(15, TimeUnit.MINUTES).build(),
+                    )
+                } else {
+                    WorkManager.getInstance(context).cancelUniqueWork(STEPS_WORK)
+                }
+            }
     }
 
     suspend fun refresh() = mutex.withLock {
@@ -67,7 +86,10 @@ class LockWallpaper(
         try {
             val (w, h) = screenSize()
             val today = LocalDateTime.now().toLocalDate()
-            val snapshot = buildSnapshot(db, days, targets = nutrition.observeTargets(today).first())
+            val snapshot = buildSnapshot(
+                db, days, targets = nutrition.observeTargets(today).first(),
+                steps = steps.stepsOn(today), stepGoal = settings.stepGoal.first(),
+            )
             wallpapers.setBitmap(draw(snapshot, w, h), null, true, WallpaperManager.FLAG_LOCK)
         } catch (e: Exception) {
             Log.w("Daybook", "Lock wallpaper update failed", e)
@@ -78,6 +100,7 @@ class LockWallpaper(
     /** Turning it off hands the lock screen back to the home wallpaper. */
     suspend fun disable() = mutex.withLock {
         alarms.cancel(tickIntent())
+        WorkManager.getInstance(context).cancelUniqueWork(STEPS_WORK)
         try {
             wallpapers.clear(WallpaperManager.FLAG_LOCK)
         } catch (e: Exception) {
@@ -124,7 +147,16 @@ class LockWallpaper(
     }
 
     private companion object {
+        const val STEPS_WORK = "lock-wallpaper-steps"
         val TABLES = arrayOf("day", "day_workout", "logged_exercise", "exercise_set", "food_entry", "routine_day", "workout_template")
+    }
+}
+
+/** Redraws the lock screen every 15 minutes so the step count stays current. */
+class LockWallpaperStepsWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        applicationContext.container.lockWallpaper.refresh()
+        return Result.success()
     }
 }
 
@@ -195,6 +227,7 @@ fun draw(s: LockSnapshot, width: Int, height: Int): Bitmap {
     line(s.morningLine, morningColor, s.morningTone != LockSnapshot.Tone.Neutral)
     line(s.workoutLine, if (s.workoutDone) PURPLE else GREY, s.workoutDone)
     line(s.foodLine, GREY, false)
+    s.stepsLine?.let { line(it, if (s.stepsReached) PURPLE else GREY, s.stepsReached) }
 
     // This week's mornings, Monday to Sunday.
     y += 3 * u

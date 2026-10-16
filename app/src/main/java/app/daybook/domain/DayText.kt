@@ -38,6 +38,10 @@ object DayText {
 
     private fun n(x: Int) = String.format(Locale.US, "%,d", x)
 
+    /** "6,240 / 10,000 steps"; null when there's no count. */
+    fun steps(steps: Long?, goal: Int): String? =
+        steps?.let { "${String.format(Locale.US, "%,d", it)} / ${n(goal)} steps" }
+
     /** [times] are "HH:mm" entry times. */
     fun food(times: List<String>): String = when (times.size) {
         0 -> "No food logged yet"

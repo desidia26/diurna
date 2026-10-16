@@ -21,6 +21,8 @@ data class LockSnapshot(
     val workoutLine: String,
     val workoutDone: Boolean,
     val foodLine: String,
+    val stepsLine: String?,
+    val stepsReached: Boolean,
     val week: List<Pair<LocalDate, Morning>>,
     val tomorrowLine: String?,
 ) {
@@ -32,6 +34,8 @@ suspend fun buildSnapshot(
     days: DayRepository,
     now: LocalDateTime = LocalDateTime.now(),
     targets: Targets? = null,
+    steps: Long? = null,
+    stepGoal: Int = 10_000,
 ): LockSnapshot {
     val today = now.toLocalDate()
     val day = db.dayDao().get(today.key())
@@ -75,5 +79,8 @@ suspend fun buildSnapshot(
         if (t == AlarmRules.OFF) "Tomorrow · no alarm" else "Tomorrow · $t · locked"
     } else null
 
-    return LockSnapshot(today, morningLine, tone, workoutLine, workoutDone, foodLine, week, tomorrowLine)
+    return LockSnapshot(
+        today, morningLine, tone, workoutLine, workoutDone, foodLine,
+        DayText.steps(steps, stepGoal), steps != null && steps >= stepGoal, week, tomorrowLine,
+    )
 }

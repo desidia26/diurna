@@ -35,4 +35,9 @@ class DayTextTest {
         assertEquals("2", 2.0.servingsLabel())
         assertEquals("2.5", 2.5.servingsLabel())
     }
+
+    @Test fun stepsLine() {
+        assertEquals("6,240 / 10,000 steps", DayText.steps(6240, 10_000))
+        assertEquals(null, DayText.steps(null, 10_000))
+    }
 }

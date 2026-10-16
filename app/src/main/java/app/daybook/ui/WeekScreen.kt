@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.daybook.domain.AlarmRules
+import app.daybook.ui.theme.LocalStatusColors
 import java.time.LocalDate
 
 @Composable
@@ -73,7 +74,16 @@ private fun WeekRow(d: WeekDayUi, today: LocalDate, onClick: () -> Unit) {
                     d.plannedName != null -> Chip(d.plannedName, if (d.date < today) Tone.Warn else Tone.Neutral) // planned but not logged
                 }
             }
-            if (d.foodCount > 0) Hint("${d.foodCount} food")
+            Column(horizontalAlignment = Alignment.End) {
+                d.steps?.let {
+                    Text(
+                        if (it >= 1000) "%.1fk".format(it / 1000.0) else "$it",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (it >= d.stepGoal) LocalStatusColors.current.good else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (d.foodCount > 0) Hint("${d.foodCount} food")
+            }
         }
     }
 }

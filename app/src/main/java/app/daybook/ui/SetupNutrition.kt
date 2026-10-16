@@ -1,6 +1,11 @@
 package app.daybook.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import app.daybook.steps.HealthConnectSteps
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.Lifecycle
+import androidx.health.connect.client.PermissionController
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -191,5 +196,43 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
             "Remove API key?", "New food entries won't be estimated until you add a key again.", "Remove",
             onDismiss = { confirmRemove = false },
         ) { vm.clearApiKey(); confirmRemove = false }
+    }
+}
+
+@Composable
+fun StepsCard(vm: SetupViewModel) {
+    val status by vm.stepsStatus.collectAsStateWithLifecycle()
+    val today by vm.todaySteps.collectAsStateWithLifecycle()
+    val goal by vm.stepGoal.collectAsStateWithLifecycle()
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshSteps() }
+    val request = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { vm.refreshSteps() }
+
+    SectionCard("Steps", chip = {
+        when (status) {
+            HealthConnectSteps.Status.READY -> Chip("Connected", Tone.Good)
+            HealthConnectSteps.Status.NEEDS_BACKGROUND -> Chip("Partly", Tone.Accent)
+            HealthConnectSteps.Status.NEEDS_PERMISSION -> Chip("Not connected", Tone.Warn)
+            HealthConnectSteps.Status.UNAVAILABLE -> Chip("Unavailable", Tone.Warn)
+            null -> {}
+        }
+    }) {
+        Hint("Your phone already counts steps into Health Connect. Daybook only reads the daily total.")
+        when (status) {
+            HealthConnectSteps.Status.UNAVAILABLE ->
+                Hint("Health Connect isn't available on this phone.")
+            HealthConnectSteps.Status.NEEDS_PERMISSION ->
+                Button(onClick = { request.launch(vm.stepPermissions()) }) { Text("Connect Health Connect") }
+            HealthConnectSteps.Status.NEEDS_BACKGROUND -> {
+                Hint("Steps show in the app, but the lock screen can't refresh them until background access is allowed.")
+                OutlinedButton(onClick = { request.launch(vm.stepPermissions()) }) { Text("Allow background access") }
+            }
+            else -> {}
+        }
+        today?.let { Text("Today: %,d steps".format(it), fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            NumberField("Daily goal", goal.toString(), suffix = "steps", modifier = Modifier.width(180.dp)) {
+                it?.toInt()?.let { g -> if (g >= 1_000) vm.setStepGoal(g) }
+            }
+        }
     }
 }
