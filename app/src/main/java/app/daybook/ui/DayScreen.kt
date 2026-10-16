@@ -1,7 +1,6 @@
 package app.daybook.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import app.daybook.steps.HealthConnectSteps
 import app.daybook.R
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.OutlinedIconButton
@@ -307,10 +306,7 @@ private fun StepsRow(vm: DayViewModel) {
         value = {
             val count = st.count
             if (count == null) {
-                Hint(
-                    if (st.status == HealthConnectSteps.Status.NEEDS_PERMISSION || st.status == HealthConnectSteps.Status.UNAVAILABLE)
-                        "Connect Health Connect in Setup" else "No steps recorded"
-                )
+                Hint("No steps recorded yet")
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("%,d / %,d".format(count, st.goal), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium)

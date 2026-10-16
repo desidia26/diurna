@@ -11,7 +11,6 @@ import app.daybook.data.Template
 import app.daybook.data.WorkoutWithExercises
 import app.daybook.data.totals
 import app.daybook.domain.AlarmRules
-import app.daybook.steps.HealthConnectSteps
 import app.daybook.domain.NutritionTotals
 import app.daybook.domain.Targets
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -75,9 +74,9 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
 
     /**
      * Steps for the selected day: the frozen count once a day is finalized, otherwise read from
-     * Health Connect each minute. Null count means no data (or no permission yet).
+     * the step source each minute. Null count means no data.
      */
-    data class StepsUi(val count: Long?, val goal: Int, val status: HealthConnectSteps.Status)
+    data class StepsUi(val count: Long?, val goal: Int)
 
     val steps: StateFlow<StepsUi?> = c.selectedDate.value.flatMapLatest { d ->
         combine(c.days.observeDay(d), c.settings.stepGoal, minuteTicker) { day, goal, now -> Triple(day, goal, now) }
@@ -87,7 +86,7 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
                     d.isAfter(now.toLocalDate()) -> null
                     else -> c.steps.stepsOn(d)
                 }
-                StepsUi(count, goal, c.steps.status())
+                StepsUi(count, goal)
             }
     }.state(null)
 

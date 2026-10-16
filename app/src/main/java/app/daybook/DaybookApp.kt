@@ -17,7 +17,8 @@ import app.daybook.data.LibraryRepository
 import app.daybook.ui.SelectedDate
 import app.daybook.data.RoutineRepository
 import app.daybook.data.SettingsStore
-import app.daybook.steps.HealthConnectSteps
+import app.daybook.data.NoSteps
+import app.daybook.data.StepSource
 import app.daybook.wallpaper.LockWallpaper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,7 @@ class AppContainer(context: Context) {
     val estimates = EstimateRunner(db, ClaudeFoodEstimator({ apiKeys.get() }))
     val selectedDate = SelectedDate()
     val nutrition = NutritionRepository(db, settings.profile)
-    val steps = HealthConnectSteps(context)
+    val steps: StepSource = NoSteps
     val finalizer = DayFinalizer(db, days, nutrition, steps)
     val routine = RoutineRepository(db, days, finalizer)
     val scheduler = AlarmScheduler(context, days, settings)

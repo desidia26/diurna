@@ -47,13 +47,6 @@ interface DayDao {
     @Query("SELECT MAX(date) FROM day WHERE finalized = 1")
     suspend fun lastFinalizedDate(): String?
 
-    /** Finished days with no step count yet, e.g. from before steps were connected. */
-    @Query("SELECT date FROM day WHERE finalized = 1 AND steps IS NULL AND date >= :since ORDER BY date")
-    suspend fun finalizedWithoutSteps(since: String): List<String>
-
-    @Query("UPDATE day SET steps = :steps WHERE date = :date")
-    suspend fun setSteps(date: String, steps: Long)
-
     @Query("SELECT date FROM day WHERE finalized = 0 AND date <= :through ORDER BY date")
     suspend fun unfinalizedThrough(through: String): List<String>
 

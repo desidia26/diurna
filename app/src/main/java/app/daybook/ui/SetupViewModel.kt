@@ -2,7 +2,6 @@ package app.daybook.ui
 
 import app.daybook.AppContainer
 import app.daybook.data.SettingsStore
-import app.daybook.steps.HealthConnectSteps
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -40,15 +39,6 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
 
     // Steps
     val stepGoal = c.settings.stepGoal.state(10_000)
-    val stepsStatus = MutableStateFlow<HealthConnectSteps.Status?>(null)
-    val todaySteps = MutableStateFlow<Long?>(null)
-    fun stepPermissions(): Set<String> = c.steps.permissionsToRequest()
-    /** Re-checks permission and today's count; run on resume and after the permission dialog. */
-    fun refreshSteps() = io {
-        stepsStatus.value = c.steps.status()
-        todaySteps.value = c.steps.stepsOn(java.time.LocalDate.now())
-        if (stepsStatus.value != HealthConnectSteps.Status.NEEDS_PERMISSION) c.finalizer.catchUp() // fills recent days
-    }
     fun setStepGoal(goal: Int) = io { c.settings.setStepGoal(goal) }
 
     // Food estimates
