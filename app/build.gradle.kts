@@ -5,6 +5,19 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+import java.util.Properties
+
+// Release builds are signed with the same key as the debug builds already on the phone, so they
+// install as updates and keep all data. The key lives in signing/ (git-ignored); lose it and the
+// app can never be updated in place again, so keep a copy somewhere safe.
+val signingProps = Properties().apply {
+    rootProject.file("signing/keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+
+// Every commit is a new, higher version, so each build is a valid update of the last.
+val commitCount: Int = providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }
+    .standardOutput.asText.get().trim().toIntOrNull() ?: 1
+
 android {
     namespace = "app.daybook"
     compileSdk = 36
@@ -13,14 +26,32 @@ android {
         applicationId = "app.daybook"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = commitCount
+        versionName = "0.$commitCount"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (signingProps.isNotEmpty()) {
+                storeFile = rootProject.file("signing/" + signingProps.getProperty("storeFile"))
+                storePassword = signingProps.getProperty("storePassword")
+                keyAlias = signingProps.getProperty("keyAlias")
+                keyPassword = signingProps.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Shrinking makes the app much smaller and faster; proguard-rules.pro keeps the parts
+            // that are only reached by reflection.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
+            // Only the Pixel's CPU type; debug builds keep all of them for the x86 emulator.
+            ndk { abiFilters += listOf("arm64-v8a") }
         }
     }
     compileOptions {

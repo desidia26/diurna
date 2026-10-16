@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Build a release and install it on the phone as an update, keeping all data.
+#   scripts/release                 tests, build, backup, install, verify, tag
+#   scripts/release --skip-tests    same, without running tests first
+#
+# Stops at the first problem. Nothing is installed unless a fresh backup succeeded, and the
+# install is checked afterwards by comparing a second backup against the first.
+source "$(dirname "$0")/_lib.sh"
+
+skip_tests=false
+[[ "${1:-}" == --skip-tests ]] && skip_tests=true
+
+step() { echo; echo "== $*"; }
+build_tools="$SDK/build-tools/$(ls "$SDK/build-tools" | sort -V | tail -1)"
+apk="$ROOT/app/build/outputs/apk/release/app-release.apk"
+
+step "Phone"
+pick_device phone
+cd "$ROOT"
+
+step "Clean working tree"
+[[ -z "$(git status --porcelain)" ]] || die "uncommitted changes. Commit first, so the installed build matches a commit."
+echo "at $(git log --oneline -1)"
+
+if ! $skip_tests; then
+  step "Tests"
+  scripts/test
+fi
+
+step "Build release"
+gradle assembleRelease
+version_new="$("$build_tools/aapt2" dump badging "$apk" | grep -o "versionCode='[0-9]*'" | grep -o '[0-9]*')"
+echo "built version $version_new ($(du -h "$apk" | cut -f1))"
+
+step "Same signing key and a newer version than the installed app"
+installed_apk="$(adb shell pm path "$PKG" | head -1 | tr -d '\r' | sed 's/^package://')"
+if [[ -n "$installed_apk" ]]; then
+  tmp="$(mktemp -d)"
+  adb pull "$installed_apk" "$tmp/installed.apk" >/dev/null
+  cert() { "$build_tools/apksigner" verify --print-certs "$1" | grep 'SHA-256' | head -1 | awk '{print $NF}'; }
+  [[ "$(cert "$tmp/installed.apk")" == "$(cert "$apk")" ]] \
+    || die "signing key differs from the installed app; installing would require wiping its data. Stopping."
+  rm -rf "$tmp"
+  version_old="$(adb shell dumpsys package "$PKG" | grep -o 'versionCode=[0-9]*' | head -1 | cut -d= -f2)"
+  (( version_new >= version_old )) || die "version $version_new is older than installed $version_old"
+  echo "key matches; version $version_old -> $version_new"
+else
+  echo "Daybook isn't installed yet; this will be a fresh install"
+fi
+
+counts() { # one line per table: name=rows, plus the schema version
+  sqlite3 "$1" "SELECT 'schema='||user_version FROM pragma_user_version;
+    SELECT 'day='||COUNT(*) FROM day; SELECT 'day_workout='||COUNT(*) FROM day_workout;
+    SELECT 'exercise_set='||COUNT(*) FROM exercise_set; SELECT 'food_entry='||COUNT(*) FROM food_entry;
+    SELECT 'meal='||COUNT(*) FROM meal; SELECT 'workout_template='||COUNT(*) FROM workout_template;
+    SELECT 'exercise='||COUNT(*) FROM exercise;"
+}
+
+before=""
+if [[ -n "$installed_apk" ]]; then
+  step "Backup before installing"
+  scripts/backup-db | tail -4
+  before="$(ls -td "$ROOT"/backups/*/ | head -1)daybook.db"
+  [[ -s "$before" ]] || die "no backup, not installing"
+fi
+
+step "Install"
+adb install -r "$apk" | tail -1
+adb shell am start -n "$PKG/.MainActivity" >/dev/null
+sleep 4
+crashes="$(adb logcat -d -b crash | grep -c "$PKG" || true)"
+
+if [[ -n "$before" ]]; then
+  step "Data survived"
+  scripts/backup-db >/dev/null
+  after="$(ls -td "$ROOT"/backups/*/ | head -1)daybook.db"
+  [[ "$(sqlite3 "$after" 'PRAGMA integrity_check')" == ok ]] || die "integrity check failed on the new backup"
+  lost=false
+  while IFS='=' read -r name n_before; do
+    n_after="$(counts "$after" | grep "^$name=" | cut -d= -f2)"
+    if (( n_after < n_before )); then echo "  LOST: $name $n_before -> $n_after"; lost=true
+    else echo "  $name: $n_before -> $n_after"; fi
+  done < <(counts "$before")
+  $lost && die "rows went missing. The backup from before the install is in $(dirname "$before")"
+fi
+
+step "Alarm"
+scripts/alarm-check | sed -n '2,3p'
+(( crashes == 0 )) || echo "WARNING: $crashes crash lines for $PKG in the log; check scripts/logs --crash"
+
+step "Tag"
+tag="release-$version_new"
+if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+  echo "$tag already exists"
+else
+  git tag -a "$tag" -m "Release $version_new installed on the phone"
+  echo "tagged $tag"
+fi
+echo; echo "Released version $version_new."

@@ -46,7 +46,8 @@ Requires JDK 17 and the Android SDK at `~/Android/Sdk` (platform 36). Day-to-day
 
 | Command | What it does |
 |---|---|
-| `scripts/install` | Build, install and open Daybook (`--no-launch` to skip opening) |
+| `scripts/release` | **Ship to the phone:** tests, release build, backup, install as an update, check no data was lost, check the alarm, tag `release-N`. Needs a clean working tree. |
+| `scripts/install` | Build, install and open a **debug** build (`--no-launch` to skip opening) |
 | `scripts/test` | Unit tests, plus device tests if an emulator is running (`unit` or `device` for just one) |
 | `scripts/emulator` | Start the emulator and wait until it's ready (`--headless` for no window, `--stop` to shut it down) |
 | `scripts/logs` | Follow the app's log live (`--crash` for recent crashes) |
@@ -54,6 +55,8 @@ Requires JDK 17 and the Android SDK at `~/Android/Sdk` (platform 36). Day-to-day
 | `scripts/backup-db` | Copy the database off the device into `backups/<timestamp>/`, which git ignores |
 | `scripts/alarm-check` | Show the armed alarm and permissions (`--doze` or `--reboot` to stress-test it) |
 | `LIVE_API=1 ./gradlew testDebugUnitTest --tests '*LiveApiErrorTest*'` | Check a real API error end to end, using a deliberately invalid key (free) |
+
+**Release builds** are shrunk, not debuggable, and signed with the key in `signing/` (git-ignored), the same key as the debug builds, so either installs over the other and keeps data. **Back up `signing/daybook.keystore`**: without it the app can't be updated in place.
 
 **Wireless:** the phone is paired for wireless debugging, so the scripts work over home Wi-Fi without a cable. Turn on Developer options → Wireless debugging (or its quick settings tile) and `adb` reconnects on its own; if it doesn't, run `adb connect <IP:port>` with the address shown on that screen. Keep it allowed on the home network only, and off when not in use. Revoking "USB debugging authorizations" in Developer options un-pairs every computer.
 

@@ -17,13 +17,18 @@ die() { echo "error: $*" >&2; exit 1; }
 # Picks the target device and exports ANDROID_SERIAL.
 #   pick_device            phone if plugged in, else emulator
 #   pick_device emulator   emulator only, never the phone (for anything that wipes app data)
+#   pick_device phone      the phone only, never an emulator (for releases)
 pick_device() {
   local want="${1:-any}"
   local devices phone emu
   devices="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1}')"
   phone="$(grep -v '^emulator-' <<<"$devices" | head -1 || true)"
   emu="$(grep '^emulator-' <<<"$devices" | head -1 || true)"
-  if [[ "$want" == emulator ]]; then
+  if [[ "$want" == phone ]]; then
+    [[ -z "${ANDROID_SERIAL:-}" || "$ANDROID_SERIAL" != emulator-* ]] || die "releases go to the phone, not $ANDROID_SERIAL"
+    ANDROID_SERIAL="${ANDROID_SERIAL:-$phone}"
+    [[ -n "$ANDROID_SERIAL" ]] || die "phone not connected. Turn on Wireless debugging (or plug it in)."
+  elif [[ "$want" == emulator ]]; then
     [[ -z "${ANDROID_SERIAL:-}" || "$ANDROID_SERIAL" == emulator-* ]] \
       || die "refusing to use $ANDROID_SERIAL: this wipes Daybook's data, so it only runs on the emulator."
     ANDROID_SERIAL="${ANDROID_SERIAL:-$emu}"
