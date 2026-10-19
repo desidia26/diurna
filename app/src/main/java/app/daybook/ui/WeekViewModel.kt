@@ -16,7 +16,7 @@ data class WeekDayUi(
     val scannedAt: String?,
     val workoutName: String?,
     val plannedName: String?,
-    val foodCount: Int,
+    val kcal: Int?,
     val steps: Long? = null,
     val stepGoal: Int = 10_000,
 )
@@ -47,7 +47,7 @@ class WeekViewModel(private val c: AppContainer) : ScreenViewModel() {
                     workoutName = r.workoutName,
                     // A finished day keeps the workout it had planned, even if the routine changed since.
                     plannedName = if (r.day?.finalized == true) r.day.plannedWorkout else tpls.find { it.id == rd?.templateId }?.name,
-                    foodCount = r.foodCount,
+                    kcal = r.kcal,
                     // Finished days use their frozen count; today reads live; future days have none.
                     steps = r.day?.steps ?: if (r.date == now.toLocalDate()) c.steps.stepsOn(r.date) else null,
                     stepGoal = goal,

@@ -18,7 +18,8 @@ data class WeekRow(
     val date: LocalDate,
     val day: DayEntity?,
     val workoutName: String?,
-    val foodCount: Int,
+    /** Calories from estimated food; null when nothing is estimated yet. */
+    val kcal: Int?,
 )
 
 class DayRepository(
@@ -46,15 +47,15 @@ class DayRepository(
         return combine(
             days.observeRange(from, to),
             workouts.observeNames(from, to),
-            food.observeCounts(from, to),
-        ) { dayRows, names, counts ->
+            food.observeKcal(from, to),
+        ) { dayRows, names, kcal ->
             (0L..6L).map { i ->
                 val d = start.plusDays(i)
                 WeekRow(
                     date = d,
                     day = dayRows.find { it.date == d.key() },
                     workoutName = names.find { it.date == d.key() }?.name,
-                    foodCount = counts.find { it.date == d.key() }?.count ?: 0,
+                    kcal = kcal.find { it.date == d.key() }?.kcal,
                 )
             }
         }

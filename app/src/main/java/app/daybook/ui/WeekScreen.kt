@@ -82,7 +82,7 @@ private fun WeekRow(d: WeekDayUi, today: LocalDate, onClick: () -> Unit) {
                         color = if (it >= d.stepGoal) LocalStatusColors.current.good else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (d.foodCount > 0) Hint("${d.foodCount} food")
+                d.kcal?.let { Hint("%,d kcal".format(it)) }
             }
         }
     }

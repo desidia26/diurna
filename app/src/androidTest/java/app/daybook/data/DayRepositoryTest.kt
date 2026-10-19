@@ -200,13 +200,19 @@ class DayRepositoryTest {
         assertEquals("12:00", t.food.observe(mon.minusDays(2)).first().single().time)
     }
 
-    @Test fun weekRowsCoverSevenDaysWithCounts() = runTest {
+    @Test fun weekRowsCoverSevenDaysWithCalories() = runTest {
         t.food.add(mon, "eggs")
         t.food.add(mon, "coffee")
+        t.food.add(mon, "still estimating")
+        val (eggs, coffee) = t.food.observe(mon).first().filter { it.text != "still estimating" }
+        val dao = t.db.foodDao()
+        dao.setEstimate(eggs.id, eggs.text, 140, 180, 12, 1, 10, "", "test", 1L) // midpoint 160
+        dao.setEstimate(coffee.id, coffee.text, 5, 10, 0, 1, 0, "", "test", 1L) // midpoint 7
         days.startWorkout(mon.plusDays(2), t.template("Pull A", "Row"))
         val week = days.observeWeek(mon).first()
         assertEquals(7, week.size)
-        assertEquals(2, week[0].foodCount)
+        assertEquals("pending entries don't count", 167, week[0].kcal)
+        assertNull("no food", week[1].kcal)
         assertEquals("Pull A", week[2].workoutName)
         assertNull(week[1].workoutName)
     }

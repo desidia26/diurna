@@ -199,7 +199,7 @@ data class LastTimeRef(val loggedExerciseId: Long, val date: String)
 
 data class DateName(val date: String, val name: String)
 
-data class DateCount(val date: String, val count: Int)
+data class DateKcal(val date: String, val kcal: Int)
 
 data class CatalogExercise(val id: Long, val name: String, val hidden: Boolean, val logged: Int, val inRoutine: Int) {
     val inUse: Boolean get() = logged > 0 || inRoutine > 0

@@ -248,8 +248,12 @@ interface FoodDao {
     @Query("SELECT * FROM food_entry WHERE date = :date ORDER BY time, id")
     fun observe(date: String): Flow<List<FoodEntryEntity>>
 
-    @Query("SELECT date, COUNT(*) AS count FROM food_entry WHERE date BETWEEN :from AND :to GROUP BY date")
-    fun observeCounts(from: String, to: String): Flow<List<DateCount>>
+    /** Each day's calories from estimated entries, the same sum as the Day screen's (midpoint per entry). */
+    @Query(
+        "SELECT date, SUM((kcal_low + kcal_high) / 2) AS kcal FROM food_entry " +
+            "WHERE date BETWEEN :from AND :to AND estimated_at IS NOT NULL GROUP BY date"
+    )
+    fun observeKcal(from: String, to: String): Flow<List<DateKcal>>
 
     @Insert
     suspend fun insert(entry: FoodEntryEntity): Long
