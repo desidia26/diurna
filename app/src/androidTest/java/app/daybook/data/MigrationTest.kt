@@ -135,4 +135,32 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v5ToV6RenamesLegCurlKeepingItsHistory() {
+        helper.createDatabase(dbName + "-6", 5).use { db ->
+            db.execSQL("INSERT INTO exercise (id, name, hidden) VALUES (7, 'Leg curl', 0)")
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-14', 1)")
+            db.execSQL("INSERT INTO day_workout (id, date, name) VALUES (1, '2026-10-14', 'Legs')")
+            db.execSQL("INSERT INTO logged_exercise (id, workout_id, exercise_id, position) VALUES (1, 1, 7, 0)")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-6", 6, true, AppDatabase.MIGRATION_5_6)
+        db.query("SELECT e.name FROM logged_exercise l JOIN exercise e ON e.id = l.exercise_id").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Seated leg curl", it.getString(0))
+        }
+        db.close()
+    }
+
+    @Test fun v5ToV6LeavesLegCurlIfSeatedAlreadyExists() {
+        helper.createDatabase(dbName + "-6b", 5).use { db ->
+            db.execSQL("INSERT INTO exercise (id, name, hidden) VALUES (7, 'Leg curl', 0)")
+            db.execSQL("INSERT INTO exercise (id, name, hidden) VALUES (8, 'seated leg curl', 0)")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-6b", 6, true, AppDatabase.MIGRATION_5_6)
+        db.query("SELECT name FROM exercise ORDER BY id").use {
+            it.moveToFirst(); assertEquals("Leg curl", it.getString(0))
+            it.moveToNext(); assertEquals("seated leg curl", it.getString(0))
+        }
+        db.close()
+    }
 }

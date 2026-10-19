@@ -6,6 +6,7 @@ import androidx.room.Database
 import androidx.room.DeleteColumn
 import androidx.room.RenameColumn
 import androidx.room.migration.AutoMigrationSpec
+import androidx.room.migration.Migration
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -23,7 +24,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FoodEntryEntity::class,
         MealEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -33,6 +34,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AutoMigration(from = 3, to = 4),
         // v5: mood and energy ratings.
         AutoMigration(from = 4, to = 5),
+        // v6 is data only: see MIGRATION_5_6.
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -68,8 +70,23 @@ abstract class AppDatabase : RoomDatabase() {
             override fun onOpen(db: SupportSQLiteDatabase) = seedExercises(db)
         }
 
+        /**
+         * v6: "Leg curl" becomes "Seated leg curl", now that "Lying leg curl" is in the catalog too.
+         * A rename keeps the id, so logged sessions and routines follow. Skipped if a
+         * "Seated leg curl" already exists, so two exercises never end up with one name.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "UPDATE exercise SET name = 'Seated leg curl' WHERE name = 'Leg curl' COLLATE NOCASE " +
+                        "AND NOT EXISTS (SELECT 1 FROM exercise WHERE name = 'Seated leg curl' COLLATE NOCASE)"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "daybook.db")
+                .addMigrations(MIGRATION_5_6)
                 .addCallback(seedRoutine)
                 .addCallback(seedCatalog)
                 .build()
