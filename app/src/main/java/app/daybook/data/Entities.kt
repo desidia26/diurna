@@ -20,7 +20,7 @@ data class ExerciseEntity(
 )
 
 /** A saved food with exact numbers, typed in once and logged with a tap. Flat: no sub-meals. */
-@Entity(tableName = "meal", indices = [Index(value = ["name"], unique = true)])
+@Entity(tableName = "meal", indices = [Index(value = ["name"], unique = true), Index(value = ["barcode"], unique = true)])
 data class MealEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
@@ -30,6 +30,8 @@ data class MealEntity(
     @ColumnInfo(name = "fat_g") val fatG: Int,
     /** Serving description, e.g. "1 bottle, 11 oz". */
     val note: String? = null,
+    /** Package barcode for meals added by scanning, normalized by [normalizeBarcode]. */
+    val barcode: String? = null,
 )
 
 @Entity(tableName = "workout_template", indices = [Index(value = ["name"], unique = true)])

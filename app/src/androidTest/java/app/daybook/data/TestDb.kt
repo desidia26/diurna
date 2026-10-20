@@ -28,7 +28,17 @@ class TestDb {
     val finalizer = DayFinalizer(db, days, nutrition, steps) { now }
     val routine = RoutineRepository(db, days, finalizer)
     val food = FoodRepository(db) { now }
-    val library = LibraryRepository(db) { now }
+    /** Fake Open Food Facts: JSON by normalized barcode. Never touches the network. */
+    val products = mutableMapOf<String, String>()
+    var productsReachable = true
+    val productFetches = mutableListOf<String>()
+    val library = LibraryRepository(db, object : ProductSource {
+        override suspend fun fetch(code: String): String? {
+            productFetches += code
+            if (!productsReachable) throw java.io.IOException("offline")
+            return products[code]
+        }
+    }) { now }
 
     suspend fun template(name: String, vararg exercises: String): Long {
         routine.addTemplate(name)

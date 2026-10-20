@@ -157,4 +157,63 @@ class LibraryRepositoryTest {
         t.days.addExercise(mon, "used")
         assertTrue("Used" in t.routine.observeExerciseNames().first())
     }
+
+    // ---- Barcodes ----
+
+    private val shakeJson = """{"status":1,"product":{"product_name":"Protein shake","brands":"Premier Protein",
+        "serving_size":"1 bottle","nutriments":{"energy-kcal_serving":160,"proteins_serving":30,"carbohydrates_serving":5,"fat_serving":3}}}"""
+
+    @Test fun newBarcodeIsLookedUpThenSavedWithItsBarcode() = runTest {
+        t.products["0012345678905"] = shakeJson
+        val found = lib.scan("012345678905") as LibraryRepository.ScanResult.Found
+        assertEquals("Protein shake (Premier Protein)", found.draft.name)
+        assertEquals("0012345678905", found.draft.barcode)
+        assertTrue("not saved until checked", meals().isEmpty())
+
+        assertEquals(Result.Ok, lib.saveMeal(found.draft))
+        assertEquals("0012345678905", meals().single().barcode)
+    }
+
+    @Test fun knownBarcodeComesFromTheLibraryWithoutALookup() = runTest {
+        lib.saveMeal(shake.copy(barcode = "0012345678905"))
+        t.productsReachable = false
+        // Scanned as UPC-A this time; saved as EAN-13.
+        val known = lib.scan("012345678905") as LibraryRepository.ScanResult.Known
+        assertEquals("Premier protein shake", known.meal.name)
+        assertTrue("no network needed", t.productFetches.isEmpty())
+    }
+
+    @Test fun unknownAndUnreachable() = runTest {
+        assertEquals(LibraryRepository.ScanResult.NotFound, lib.scan("0012345678905"))
+        assertEquals(LibraryRepository.ScanResult.NotFound, lib.scan("not a barcode"))
+        t.productsReachable = false
+        assertTrue(lib.scan("0012345678905") is LibraryRepository.ScanResult.Failed)
+    }
+
+    @Test fun loggingScannedMealWithServingsScalesIt() = runTest {
+        lib.saveMeal(shake.copy(barcode = "0012345678905"))
+        lib.logMeal(mon, lib.mealByBarcode("0012345678905")!!.id, 1.5)
+        val e = food().single()
+        assertEquals(240, e.kcalLow)
+        assertEquals(45, e.proteinG)
+        assertEquals(1.5, e.servings, 0.0)
+    }
+
+    @Test fun garbageAnswerIsNotFound() = runTest {
+        t.products["0012345678905"] = "<html>not json</html>"
+        assertEquals(LibraryRepository.ScanResult.NotFound, lib.scan("0012345678905"))
+    }
+
+    @Test fun twoMealsCantShareABarcode() = runTest {
+        lib.saveMeal(shake.copy(barcode = "0012345678905"))
+        val r = lib.saveMeal(shake.copy(name = "Other", barcode = "0012345678905"))
+        assertTrue(r is Result.Problem)
+        assertEquals(1, meals().size)
+    }
+
+    @Test fun barcodeLookupOnlyEverSendsDigits() = runTest {
+        lib.scan("../../admin?x=1")
+        lib.scan("12345678;rm")
+        assertTrue(t.productFetches.isEmpty())
+    }
 }

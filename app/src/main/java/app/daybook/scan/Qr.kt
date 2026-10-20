@@ -33,9 +33,20 @@ import com.google.zxing.qrcode.QRCodeWriter
 import java.util.concurrent.Executors
 
 /** Back-camera preview that reports every QR value it reads. Needs CAMERA permission. */
+@Composable
+fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier, torch: Boolean = false) =
+    CodeScanner(intArrayOf(Barcode.FORMAT_QR_CODE), { value, _ -> onCode(value) }, modifier, torch)
+
+/** Product barcodes on food packaging. */
+val PRODUCT_FORMATS = intArrayOf(Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E)
+
+/**
+ * Back-camera preview that reports every code it reads in [formats] (ML Kit `Barcode.FORMAT_*`),
+ * with the format it was read as. Needs CAMERA permission.
+ */
 @OptIn(ExperimentalGetImage::class)
 @Composable
-fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier, torch: Boolean = false) {
+fun CodeScanner(formats: IntArray, onCode: (String, Int) -> Unit, modifier: Modifier = Modifier, torch: Boolean = false) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val latestOnCode by rememberUpdatedState(onCode)
@@ -45,7 +56,7 @@ fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier, torch: Bo
     DisposableEffect(owner) {
         val executor = Executors.newSingleThreadExecutor()
         val scanner = BarcodeScanning.getClient(
-            BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
+            BarcodeScannerOptions.Builder().setBarcodeFormats(formats.first(), *formats.drop(1).toIntArray()).build()
         )
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
@@ -61,7 +72,9 @@ fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier, torch: Bo
                     return@setAnalyzer
                 }
                 scanner.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
-                    .addOnSuccessListener { codes -> codes.firstNotNullOfOrNull { it.rawValue }?.let(latestOnCode) }
+                    .addOnSuccessListener { codes ->
+                        codes.firstOrNull { it.rawValue != null }?.let { latestOnCode(it.rawValue!!, it.format) }
+                    }
                     .addOnCompleteListener { proxy.close() }
             }
             provider.unbindAll()

@@ -127,6 +127,12 @@ interface MealDao {
     @Query("SELECT COUNT(*) FROM meal WHERE name = :name COLLATE NOCASE AND id != :exceptId")
     suspend fun nameTakenByOther(name: String, exceptId: Long): Int
 
+    @Query("SELECT COUNT(*) FROM meal WHERE barcode = :code AND id != :exceptId")
+    suspend fun barcodeTakenByOther(code: String, exceptId: Long): Int
+
+    @Query("SELECT * FROM meal WHERE barcode = :code")
+    suspend fun byBarcode(code: String): MealEntity?
+
     @Insert
     suspend fun insert(meal: MealEntity): Long
 

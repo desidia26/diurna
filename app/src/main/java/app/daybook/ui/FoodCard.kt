@@ -1,5 +1,10 @@
 package app.daybook.ui
 
+import app.daybook.R
+import app.daybook.data.LibraryRepository
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.focus.onFocusChanged
 import app.daybook.domain.suggest
@@ -64,6 +69,10 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
     var editing by remember { mutableStateOf<FoodEntryEntity?>(null) }
     var servingsFor by remember { mutableStateOf<FoodEntryEntity?>(null) }
     var savingAsMeal by remember { mutableStateOf<FoodEntryEntity?>(null) }
+    // Barcode flow: scanning → (new product: check and save) → how many servings → logged.
+    var scanning by remember { mutableStateOf(false) }
+    var scannedDraft by remember { mutableStateOf<MealEntity?>(null) }
+    var servingsOf by remember { mutableStateOf<MealEntity?>(null) }
     val n = s.food.size
     val totals = s.totals
     val summary = DayText.nutrition(totals, s.targets) ?: DayText.food(s.food.map { it.time })
@@ -84,6 +93,9 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { vm.addFood(text); text = "" }),
             )
+            IconButton(onClick = { scanning = true }) {
+                Icon(painterResource(R.drawable.ic_barcode), contentDescription = "Scan barcode", tint = MaterialTheme.colorScheme.primary)
+            }
             Button(onClick = { vm.addFood(text); text = "" }) { Text("Log") }
         }
         // Saved meals matching what's typed: a tap logs exact numbers, no AI.
@@ -118,6 +130,26 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
                 onEdit = { editing = f }, onDelete = { vm.deleteFood(f.id) },
                 onServings = { servingsFor = f }, onSaveAsMeal = { savingAsMeal = f },
             )
+        }
+    }
+    if (scanning) {
+        BarcodeScanDialog(
+            scan = vm::scanBarcode,
+            onKnown = { scanning = false; servingsOf = it },
+            onFound = { scanning = false; scannedDraft = it },
+            onClose = { scanning = false },
+        )
+    }
+    scannedDraft?.let { draft ->
+        MealDialog("Add from barcode", draft, onDismiss = { scannedDraft = null }) { meal ->
+            vm.saveMeal(meal).also { r ->
+                if (r == LibraryRepository.Result.Ok) servingsOf = vm.mealByBarcode(draft.barcode!!)
+            }
+        }
+    }
+    servingsOf?.let { m ->
+        ServingsDialog(1.0, title = "${m.name} · ${m.kcal} kcal each", onDismiss = { servingsOf = null }) {
+            vm.logMeal(m.id, it); servingsOf = null
         }
     }
     servingsFor?.let { f ->
@@ -217,11 +249,11 @@ fun Double.servingsLabel(): String = when (this) {
 }
 
 @Composable
-private fun ServingsDialog(current: Double, onDismiss: () -> Unit, onPick: (Double) -> Unit) {
+private fun ServingsDialog(current: Double, onDismiss: () -> Unit, title: String = "Servings", onPick: (Double) -> Unit) {
     var custom by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Servings") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

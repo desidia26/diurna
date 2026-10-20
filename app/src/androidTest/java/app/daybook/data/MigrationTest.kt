@@ -163,4 +163,19 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v6ToV7AddsBarcodesAndKeepsMeals() {
+        helper.createDatabase(dbName + "-7", 6).use { db ->
+            db.execSQL("INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, note) VALUES (1, 'Shake', 160, 30, 5, 3, '1 bottle')")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-7", 7, true)
+        db.query("SELECT name, kcal, note, barcode FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Shake", it.getString(0))
+            assertEquals(160, it.getInt(1))
+            assertEquals("1 bottle", it.getString(2))
+            assertTrue("no barcode yet", it.isNull(3))
+        }
+        db.close()
+    }
 }
