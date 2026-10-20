@@ -197,5 +197,18 @@ class DayRepository(
         if (workouts.sets(loggedId).isEmpty()) workouts.deleteLogged(loggedId)
     }
 
+    /** Takes the exercise and all its sets out of the day's workout. */
+    suspend fun removeExercise(loggedId: Long) = workouts.deleteLogged(loggedId)
+
+    /** Swaps the exercise with its neighbor above or below; nothing at the ends. */
+    suspend fun moveExercise(loggedId: Long, up: Boolean) = db.withTransaction {
+        val logged = workouts.getLogged(loggedId) ?: return@withTransaction
+        val all = workouts.loggedIn(logged.workoutId)
+        val i = all.indexOfFirst { it.id == loggedId }
+        val other = all.getOrNull(if (up) i - 1 else i + 1) ?: return@withTransaction
+        workouts.setLoggedPosition(logged.id, other.position)
+        workouts.setLoggedPosition(other.id, logged.position)
+    }
+
     suspend fun removeWorkout(date: LocalDate) = workouts.deleteWorkout(date.key())
 }

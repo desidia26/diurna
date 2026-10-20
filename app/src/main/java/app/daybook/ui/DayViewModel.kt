@@ -123,6 +123,8 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
     fun updateSet(id: Long, weight: Double?, reps: Int?) = io { c.days.updateSet(id, weight, reps) }
     fun deleteSet(setId: Long, loggedId: Long) = io { c.days.deleteSet(setId, loggedId) }
     fun removeWorkout() = io { c.days.removeWorkout(date) }
+    fun removeExercise(loggedId: Long) = io { c.days.removeExercise(loggedId) }
+    fun moveExercise(loggedId: Long, up: Boolean) = io { c.days.moveExercise(loggedId, up) }
 
     // Food
     fun addFood(text: String) = io { if (text.isNotBlank()) c.food.add(date, text) }

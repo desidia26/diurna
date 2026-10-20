@@ -220,6 +220,15 @@ interface WorkoutDao {
     @Query("DELETE FROM logged_exercise WHERE id = :id")
     suspend fun deleteLogged(id: Long)
 
+    @Query("SELECT * FROM logged_exercise WHERE id = :id")
+    suspend fun getLogged(id: Long): LoggedExerciseEntity?
+
+    @Query("SELECT * FROM logged_exercise WHERE workout_id = :workoutId ORDER BY position")
+    suspend fun loggedIn(workoutId: Long): List<LoggedExerciseEntity>
+
+    @Query("UPDATE logged_exercise SET position = :position WHERE id = :id")
+    suspend fun setLoggedPosition(id: Long, position: Int)
+
     @Insert
     suspend fun insertSets(sets: List<ExerciseSetEntity>)
 

@@ -1,5 +1,16 @@
 package app.daybook.ui
 
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import app.daybook.domain.SetHints
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import app.daybook.R
 import androidx.compose.ui.res.painterResource
@@ -243,7 +254,18 @@ private fun WorkoutCard(s: DayUi, vm: DayViewModel) {
     val setsDone = s.exercises.sumOf { e -> e.logged.sets.count { it.reps != null } }
     val summary = "${s.exercises.size} exercises · $setsDone sets · ${volume.fmt()} lb"
     SectionCard("Workout", chip = { Chip(w.workout.name + if (swapped) " (swapped)" else "", Tone.Sky) }, fold = rememberFold(vm, "workout", summary)) {
-        s.exercises.forEach { ex -> ExerciseBlock(ex, vm) }
+        // Enter walks weight → reps → next set's weight, across exercises; explicit requesters so
+        // focus skips the buttons in between.
+        val requesters = remember { mutableMapOf<Pair<Long, Boolean>, FocusRequester>() }
+        fun focusOf(setId: Long, reps: Boolean) = requesters.getOrPut(setId to reps) { FocusRequester() }
+        val order = s.exercises.flatMap { e -> e.logged.sets.map { it.id } }
+        s.exercises.forEachIndexed { i, ex ->
+            ExerciseBlock(
+                ex, vm, isFirst = i == 0, isLast = i == s.exercises.lastIndex,
+                focusOf = ::focusOf,
+                nextSet = { id -> order.getOrNull(order.indexOf(id) + 1) },
+            )
+        }
         val names by vm.exerciseNames.collectAsStateWithLifecycle()
         ExerciseInput(names, onAdd = vm::addExercise)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -260,45 +282,142 @@ private fun WorkoutCard(s: DayUi, vm: DayViewModel) {
 }
 
 @Composable
-private fun ExerciseBlock(ex: ExerciseUi, vm: DayViewModel) {
+private fun ExerciseBlock(
+    ex: ExerciseUi, vm: DayViewModel, isFirst: Boolean, isLast: Boolean,
+    focusOf: (setId: Long, reps: Boolean) -> FocusRequester,
+    nextSet: (setId: Long) -> Long?,
+) {
     val logged = ex.logged
     val last = ex.last
+    val sets = logged.sets
+    val done = sets.count { it.reps != null }
+    var menu by remember { mutableStateOf(false) }
+    var confirmRemove by remember { mutableStateOf(false) }
+    // "+ Set" puts the cursor in the new row once it arrives from the database.
+    var focusWhenMoreThan by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(sets.size) {
+        val n = focusWhenMoreThan ?: return@LaunchedEffect
+        if (sets.size > n) {
+            focusWhenMoreThan = null
+            runCatching { focusOf(sets.last().id, false).requestFocus() }
+        }
+    }
+    val focusManager = LocalFocusManager.current
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(logged.exercise.name, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-            if (last != null) TextButton(onClick = { vm.useLast(logged.logged.id, logged.exercise.id) }) { Text("Same as last") }
-            TextButton(onClick = { vm.addSet(logged.logged.id) }) { Text("+ Set") }
+            if (sets.isNotEmpty()) Chip("$done/${sets.size}", if (done == sets.size) Tone.Good else Tone.Neutral)
+            Box {
+                IconButton(onClick = { menu = true }, modifier = Modifier.size(40.dp)) {
+                    Text("⋮", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Move up") }, enabled = !isFirst, onClick = { menu = false; vm.moveExercise(logged.logged.id, up = true) })
+                    DropdownMenuItem(text = { Text("Move down") }, enabled = !isLast, onClick = { menu = false; vm.moveExercise(logged.logged.id, up = false) })
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text("Remove") }, onClick = {
+                        menu = false
+                        if (sets.any { it.weight != null || it.reps != null }) confirmRemove = true
+                        else vm.removeExercise(logged.logged.id)
+                    })
+                }
+            }
         }
         Hint(
             if (last != null) "Last time, ${last.date.short()}: " + last.sets.joinToString(" · ") { "${it.weight?.fmt() ?: "–"}×${it.reps}" }
             else "First time logging this"
         )
-        logged.sets.forEachIndexed { i, set ->
-            val placeholder = last?.sets?.let { it.getOrNull(i) ?: it.lastOrNull() }
-            SetRow(i + 1, set, placeholder, onChange = { wt, r -> vm.updateSet(set.id, wt, r) }, onDelete = { vm.deleteSet(set.id, logged.logged.id) })
+        sets.forEachIndexed { i, set ->
+            val next = nextSet(set.id)
+            SetRow(
+                i + 1, set, SetHints.hint(i, sets, last?.sets.orEmpty()),
+                weightFocus = focusOf(set.id, false), repsFocus = focusOf(set.id, true),
+                onRepsNext = next?.let { id -> { focusOf(id, false).requestFocus() } },
+                onLastDone = { focusManager.clearFocus() },
+                onChange = { wt, r -> vm.updateSet(set.id, wt, r) },
+                onDelete = { vm.deleteSet(set.id, logged.logged.id) },
+            )
+        }
+        Row {
+            TextButton(onClick = { focusWhenMoreThan = sets.size; vm.addSet(logged.logged.id) }) { Text("+ Set") }
+            if (last != null) TextButton(onClick = { vm.useLast(logged.logged.id, logged.exercise.id) }) { Text("Same as last") }
+        }
+    }
+    if (confirmRemove) {
+        ConfirmDialog(
+            "Remove ${logged.exercise.name}?", "This deletes the sets logged for it today.", "Remove",
+            onDismiss = { confirmRemove = false },
+        ) { vm.removeExercise(logged.logged.id); confirmRemove = false }
+    }
+}
+
+/**
+ * Weight and reps for one set. Enter moves on (weight → reps → [onRepsNext]); on an empty field it
+ * first accepts the grey hint. Tapping a filled field selects it, so typing replaces the value.
+ */
+@Composable
+private fun SetRow(
+    n: Int, set: ExerciseSetEntity, hint: SetHints.Hint,
+    weightFocus: FocusRequester, repsFocus: FocusRequester,
+    onRepsNext: (() -> Unit)?, onLastDone: () -> Unit,
+    onChange: (Double?, Int?) -> Unit, onDelete: () -> Unit,
+) {
+    // Local text keyed by set id only: the database echoes every keystroke back, and a stale echo
+    // must not overwrite newer typing. Changes made elsewhere ("Same as last", "+ Set") create new ids.
+    var weight by remember(set.id) { mutableStateOf(TextFieldValue(set.weight?.fmt() ?: "")) }
+    var reps by remember(set.id) { mutableStateOf(TextFieldValue(set.reps?.toString() ?: "")) }
+    fun save() = onChange(weight.text.toDoubleOrNull(), reps.text.toIntOrNull())
+    fun acceptWeightHint() {
+        if (weight.text.isEmpty() && hint.weight != null) { weight = TextFieldValue(hint.weight.fmt()); save() }
+    }
+    fun acceptRepsHint() {
+        if (reps.text.isEmpty() && hint.reps != null) { reps = TextFieldValue(hint.reps.toString()); save() }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("$n", Modifier.width(18.dp), fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(
+            weight, { v -> val changed = v.text != weight.text; weight = v; if (changed) save() },
+            Modifier.weight(1f).focusRequester(weightFocus).selectAllOnFocus({ weight }, { weight = it }),
+            placeholder = { Text(hint.weight?.fmt() ?: "0") }, suffix = { Text("lb") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { acceptWeightHint(); repsFocus.requestFocus() }),
+        )
+        OutlinedTextField(
+            reps, { v -> val changed = v.text != reps.text; reps = v; if (changed) save() },
+            Modifier.weight(1f).focusRequester(repsFocus).selectAllOnFocus({ reps }, { reps = it }),
+            placeholder = { Text(hint.reps?.toString() ?: "0") }, suffix = { Text("reps") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = if (onRepsNext != null) ImeAction.Next else ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(
+                onNext = { acceptRepsHint(); onRepsNext?.invoke() },
+                onDone = { acceptRepsHint(); onLastDone() },
+            ),
+        )
+        IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
+            Text("×", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
+/**
+ * Selects the whole value when the field gains focus. Applied twice: a tap places its own cursor
+ * just after focus arrives, which would otherwise undo the first selection.
+ */
 @Composable
-private fun SetRow(n: Int, set: ExerciseSetEntity, placeholder: ExerciseSetEntity?, onChange: (Double?, Int?) -> Unit, onDelete: () -> Unit) {
-    // Local text keyed by set id only: the database echoes every keystroke back, and a stale echo
-    // must not overwrite newer typing. Changes made elsewhere ("Same as last", "+ Set") create new ids.
-    var weight by remember(set.id) { mutableStateOf(set.weight?.fmt() ?: "") }
-    var reps by remember(set.id) { mutableStateOf(set.reps?.toString() ?: "") }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("$n", Modifier.width(18.dp), fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(
-            weight, { weight = it; onChange(it.toDoubleOrNull(), reps.toIntOrNull()) }, Modifier.weight(1f),
-            placeholder = { Text(placeholder?.weight?.fmt() ?: "0") }, suffix = { Text("lb") }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        )
-        OutlinedTextField(
-            reps, { reps = it; onChange(weight.toDoubleOrNull(), it.toIntOrNull()) }, Modifier.weight(1f),
-            placeholder = { Text(placeholder?.reps?.toString() ?: "0") }, suffix = { Text("reps") }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        )
-        TextButton(onClick = onDelete, contentPadding = PaddingValues(4.dp)) { Text("×") }
+private fun Modifier.selectAllOnFocus(value: () -> TextFieldValue, set: (TextFieldValue) -> Unit): Modifier {
+    val scope = rememberCoroutineScope()
+    return onFocusChanged { f ->
+        if (!f.isFocused) return@onFocusChanged
+        scope.launch {
+            repeat(2) {
+                val v = value()
+                set(v.copy(selection = TextRange(0, v.text.length)))
+                delay(80)
+            }
+        }
     }
 }
 

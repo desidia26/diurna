@@ -3,6 +3,7 @@ package app.daybook.data
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.daybook.domain.AlarmRules
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -68,6 +69,39 @@ class DayRepositoryTest {
 
         days.startWorkout(mon, push)
         assertEquals(mon.minusDays(14), days.lastTime(workout(mon).ex("Bench press").exercise.id, mon)!!.date)
+    }
+
+    @Test fun removeExerciseTakesItsSetsAndLeavesTheRest() = runTest {
+        days.startWorkout(mon, t.template("Push A", "Bench press", "Dips"))
+        t.fill(mon, "Bench press", 185.0, 8, 8, 6)
+        days.removeExercise(workout(mon).ex("Bench press").logged.id)
+        val w = workout(mon)
+        assertEquals(listOf("Dips"), w.exercises.map { it.exercise.name })
+        assertEquals("no orphaned sets", 3, t.db.workoutDao().sets(w.ex("Dips").logged.id).size)
+        assertTrue(t.db.query("SELECT COUNT(*) FROM exercise_set", null).use { it.moveToFirst(); it.getInt(0) } == 3)
+    }
+
+    @Test fun moveExerciseSwapsNeighborsAndStopsAtTheEnds() = runTest {
+        days.startWorkout(mon, t.template("Push A", "Bench press", "Dips", "Lateral raise"))
+        fun order() = runBlocking { workout(mon).exercises.sortedBy { it.logged.position }.map { it.exercise.name } }
+        val dips = workout(mon).ex("Dips").logged.id
+        days.moveExercise(dips, up = true)
+        assertEquals(listOf("Dips", "Bench press", "Lateral raise"), order())
+        days.moveExercise(dips, up = true) // already first
+        assertEquals(listOf("Dips", "Bench press", "Lateral raise"), order())
+        val raise = workout(mon).ex("Lateral raise").logged.id
+        days.moveExercise(raise, up = false) // already last
+        days.moveExercise(dips, up = false)
+        assertEquals(listOf("Bench press", "Dips", "Lateral raise"), order())
+    }
+
+    @Test fun lastTimeStillWorksAfterReordering() = runTest {
+        val push = t.template("Push A", "Bench press", "Dips")
+        days.startWorkout(mon.minusDays(7), push)
+        t.fill(mon.minusDays(7), "Dips", 0.0, 12, 10)
+        days.moveExercise(workout(mon.minusDays(7)).ex("Dips").logged.id, up = true)
+        days.startWorkout(mon, push)
+        assertEquals(listOf(12, 10), days.lastTime(workout(mon).ex("Dips").exercise.id, mon)!!.sets.map { it.reps })
     }
 
     @Test fun neverDoneExerciseGetsThreeBlankSets() = runTest {
