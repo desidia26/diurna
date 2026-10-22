@@ -47,7 +47,7 @@ class AndroidStepSensor(private val context: Context) : CounterSensor {
                 cont.invokeOnCancellation { manager.unregisterListener(listener) }
             }
         }
-        if (value == null) Log.w("DaybookSteps", "step sensor gave no reading within 5s")
+        if (value == null) Log.w("DiurnaSteps", "step sensor gave no reading within 5s")
         return value
     }
 

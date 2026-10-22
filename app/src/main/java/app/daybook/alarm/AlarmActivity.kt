@@ -38,7 +38,7 @@ import androidx.lifecycle.lifecycleScope
 import app.daybook.container
 import app.daybook.data.hhmm
 import app.daybook.scan.QrScanner
-import app.daybook.ui.theme.DaybookTheme
+import app.daybook.ui.theme.DiurnaTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -54,10 +54,10 @@ class AlarmActivity : ComponentActivity() {
 
         val c = container
         setContent {
-            DaybookTheme {
+            DiurnaTheme {
                 val ring by AlarmService.ringing.collectAsStateWithLifecycle()
                 LaunchedEffect(ring) { if (ring == null) finish() }
-                val current = ring ?: return@DaybookTheme
+                val current = ring ?: return@DiurnaTheme
                 var stopping by remember { mutableStateOf(false) }
 
                 AlarmScreen(
@@ -123,7 +123,7 @@ private fun AlarmScreen(test: Boolean, hasCamera: Boolean, onCode: (String) -> U
                 }
                 if (lastWrong) Text("Point it at the porch code. Other codes won't stop the alarm.", style = MaterialTheme.typography.bodySmall)
             } else {
-                Text("Camera permission is off, so the porch code can't be scanned. Grant it in Daybook's Setup tab.")
+                Text("Camera permission is off, so the porch code can't be scanned. Grant it in Diurna's Setup tab.")
             }
             if (test) Button(onClick = onStopTest) { Text("Stop test") }
         }

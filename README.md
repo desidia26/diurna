@@ -1,12 +1,14 @@
-# Daybook
+# Diurna
 
 > A personal Android app, built for one person and one phone, and shared as-is. There's no support and no roadmap beyond [BACKLOG.md](BACKLOG.md). You're welcome to read it, fork it or borrow from it ([MIT](LICENSE)).
+
+*Diurna* is Latin for "daily things": Rome's *Acta Diurna* were public notices of each day's events. The app was called Daybook at first, so internal names still say `daybook`: the app id `app.daybook`, the code package and the database file. Those stay, because changing the app id would make Android treat it as a different app.
 
 ## Mission
 
 **Get up at the same time every morning, get outside, and keep an honest record of each day.**
 
-Daybook treats a *day* as the basic unit: each day has a morning, the food eaten, maybe a workout, a step count and an evening check-in. The alarm stops only when you scan a QR code on the porch, so being up and being outside become one action that can't be faked from bed. Everything else is a fast log that builds into a history worth looking back on.
+Diurna treats a *day* as the basic unit: each day has a morning, the food eaten, maybe a workout, a step count and an evening check-in. The alarm stops only when you scan a QR code on the porch, so being up and being outside become one action that can't be faked from bed. Everything else is a fast log that builds into a history worth looking back on.
 
 ### Principles
 
@@ -80,7 +82,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 
 **Release builds** are shrunk with R8 (about 25 MB, versus about 80 MB for debug) and not debuggable. `versionCode` is the git commit count, so every release is newer than the last.
 
-**Device tests never run on a real phone.** Gradle uninstalls the app after them, which deletes all of Daybook's data, so `scripts/test` refuses anything but the emulator. Run `./gradlew connectedDebugAndroidTest` by hand only if you know which device it will hit.
+**Device tests never run on a real phone.** Gradle uninstalls the app after them, which deletes all of Diurna's data, so `scripts/test` refuses anything but the emulator. Run `./gradlew connectedDebugAndroidTest` by hand only if you know which device it will hit.
 
 **Wireless debugging** works with the scripts too: pair once in Developer options → Wireless debugging, and `adb` reconnects whenever it's turned on. Keep it on trusted networks only, and off when not in use.
 

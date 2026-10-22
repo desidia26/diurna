@@ -5,7 +5,7 @@
 #   scripts/test device   database / repository / lock-screen tests (emulator only)
 #
 # Device tests always run on the emulator, never the phone: Gradle uninstalls the app when they
-# finish, which deletes all of Daybook's data on that device.
+# finish, which deletes all of Diurna's data on that device.
 source "$(dirname "$0")/_lib.sh"
 
 mode="${1:-all}"

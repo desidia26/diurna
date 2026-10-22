@@ -57,7 +57,7 @@ fun BarcodeScanDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when {
-                    !hasCamera -> Text("Daybook needs the camera to scan.")
+                    !hasCamera -> Text("Diurna needs the camera to scan.")
                     problem != null -> Text(problem!!)
                     looking -> Text("Looking up…")
                     else -> {

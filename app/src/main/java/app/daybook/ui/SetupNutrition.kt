@@ -217,7 +217,7 @@ fun StepsCard(vm: SetupViewModel) {
         when {
             !vm.stepSensorPresent -> Hint("This phone has no step sensor.")
             !permitted -> {
-                Hint("Daybook counts steps with the phone's own step sensor. Android asks for \"Physical activity\" access first.")
+                Hint("Diurna counts steps with the phone's own step sensor. Android asks for \"Physical activity\" access first.")
                 Button(onClick = { request.launch(Manifest.permission.ACTIVITY_RECOGNITION) }) { Text("Allow step counting") }
             }
             else -> {
@@ -238,7 +238,7 @@ fun StepsCard(vm: SetupViewModel) {
 fun BackupsCard(vm: SetupViewModel) {
     val last by vm.lastBackup.collectAsStateWithLifecycle()
     SectionCard("Backups") {
-        Hint("Daybook backs itself up once a day (the last 14 are kept) to its folder on this phone, where a computer can copy them with scripts/backup-db.")
+        Hint("Diurna backs itself up once a day (the last 14 are kept) to its folder on this phone, where a computer can copy them with scripts/backup-db.")
         Text(
             last?.let { "Last backup: " + it.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, HH:mm")) } ?: "No backup yet",
             fontFamily = FontFamily.Monospace,

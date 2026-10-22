@@ -58,7 +58,7 @@ class AppContainer(context: Context) {
     }
 }
 
-class DaybookApp : Application() {
+class DiurnaApp : Application() {
     lateinit var container: AppContainer
         private set
 
@@ -68,13 +68,13 @@ class DaybookApp : Application() {
         container.appScope.launch {
             container.settings.ensureSecret()
             container.finalizer.catchUp()
-            EstimateWorker.enqueue(this@DaybookApp) // anything logged while offline
-            StepSampling.schedule(this@DaybookApp)
-            CheckInReminder.schedule(this@DaybookApp)
+            EstimateWorker.enqueue(this@DiurnaApp) // anything logged while offline
+            StepSampling.schedule(this@DiurnaApp)
+            CheckInReminder.schedule(this@DiurnaApp)
             container.backups.scheduleDaily()
             container.scheduler.reschedule()
         }
     }
 }
 
-val Context.container: AppContainer get() = (applicationContext as DaybookApp).container
+val Context.container: AppContainer get() = (applicationContext as DiurnaApp).container

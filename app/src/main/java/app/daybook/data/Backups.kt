@@ -20,7 +20,7 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 
 /**
- * Daybook backs itself up to its folder in shared storage
+ * Diurna backs itself up to its folder in shared storage
  * (/sdcard/Android/data/app.daybook/files/backups), which a computer can pull over adb even from
  * a release build. Each backup is a consistent copy of the database plus the settings file. The
  * API key is left out on purpose: it's encrypted with a key that never leaves this phone.
@@ -82,7 +82,7 @@ class Backups(private val context: Context, private val db: AppDatabase) {
     }
 
     companion object {
-        private const val TAG = "DaybookBackup"
+        private const val TAG = "DiurnaBackup"
         private const val WORK = "daily-backup"
         private const val KEEP = 14
         private val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")

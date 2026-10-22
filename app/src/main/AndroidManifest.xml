@@ -21,11 +21,11 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
-        android:name=".DaybookApp"
+        android:name=".DiurnaApp"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
-        android:label="Daybook"
+        android:label="Diurna"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
         <activity

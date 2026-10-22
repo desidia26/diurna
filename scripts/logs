@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Show Daybook's logs.
+# Show Diurna's logs.
 #   scripts/logs           follow the app's log live (Ctrl-C to stop)
 #   scripts/logs --crash   print recent crashes and exit
 source "$(dirname "$0")/_lib.sh"
@@ -11,5 +11,5 @@ if [[ "${1:-}" == --crash ]]; then
 fi
 
 pid="$(adb shell pidof "$PKG" | tr -d '\r' || true)"
-[[ -n "$pid" ]] || die "Daybook isn't running. Start it (scripts/install), then run this again."
+[[ -n "$pid" ]] || die "Diurna isn't running. Start it (scripts/install), then run this again."
 adb logcat --pid="$pid"

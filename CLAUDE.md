@@ -1,4 +1,4 @@
-# Daybook
+# Diurna
 
 Personal Android app (Kotlin, Jetpack Compose, Room) for one person's phone: a porch-QR alarm, food logging with AI estimates and barcodes, workouts from a weekly routine, steps and an evening check-in. Read [README.md](README.md) for the mission, principles and architecture map, and [BACKLOG.md](BACKLOG.md) for the work list.
 
@@ -16,7 +16,7 @@ Check a build by its exit code, not by filtered output.
 
 - **Never run device tests on the real phone.** `connectedDebugAndroidTest` uninstalls the app afterwards and wipes its data. Use `scripts/test`, which only targets the emulator.
 - **Install to the phone only through `scripts/release`.** It backs up first and checks that no rows were lost. Don't uninstall the app, clear its data, reboot the phone or change its settings without asking.
-- **Never change `applicationId app.daybook` or the signing key** (`signing/`, git-ignored). Either change makes in-place updates impossible.
+- **Never change `applicationId app.daybook` or the signing key**. The app was renamed from Daybook to Diurna; the id, code package, `daybook.db` and backup file names keep the old name on purpose (`signing/`, git-ignored). Either change makes in-place updates impossible.
 - **Never commit secrets or personal data:** API keys, `signing/`, `local.properties`, `backups/`, databases. The Claude API key is entered in the app and stored encrypted on the phone; never put one in code, tests or chat.
 - **Every schema change ships with a migration and a `MigrationTest` case.** Prefer `AutoMigration`; data-only changes use a `Migration`. Never a destructive fallback.
 

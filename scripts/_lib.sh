@@ -30,7 +30,7 @@ pick_device() {
     [[ -n "$ANDROID_SERIAL" ]] || die "phone not connected. Turn on Wireless debugging (or plug it in)."
   elif [[ "$want" == emulator ]]; then
     [[ -z "${ANDROID_SERIAL:-}" || "$ANDROID_SERIAL" == emulator-* ]] \
-      || die "refusing to use $ANDROID_SERIAL: this wipes Daybook's data, so it only runs on the emulator."
+      || die "refusing to use $ANDROID_SERIAL: this wipes Diurna's data, so it only runs on the emulator."
     ANDROID_SERIAL="${ANDROID_SERIAL:-$emu}"
     [[ -n "$ANDROID_SERIAL" ]] || die "no emulator running. Start one with: scripts/emulator --headless"
   else

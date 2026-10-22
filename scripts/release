@@ -46,7 +46,7 @@ if [[ -n "$installed_apk" ]]; then
   (( version_new >= version_old )) || die "version $version_new is older than installed $version_old"
   echo "key matches; version $version_old -> $version_new"
 else
-  echo "Daybook isn't installed yet; this will be a fresh install"
+  echo "Diurna isn't installed yet; this will be a fresh install"
 fi
 
 counts() { # one line per table: name=rows, plus the schema version

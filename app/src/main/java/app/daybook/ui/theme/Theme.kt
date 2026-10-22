@@ -39,7 +39,7 @@ private val Status = StatusColors(Color(0xFF7DD3A0), Color(0xFF15261C), Color(0x
 val LocalStatusColors = staticCompositionLocalOf { Status }
 
 @Composable
-fun DaybookTheme(content: @Composable () -> Unit) {
+fun DiurnaTheme(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalStatusColors provides Status) {
         MaterialTheme(colorScheme = Scheme, content = content)
     }

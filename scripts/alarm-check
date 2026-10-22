@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Inspect Daybook's armed alarm, and stress it the way real nights do (backlog A1).
+# Inspect Diurna's armed alarm, and stress it the way real nights do (backlog A1).
 #   scripts/alarm-check            show what's armed and whether permissions are in place
 #   scripts/alarm-check --doze     force deep sleep, then confirm the alarm is still armed
 #   scripts/alarm-check --reboot   reboot, wait, then confirm the alarm was re-armed

@@ -98,10 +98,10 @@ class LockWallpaper(
             if (snapshot != lastDrawn) {
                 wallpapers.setBitmap(draw(snapshot, w, h), null, true, WallpaperManager.FLAG_LOCK)
                 lastDrawn = snapshot
-                Log.d("DaybookLock", "lock screen redrawn")
+                Log.d("DiurnaLock", "lock screen redrawn")
             }
         } catch (e: Exception) {
-            Log.w("Daybook", "Lock wallpaper update failed", e)
+            Log.w("Diurna", "Lock wallpaper update failed", e)
         }
         scheduleNextTick()
     }
@@ -114,7 +114,7 @@ class LockWallpaper(
         try {
             wallpapers.clear(WallpaperManager.FLAG_LOCK)
         } catch (e: Exception) {
-            Log.w("Daybook", "Clearing lock wallpaper failed", e)
+            Log.w("Diurna", "Clearing lock wallpaper failed", e)
         }
     }
 

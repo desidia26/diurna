@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copy Daybook's data off the device into backups/<timestamp>/ (git-ignored).
+# Copy Diurna's data off the device into backups/<timestamp>/ (git-ignored).
 #
 # Asks the app for a fresh backup (it opens briefly to do so), then pulls it from the app's folder
 # in shared storage. That works for release builds too. Builds older than the self-backup feature

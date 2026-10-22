@@ -18,7 +18,7 @@ import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
 /**
- * When Daybook looks at the step sensor: every 15 minutes in the background, and once at 23:59 so
+ * When Diurna looks at the step sensor: every 15 minutes in the background, and once at 23:59 so
  * the day's last steps are counted on that day before midnight. (Also at boot and whenever today's
  * count is shown.)
  */

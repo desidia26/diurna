@@ -78,7 +78,7 @@ class AlarmScheduler(
             alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(trigger, show), operation)
             true
         } catch (e: SecurityException) {
-            Log.w("Daybook", "Exact alarms not permitted", e)
+            Log.w("Diurna", "Exact alarms not permitted", e)
             false
         }
     }

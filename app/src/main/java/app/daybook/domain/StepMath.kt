@@ -4,7 +4,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 /**
- * The phone's step sensor reports a running total since the last reboot. Daybook looks at it now
+ * The phone's step sensor reports a running total since the last reboot. Diurna looks at it now
  * and then and turns the difference into steps for a day. These are the rules, kept free of
  * Android so every case is unit tested.
  */
@@ -22,7 +22,7 @@ object StepMath {
      * [bootedAt] is when the phone last started. A reboot resets the sensor to 0, so after one
      * every count it reports is new.
      *
-     * Steps go to the day of the current look. Looking just before midnight (Daybook wakes at
+     * Steps go to the day of the current look. Looking just before midnight (Diurna wakes at
      * 23:59) keeps late-evening steps on the right day; if that look is missed, overnight steps
      * land on the new day, which is almost always where they happened.
      */

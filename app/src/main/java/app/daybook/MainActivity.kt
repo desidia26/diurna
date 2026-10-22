@@ -42,7 +42,7 @@ import app.daybook.ui.containerViewModel
 import app.daybook.ui.RoutineScreen
 import app.daybook.ui.SetupScreen
 import app.daybook.ui.WeekScreen
-import app.daybook.ui.theme.DaybookTheme
+import app.daybook.ui.theme.DiurnaTheme
 
 private enum class Tab(val label: String, @DrawableRes val icon: Int) {
     Day("Day", R.drawable.ic_day),
@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
         backupIfAsked(intent)
         if (savedInstanceState == null) openCheckInIfAsked(intent)
         setContent {
-            DaybookTheme {
+            DiurnaTheme {
                 val dayVm = containerViewModel(c) { DayViewModel(it) }
                 val weekVm = containerViewModel(c) { WeekViewModel(it) }
                 val routineVm = containerViewModel(c) { RoutineViewModel(it) }

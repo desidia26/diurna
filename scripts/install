@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build, install and open Daybook. Prefers the phone over the emulator.
+# Build, install and open Diurna. Prefers the phone over the emulator.
 #   scripts/install               install and launch
 #   scripts/install --no-launch   install only
 source "$(dirname "$0")/_lib.sh"
