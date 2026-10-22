@@ -51,7 +51,7 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 |---|---|---|---|
 | T2 | P2 | Compose UI tests | Logic is covered by unit and instrumented tests; the screens aren't. |
 | T4 | P3 | Upgrade libraries together | Pinned to a mid-2025 set. |
-| T5 | P3 | Debug APK is ~82 MB | Mostly the Anthropic SDK's HTTP dependencies plus ML Kit. Fine for sideloading; shrink with R8 if it ever matters. |
+| T5 | P3 | Debug APK is ~82 MB | Mostly the Anthropic SDK's HTTP dependencies plus ML Kit. Release builds are shrunk with R8 to ~25 MB, so this only affects debug installs. |
 
 ## Done
 

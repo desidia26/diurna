@@ -11,3 +11,17 @@
 .kotlin/
 /backups/
 /signing/
+
+# Never commit secrets, signing material or personal data, wherever they end up.
+*.jks
+*.keystore
+keystore.properties
+local.properties
+.env
+*.apk
+*.aab
+*.db
+*.db-wal
+*.db-shm
+*.preferences_pb
+.claude/settings.local.json
