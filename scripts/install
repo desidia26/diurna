@@ -7,6 +7,6 @@ source "$(dirname "$0")/_lib.sh"
 pick_device
 gradle installDebug
 if [[ "${1:-}" != --no-launch ]]; then
-  adb shell am start -n "$MAIN" >/dev/null
+  adb shell am start -n "$(main_activity)" >/dev/null
   echo "launched"
 fi

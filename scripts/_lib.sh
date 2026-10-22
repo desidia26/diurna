@@ -11,7 +11,6 @@ ADB="$SDK/platform-tools/adb"
 EMULATOR="$SDK/emulator/emulator"
 AVD="${AVD:-Pixel_3a_API_33_x86_64}"
 PKG="app.daybook"            # the app id; kept from the app's first name, never changes
-MAIN="$PKG/app.diurna.MainActivity" # the code package is app.diurna
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -43,5 +42,13 @@ pick_device() {
 }
 
 adb() { "$ADB" "$@"; }
+
+# The installed app's main screen, asked of the device: builds from before the code moved to the
+# app.diurna package name it app.daybook.MainActivity. Falls back to the current name.
+main_activity() {
+  local found
+  found="$(adb shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$PKG" | tail -1 | tr -d '\r')"
+  [[ "$found" == "$PKG/"* ]] && echo "$found" || echo "$PKG/app.diurna.MainActivity"
+}
 
 gradle() { (cd "$ROOT" && ./gradlew --no-daemon -q "$@"); }
