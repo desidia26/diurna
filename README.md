@@ -2,7 +2,7 @@
 
 > A personal Android app, built for one person and one phone, and shared as-is. There's no support and no roadmap beyond [BACKLOG.md](BACKLOG.md). You're welcome to read it, fork it or borrow from it ([MIT](LICENSE)).
 
-*Diurna* is Latin for "daily things": Rome's *Acta Diurna* were public notices of each day's events. The app was called Daybook at first, so internal names still say `daybook`: the app id `app.daybook`, the code package and the database file. Those stay, because changing the app id would make Android treat it as a different app.
+*Diurna* is Latin for "daily things": Rome's *Acta Diurna* were public notices of each day's events. The app was called Daybook at first. The code package is now `app.diurna`, but the app id stays `app.daybook` (changing it would make Android treat it as a different app, with none of the old one's data), as do the database and backup file names.
 
 ## Mission
 

@@ -10,7 +10,8 @@ SDK="${ANDROID_HOME:-$HOME/Android/Sdk}"
 ADB="$SDK/platform-tools/adb"
 EMULATOR="$SDK/emulator/emulator"
 AVD="${AVD:-Pixel_3a_API_33_x86_64}"
-PKG="app.daybook"
+PKG="app.daybook"            # the app id; kept from the app's first name, never changes
+MAIN="$PKG/app.diurna.MainActivity" # the code package is app.diurna
 
 die() { echo "error: $*" >&2; exit 1; }
 

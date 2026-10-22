@@ -16,7 +16,7 @@ Check a build by its exit code, not by filtered output.
 
 - **Never run device tests on the real phone.** `connectedDebugAndroidTest` uninstalls the app afterwards and wipes its data. Use `scripts/test`, which only targets the emulator.
 - **Install to the phone only through `scripts/release`.** It backs up first and checks that no rows were lost. Don't uninstall the app, clear its data, reboot the phone or change its settings without asking.
-- **Never change `applicationId app.daybook` or the signing key**. The app was renamed from Daybook to Diurna; the id, code package, `daybook.db` and backup file names keep the old name on purpose (`signing/`, git-ignored). Either change makes in-place updates impossible.
+- **Never change `applicationId app.daybook` or the signing key**. The app was renamed from Daybook to Diurna; the code package is `app.diurna`, but the app id, `daybook.db` and backup file names keep the old name on purpose (`signing/`, git-ignored). Either change makes in-place updates impossible.
 - **Never commit secrets or personal data:** API keys, `signing/`, `local.properties`, `backups/`, databases. The Claude API key is entered in the app and stored encrypted on the phone; never put one in code, tests or chat.
 - **Every schema change ships with a migration and a `MigrationTest` case.** Prefer `AutoMigration`; data-only changes use a `Migration`. Never a destructive fallback.
 

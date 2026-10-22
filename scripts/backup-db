@@ -16,7 +16,7 @@ newest() { { adb shell "ls $remote/daybook-*.db 2>/dev/null" || true; } | tr -d 
 
 before="$(newest)"
 # single-top: if the app is already open, hand the request to that screen instead of just showing it.
-adb shell am start --activity-single-top -n "$PKG/.MainActivity" --ez backup true >/dev/null 2>&1 || true
+adb shell am start --activity-single-top -n "$MAIN" --ez backup true >/dev/null 2>&1 || true
 latest=""
 for _ in $(seq 1 20); do
   sleep 1

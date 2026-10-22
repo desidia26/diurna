@@ -67,7 +67,7 @@ fi
 
 step "Install"
 adb install -r "$apk" | tail -1
-adb shell am start -n "$PKG/.MainActivity" >/dev/null
+adb shell am start -n "$MAIN" >/dev/null
 sleep 4
 crashes="$(adb logcat -d -b crash | grep -c "$PKG" || true)"
 

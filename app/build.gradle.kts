@@ -19,10 +19,12 @@ val commitCount: Int = providers.exec { commandLine("git", "rev-list", "--count"
     .standardOutput.asText.get().trim().toIntOrNull() ?: 1
 
 android {
-    namespace = "app.daybook"
+    namespace = "app.diurna"
     compileSdk = 36
 
     defaultConfig {
+        // Kept from the app's first name, Daybook: changing it would make Android treat it as a
+        // different app, with none of this one's data. The code package (namespace) is app.diurna.
         applicationId = "app.daybook"
         minSdk = 29
         targetSdk = 36

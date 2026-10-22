@@ -9,7 +9,7 @@ pick_device
 
 show() {
   local armed
-  armed="$(adb shell dumpsys alarm | grep -A1 "$PKG/.alarm.AlarmReceiver" | grep -o 'origWhen=[^ ]* [^ ]*' | sed 's/origWhen=/  /' | sort -u || true)"
+  armed="$(adb shell dumpsys alarm | grep -A1 "$PKG/app.diurna.alarm.AlarmReceiver" | grep -o 'origWhen=[^ ]* [^ ]*' | sed 's/origWhen=/  /' | sort -u || true)"
   if [[ -n "$armed" ]]; then
     echo "armed alarms:"; echo "$armed"
   else
