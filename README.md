@@ -18,6 +18,23 @@ Diurna treats a *day* as the basic unit: each day has a morning, the food eaten,
 - **Low-friction logging.** Food is free text, a saved meal or a barcode scan. Sets are pre-filled from last time, and the keyboard's Next key walks through them.
 - **Local and private.** No account and no server of its own; everything lives on the phone. It makes exactly two kinds of network call: food text you log goes to the Claude API with *your own* API key, and barcode numbers you scan go to [Open Food Facts](https://world.openfoodfacts.org).
 
+## Screenshots
+
+Demo data on an emulator; none of it is real.
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/screenshots/day.png" width="250" alt="Day screen: the morning alarm, scanned on time, weight and porch scan"><br><sub><b>Morning:</b> on time, locked alarm, porch scan</sub></td>
+    <td align="center"><img src="assets/screenshots/workout.png" width="250" alt="Workout: sets with last time's numbers and grey hints"><br><sub><b>Workout:</b> last time's sets as hints</sub></td>
+    <td align="center"><img src="assets/screenshots/food.png" width="250" alt="Food: calories and macros against daily targets"><br><sub><b>Food:</b> intake against targets</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/screenshots/estimates.png" width="250" alt="Food entries: AI estimates with their assumptions, and saved meals"><br><sub><b>Estimates:</b> AI ranges with assumptions, exact saved meals</sub></td>
+    <td align="center"><img src="assets/screenshots/week.png" width="250" alt="Week view: mornings, workouts, steps and calories per day"><br><sub><b>Week:</b> mornings, workouts, steps, calories</sub></td>
+    <td align="center"><img src="assets/screenshots/routine.png" width="250" alt="Routine: alarm time and workout for each weekday"><br><sub><b>Routine:</b> the weekly template</sub></td>
+  </tr>
+</table>
+
 ## How it works
 
 | Area | Where |
