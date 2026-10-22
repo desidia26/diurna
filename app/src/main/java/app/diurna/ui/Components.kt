@@ -1,5 +1,11 @@
 package app.diurna.ui
 
+import androidx.compose.foundation.layout.PaddingValues
+
+import androidx.compose.foundation.layout.RowScope
+
+import androidx.compose.material3.ButtonDefaults
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import app.diurna.R
@@ -40,7 +46,6 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -232,3 +237,20 @@ fun ConfirmDialog(title: String, body: String, confirm: String, onDismiss: () ->
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
+
+/**
+ * The app's outlined button: Material's, with purple text. Material 3 1.4 made outlined button
+ * text grey by default; buttons here stay in the accent color.
+ */
+@Composable
+fun OutlinedButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    content: @Composable RowScope.() -> Unit,
+) = androidx.compose.material3.OutlinedButton(
+    onClick, modifier, enabled,
+    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+    contentPadding = contentPadding, content = content,
+)

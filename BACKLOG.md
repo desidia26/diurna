@@ -50,7 +50,7 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | # | P | Item | Notes |
 |---|---|---|---|
 | T2 | P2 | Compose UI tests | Logic is covered by unit and instrumented tests; the screens aren't. |
-| T4 | P3 | Upgrade libraries together | Pinned to a mid-2025 set. |
+| T4 | P3 | Upgrade the rest of the libraries together | Compose moved to BOM 2026.06.00 (2026-10-22) to fix a crash; Kotlin, AGP, Room, CameraX and the rest are still the mid-2025 set. |
 | T5 | P3 | Debug APK is ~82 MB | Mostly the Anthropic SDK's HTTP dependencies plus ML Kit. Release builds are shrunk with R8 to ~25 MB, so this only affects debug installs. |
 
 ## Done
@@ -90,3 +90,4 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | — | Evening check-in: mood and energy (1–5, a word per step) on each day, editable any time; a 9pm reminder that skips rated days and clears itself once both are in. Database v5 | 2026-10-16 |
 | — | Barcode scanning for food: package barcodes (EAN/UPC) looked up on Open Food Facts, checked in the meal form, saved to the library with the barcode; rescans go straight to servings and work offline. Responses treated as untrusted (HTTPS only, no redirects, size and time caps, sanity limits on numbers, plain short text). Database v7 | 2026-10-20 |
 | — | Exercise logging usability: Enter walks weight → reps → next set across exercises (✓ on the last field closes the keyboard); Enter on an empty field accepts the grey hint (weight follows the set above); tapping a filled field selects it; "+ Set" focuses the new row; per-exercise "done/total" chip; ⋮ menu to move up/down or remove (confirm when it has data); bigger × on sets | 2026-10-20 |
+| — | Crash: "launchAnimation called when previous animation was running" (three times on the phone) when the keyboard shrank the screen while a scroll-into-view was running, a Compose 1.8 bug. Fixed by moving to Compose BOM 2026.06.00 (foundation 1.11), whose rewritten code path no longer has the crashing call; outlined buttons kept purple after Material 3 1.4 made them grey | 2026-10-22 |
