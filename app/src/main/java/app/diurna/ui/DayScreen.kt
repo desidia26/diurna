@@ -1,5 +1,7 @@
 package app.diurna.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
@@ -257,10 +259,13 @@ private fun WorkoutCard(s: DayUi, vm: DayViewModel) {
         // focus skips the buttons in between.
         val requesters = remember { mutableMapOf<Pair<Long, Boolean>, FocusRequester>() }
         fun focusOf(setId: Long, reps: Boolean) = requesters.getOrPut(setId to reps) { FocusRequester() }
-        val order = s.exercises.flatMap { e -> e.logged.sets.map { it.id } }
+        // Folded exercises' fields aren't on screen, so the chain skips them.
+        val folded by vm.folded.collectAsStateWithLifecycle()
+        val order = s.exercises.filter { exerciseFoldKey(it) !in folded }.flatMap { e -> e.logged.sets.map { it.id } }
         s.exercises.forEachIndexed { i, ex ->
             ExerciseBlock(
                 ex, vm, isFirst = i == 0, isLast = i == s.exercises.lastIndex,
+                collapsed = exerciseFoldKey(ex) in folded,
                 focusOf = ::focusOf,
                 nextSet = { id -> order.getOrNull(order.indexOf(id) + 1) },
             )
@@ -280,9 +285,11 @@ private fun WorkoutCard(s: DayUi, vm: DayViewModel) {
     }
 }
 
+private fun exerciseFoldKey(ex: ExerciseUi) = "exercise:${ex.logged.logged.id}"
+
 @Composable
 private fun ExerciseBlock(
-    ex: ExerciseUi, vm: DayViewModel, isFirst: Boolean, isLast: Boolean,
+    ex: ExerciseUi, vm: DayViewModel, isFirst: Boolean, isLast: Boolean, collapsed: Boolean,
     focusOf: (setId: Long, reps: Boolean) -> FocusRequester,
     nextSet: (setId: Long) -> Long?,
 ) {
@@ -290,6 +297,7 @@ private fun ExerciseBlock(
     val last = ex.last
     val sets = logged.sets
     val done = sets.count { it.reps != null }
+    val complete = sets.isNotEmpty() && done == sets.size
     var menu by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
     // "+ Set" puts the cursor in the new row once it arrives from the database.
@@ -305,8 +313,22 @@ private fun ExerciseBlock(
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(logged.exercise.name, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-            if (sets.isNotEmpty()) Chip("$done/${sets.size}", if (done == sets.size) Tone.Good else Tone.Neutral)
+            // Tapping the name folds the exercise to one line of its sets.
+            Row(
+                Modifier.weight(1f).clickable(onClickLabel = if (collapsed) "Expand" else "Collapse") { vm.toggleFold(exerciseFoldKey(ex)) },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                val angle by animateFloatAsState(if (collapsed) -90f else 0f, label = "exercise fold")
+                Icon(
+                    painterResource(R.drawable.ic_chevron_down), contentDescription = null,
+                    Modifier.size(20.dp).rotate(angle), tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    logged.exercise.name, fontWeight = FontWeight.SemiBold,
+                    color = if (complete) LocalStatusColors.current.good else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            if (sets.isNotEmpty()) Chip("$done/${sets.size}", if (complete) Tone.Good else Tone.Neutral)
             Box {
                 IconButton(onClick = { menu = true }, modifier = Modifier.size(40.dp)) {
                     Text("⋮", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -322,6 +344,13 @@ private fun ExerciseBlock(
                     })
                 }
             }
+        }
+        if (collapsed) {
+            Hint(
+                sets.filter { it.reps != null }.joinToString(" · ") { "${it.weight?.fmt() ?: "–"}×${it.reps}" }
+                    .ifEmpty { "No sets logged yet" }
+            )
+            return@Column
         }
         Hint(
             if (last != null) "Last time, ${last.date.short()}: " + last.sets.joinToString(" · ") { "${it.weight?.fmt() ?: "–"}×${it.reps}" }
