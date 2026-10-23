@@ -25,3 +25,6 @@ local.properties
 *.db-shm
 *.preferences_pb
 .claude/settings.local.json
+
+# Local run logs (release timings)
+/logs/

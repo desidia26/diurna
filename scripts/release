@@ -10,7 +10,26 @@ source "$(dirname "$0")/_lib.sh"
 skip_tests=false
 [[ "${1:-}" == --skip-tests ]] && skip_tests=true
 
-step() { echo; echo "== $*"; }
+# Each step is timed; the durations print at the end (also when a step fails) and are appended to
+# logs/release-timings.csv (git-ignored), one row per run, to compare releases over time.
+timings=() step_name="" step_start=0 run_start=$SECONDS outcome="failed" version_new=""
+end_step() { [[ -n "$step_name" ]] && timings+=("$step_name|$((SECONDS - step_start))"); step_name=""; }
+step() { end_step; step_name="$*"; step_start=$SECONDS; echo; echo "== $*"; }
+report_timings() {
+  end_step
+  local total=$((SECONDS - run_start)) row name secs
+  echo; echo "== Timings ($outcome)"
+  for row in "${timings[@]}"; do
+    name="${row%|*}"; secs="${row##*|}"
+    printf "  %-62s %3ss\n" "$name" "$secs"
+  done
+  printf "  %-62s %3ss\n" "Total" "$total"
+  mkdir -p "$ROOT/logs"
+  local csv="$ROOT/logs/release-timings.csv"
+  [[ -f "$csv" ]] || echo "date,version,outcome,total_s,steps" > "$csv"
+  echo "$(date -Iseconds),${version_new:-?},$outcome,$total,\"$(IFS=';'; echo "${timings[*]}")\"" >> "$csv"
+}
+trap report_timings EXIT
 build_tools="$SDK/build-tools/$(ls "$SDK/build-tools" | sort -V | tail -1)"
 apk="$ROOT/app/build/outputs/apk/release/app-release.apk"
 
@@ -97,4 +116,5 @@ else
   git tag -a "$tag" -m "Release $version_new installed on the phone"
   echo "tagged $tag"
 fi
+outcome="released"
 echo; echo "Released version $version_new."
