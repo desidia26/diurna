@@ -18,10 +18,21 @@ die() { echo "error: $*" >&2; exit 1; }
 #   pick_device            phone if plugged in, else emulator
 #   pick_device emulator   emulator only, never the phone (for anything that wipes app data)
 #   pick_device phone      the phone only, never an emulator (for releases)
+# Wireless debugging can be on while adb hasn't reconnected: find the phone on the network and connect.
+connect_wireless() {
+  local addr
+  addr="$("$ADB" mdns services 2>/dev/null | awk '/_adb-tls-connect/ {print $NF; exit}')"
+  [[ -n "$addr" ]] && timeout 10 "$ADB" connect "$addr" >/dev/null 2>&1 || true
+}
+
 pick_device() {
   local want="${1:-any}"
   local devices phone emu
   devices="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1}')"
+  if [[ "$want" != emulator ]] && ! grep -qv '^emulator-' <<<"$devices"; then
+    connect_wireless
+    devices="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1}')"
+  fi
   phone="$(grep -v '^emulator-' <<<"$devices" | head -1 || true)"
   emu="$(grep '^emulator-' <<<"$devices" | head -1 || true)"
   if [[ "$want" == phone ]]; then
