@@ -62,4 +62,7 @@ main_activity() {
   [[ "$found" == "$PKG/"* ]] && echo "$found" || echo "$PKG/app.diurna.MainActivity"
 }
 
-gradle() { (cd "$ROOT" && ./gradlew --no-daemon -q "$@"); }
+# Uses Gradle's background daemon, so later runs (the release build right after the tests, the next
+# release) skip startup and reuse what it has loaded. It exits on its own after 3 idle hours;
+# ./gradlew --stop ends it sooner.
+gradle() { (cd "$ROOT" && ./gradlew -q "$@"); }
