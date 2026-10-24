@@ -16,6 +16,7 @@ import app.diurna.data.DayRepository
 import app.diurna.data.NutritionRepository
 import app.diurna.data.FoodRepository
 import app.diurna.data.LibraryRepository
+import app.diurna.data.MetricsRepository
 import app.diurna.ui.SelectedDate
 import app.diurna.data.RoutineRepository
 import app.diurna.data.SettingsStore
@@ -34,6 +35,7 @@ class AppContainer(context: Context) {
     val db = AppDatabase.build(context)
     val settings = SettingsStore(context)
     val days = DayRepository(db)
+    val metrics = MetricsRepository(db)
     val food = FoodRepository(db)
     val library = LibraryRepository(db)
     val backups = Backups(context, db)

@@ -54,6 +54,9 @@ interface DayDao {
     @Query("SELECT MIN(date) FROM day")
     suspend fun firstDate(): String?
 
+    @Query("SELECT MIN(date) FROM day")
+    fun observeFirstDate(): Flow<String?>
+
     @Query("SELECT MAX(date) FROM day WHERE finalized = 1")
     suspend fun lastFinalizedDate(): String?
 
@@ -256,6 +259,17 @@ interface WorkoutDao {
 
     @Query("SELECT * FROM exercise_set WHERE logged_exercise_id = :loggedId AND reps IS NOT NULL ORDER BY position")
     suspend fun filledSets(loggedId: Long): List<ExerciseSetEntity>
+
+    /** Every set ever logged, oldest first. All of history, because PRs are judged against it. */
+    @Query(
+        """SELECT w.date AS date, le.exercise_id AS exerciseId, e.name AS name, le.id AS loggedId, s.weight AS weight, s.reps AS reps
+           FROM exercise_set s
+           JOIN logged_exercise le ON le.id = s.logged_exercise_id
+           JOIN day_workout w ON w.id = le.workout_id
+           JOIN exercise e ON e.id = le.exercise_id
+           ORDER BY w.date, le.position, s.position"""
+    )
+    fun observeSetRows(): Flow<List<SetRow>>
 }
 
 @Dao

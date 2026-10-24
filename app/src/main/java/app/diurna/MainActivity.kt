@@ -38,6 +38,8 @@ import app.diurna.ui.LibraryViewModel
 import app.diurna.ui.RoutineViewModel
 import app.diurna.ui.SetupViewModel
 import app.diurna.ui.WeekViewModel
+import app.diurna.ui.MetricsScreen
+import app.diurna.ui.MetricsViewModel
 import app.diurna.ui.containerViewModel
 import app.diurna.ui.RoutineScreen
 import app.diurna.ui.SetupScreen
@@ -47,6 +49,7 @@ import app.diurna.ui.theme.DiurnaTheme
 private enum class Tab(val label: String, @DrawableRes val icon: Int) {
     Day("Day", R.drawable.ic_day),
     Week("Week", R.drawable.ic_week),
+    Metrics("Metrics", R.drawable.ic_metrics),
     Routine("Routine", R.drawable.ic_routine),
     Setup("Setup", R.drawable.ic_setup),
 }
@@ -97,6 +100,7 @@ class MainActivity : ComponentActivity() {
             DiurnaTheme {
                 val dayVm = containerViewModel(c) { DayViewModel(it) }
                 val weekVm = containerViewModel(c) { WeekViewModel(it) }
+                val metricsVm = containerViewModel(c) { MetricsViewModel(it) }
                 val routineVm = containerViewModel(c) { RoutineViewModel(it) }
                 val setupVm = containerViewModel(c) { SetupViewModel(it) }
                 val libraryVm = containerViewModel(c) { LibraryViewModel(it) }
@@ -126,6 +130,7 @@ class MainActivity : ComponentActivity() {
                         when (tab) {
                             Tab.Day -> DayScreen(dayVm, inner)
                             Tab.Week -> WeekScreen(weekVm, inner) { weekVm.goTo(it); tab = Tab.Day }
+                            Tab.Metrics -> MetricsScreen(metricsVm, inner)
                             Tab.Routine -> RoutineScreen(routineVm, inner)
                             Tab.Setup -> SetupScreen(setupVm, libraryVm, inner)
                         }

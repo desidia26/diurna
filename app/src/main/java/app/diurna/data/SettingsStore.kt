@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import app.diurna.domain.Activity
 import app.diurna.domain.Goal
+import app.diurna.domain.Metrics
 import app.diurna.domain.Profile
 import app.diurna.domain.Sex
 import app.diurna.domain.StepMath
@@ -49,6 +50,16 @@ class SettingsStore(private val context: Context) : StepStateStore {
 
     suspend fun setStepGoal(goal: Int) {
         context.dataStore.edit { it[stepGoalKey] = goal.coerceIn(1_000, 100_000) }
+    }
+
+    // ---- Metrics ----
+    private val metricsRangeKey = stringPreferencesKey("metrics_range")
+    val metricsRange: Flow<Metrics.Range> = context.dataStore.data
+        .map { p -> Metrics.Range.entries.find { it.name == p[metricsRangeKey] } ?: Metrics.Range.W4 }
+        .distinctUntilChanged()
+
+    suspend fun setMetricsRange(range: Metrics.Range) {
+        context.dataStore.edit { it[metricsRangeKey] = range.name }
     }
 
     private val stepCounterKey = longPreferencesKey("step_last_counter")

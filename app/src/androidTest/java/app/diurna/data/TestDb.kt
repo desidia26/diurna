@@ -18,6 +18,7 @@ class TestDb {
     ).addCallback(AppDatabase.seedRoutine).build()
 
     val days = DayRepository(db) { now }
+    val metrics = MetricsRepository(db)
     val profile = MutableStateFlow<Profile?>(null)
     val nutrition = NutritionRepository(db, profile)
     /** Fake step counts by date; missing dates have no data. */

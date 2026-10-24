@@ -53,10 +53,11 @@ Demo data on an emulator; none of it is real.
 | Steps: counted from the phone's hardware step sensor (running total since boot), checked every 15 minutes, at 23:59 and at boot; the rules for reboots and midnight are in `domain/StepMath.kt`; shown against a goal and frozen per day | `steps/`, `data/StepCounter.kt` |
 | Evening check-in: mood and energy (1–5) per day, with a 9pm reminder that skips rated days | `checkin/`, `domain/Ratings.kt` |
 | Week view: each day's morning, workout, steps and calories | `ui/WeekScreen.kt` |
+| Metrics: weight with a 7-day average, mood and energy, weekly training volume and PRs, lifts by estimated 1RM (Epley, sets of up to 12 reps) with a per-exercise screen. Worked out from current data on the fly; nothing extra is stored. Charts are drawn with Compose `Canvas` | `domain/Metrics.kt`, `data/MetricsRepository.kt`, `ui/MetricsScreen.kt`, `ui/Charts.kt` |
 | Finalizing days: once a day ends, its alarm, planned workout, targets and steps are frozen so later routine or profile edits don't rewrite history | `data/DayFinalizer.kt` |
 | Self-backups: a consistent copy of the database and settings daily (keeps 14) in the app's shared-storage folder, readable over `adb` | `data/Backups.kt` |
 | Shared one-line summaries for the Day screen and lock screen | `domain/DayText.kt` |
-| UI: Compose, four tabs (Day, Week, Routine, Setup), one ViewModel per screen | `ui/` |
+| UI: Compose, five tabs (Day, Week, Metrics, Routine, Setup), one ViewModel per screen | `ui/` |
 
 Key data rules:
 - A day's alarm is its override if set (a time or `off`), otherwise the routine. Once the day locks, the time that was armed (`day.scheduled_alarm`) is frozen.

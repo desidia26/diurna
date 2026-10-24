@@ -199,6 +199,8 @@ data class TemplateExerciseName(val templateId: Long, val position: Int, val nam
 
 data class LastTimeRef(val loggedExerciseId: Long, val date: String)
 
+data class SetRow(val date: String, val exerciseId: Long, val name: String, val loggedId: Long, val weight: Double?, val reps: Int?)
+
 data class DateName(val date: String, val name: String)
 
 data class DateKcal(val date: String, val kcal: Int)

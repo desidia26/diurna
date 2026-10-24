@@ -35,7 +35,9 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | F2 | P3 | Cross-day insights | E.g. "you eat more on days you skip the gym", "protein is low on rest days". |
 | F3 | P3 | Home-screen widget with quick actions | Log food or start today's workout without opening the app. |
 | F4 | P3 | Dark-morning handling | In winter the alarm can go off before sunrise; maybe a separate "outside after sunrise" goal. |
-| F5 | P3 | Progress charts | Per-exercise weight over time, on-time mornings by week. |
+| F6 | P3 | Metrics: comparisons card | Energy on workout vs rest days, mood on on-time vs late mornings and on step-goal days, weight vs calories; shown only once each side has 5+ days. Wireframed ("Comparisons"). Overlaps F2. |
+| F7 | P3 | Metrics: tap a chart point to see that day | Shows the date and value, and opens the day. Wireframed ("States", S4). |
+| F8 | P3 | Metrics: on-time mornings by week | Left over from F5. |
 
 ## Alarm and lock screen
 
@@ -92,3 +94,4 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | — | Exercise logging usability: Enter walks weight → reps → next set across exercises (✓ on the last field closes the keyboard); Enter on an empty field accepts the grey hint (weight follows the set above); tapping a filled field selects it; "+ Set" focuses the new row; per-exercise "done/total" chip; ⋮ menu to move up/down or remove (confirm when it has data); bigger × on sets | 2026-10-20 |
 | — | Crash: "launchAnimation called when previous animation was running" (three times on the phone) when the keyboard shrank the screen while a scroll-into-view was running, a Compose 1.8 bug. Fixed by moving to Compose BOM 2026.06.00 (foundation 1.11), whose rewritten code path no longer has the crashing call; outlined buttons kept purple after Material 3 1.4 made them grey | 2026-10-22 |
 | — | Tap an exercise name to fold it to one line of its sets (Enter skips folded exercises); exercises with every set done show their name in green | 2026-10-23 |
+| F5 | Metrics tab: weight (daily dots and 7-day average), mood and energy (7-day averages past 4 weeks), weekly training volume, workouts and PRs, and the most-logged lifts by estimated 1RM; each lift opens a screen with e1RM or volume per session, records and session history. Ranges 4w/12w/1y/All, remembered | 2026-10-24 |
