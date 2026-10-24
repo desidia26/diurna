@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Replace the emulator's Diurna data with made-up history (12 weeks by default), for screenshots.
+#   scripts/demo-data          fresh install data, then 12 weeks of demo history
+#   scripts/demo-data 26       ...or this many weeks
+#
+# Emulator only: it clears the app's data first. Needs a debug build (installs one if missing),
+# since writing the database uses run-as. The profile (Setup → Nutrition) lives in settings, not the
+# database, so food targets for today show only once you fill it in; past days carry their own.
+source "$(dirname "$0")/_lib.sh"
+
+weeks="${1:-12}"
+[[ "$weeks" =~ ^[0-9]+$ ]] || die "usage: scripts/demo-data [weeks]"
+pick_device emulator
+
+if ! adb shell run-as "$PKG" true 2>/dev/null; then
+  echo "installing a debug build"
+  gradle installDebug
+fi
+
+# Start clean and let the app create the database itself, so Room's schema and seed rows are its own.
+adb shell pm clear "$PKG" >/dev/null
+adb shell am start -n "$(main_activity)" >/dev/null
+for _ in $(seq 1 30); do
+  adb shell run-as "$PKG" test -f databases/daybook.db 2>/dev/null && break
+  sleep 1
+done
+adb shell run-as "$PKG" test -f databases/daybook.db || die "the app didn't create its database"
+sleep 3 # let the first open's seeding finish
+adb shell am force-stop "$PKG"
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+for f in daybook.db daybook.db-wal daybook.db-shm; do
+  if adb shell run-as "$PKG" test -f "databases/$f"; then
+    adb exec-out run-as "$PKG" cat "databases/$f" >"$work/$f"
+  fi
+done
+
+today="$(adb shell date +%F | tr -d '\r')"
+python3 -I "$ROOT/scripts/demo-data.py" "$work/daybook.db" "$today" "$weeks"
+
+# exec-in drops stdin on its way through run-as; adb shell passes it on.
+adb shell "run-as $PKG rm -f databases/daybook.db-wal databases/daybook.db-shm"
+adb shell "run-as $PKG sh -c 'cat > databases/daybook.db'" <"$work/daybook.db"
+size="$(adb shell run-as "$PKG" stat -c %s databases/daybook.db | tr -d '\r')"
+[[ "$size" == "$(stat -c %s "$work/daybook.db")" ]] || die "the database didn't copy back to the device"
+adb shell am start -n "$(main_activity)" >/dev/null
+echo "done; the app is open on $ANDROID_SERIAL"

@@ -20,7 +20,7 @@ Diurna treats a *day* as the basic unit: each day has a morning, the food eaten,
 
 ## Screenshots
 
-Demo data on an emulator; none of it is real.
+Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 
 <table>
   <tr>
@@ -32,6 +32,11 @@ Demo data on an emulator; none of it is real.
     <td align="center"><img src="assets/screenshots/estimates.png" width="250" alt="Food entries: AI estimates with their assumptions, and saved meals"><br><sub><b>Estimates:</b> AI ranges with assumptions, exact saved meals</sub></td>
     <td align="center"><img src="assets/screenshots/week.png" width="250" alt="Week view: mornings, workouts, steps and calories per day"><br><sub><b>Week:</b> mornings, workouts, steps, calories</sub></td>
     <td align="center"><img src="assets/screenshots/routine.png" width="250" alt="Routine: alarm time and workout for each weekday"><br><sub><b>Routine:</b> the weekly template</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/screenshots/metrics.png" width="250" alt="Metrics: body weight with a 7-day average, mood and energy over 12 weeks"><br><sub><b>Metrics:</b> weight trend, mood and energy</sub></td>
+    <td align="center"><img src="assets/screenshots/training.png" width="250" alt="Metrics: weekly training volume bars and the most-logged lifts by estimated 1RM"><br><sub><b>Training:</b> weekly volume, lifts by e1RM</sub></td>
+    <td align="center"><img src="assets/screenshots/lift.png" width="250" alt="One lift: estimated 1RM per session and records"><br><sub><b>Lift:</b> e1RM per session, records</sub></td>
   </tr>
 </table>
 
@@ -94,6 +99,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 | `scripts/emulator` | Start the emulator and wait until it's ready (`--headless` for no window, `--stop` to shut it down) |
 | `scripts/logs` | Follow the app's log live (`--crash` for recent crashes) |
 | `scripts/screenshot` | Capture the device screen to `~/Downloads` (`--last` copies the newest screenshot taken on the phone) |
+| `scripts/demo-data` | **Emulator only:** clear the app's data and fill it with 12 weeks of made-up history (or `scripts/demo-data <weeks>`), for screenshots |
 | `scripts/backup-db` | Copy the database off the device into `backups/<timestamp>/`, which git ignores |
 | `scripts/alarm-check` | Show the armed alarm and permissions (`--doze` or `--reboot` to stress-test it) |
 | `LIVE_API=1 ./gradlew testDebugUnitTest --tests '*LiveApiErrorTest*'` | Check a real API error end to end, using a deliberately invalid key (free) |

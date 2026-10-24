@@ -7,7 +7,7 @@ Personal Android app (Kotlin, Jetpack Compose, Room) for one person's phone: a p
 - `scripts/test`: unit tests, plus device tests on a running emulator (`scripts/emulator --headless` starts one)
 - `scripts/install`: debug build onto the connected device
 - `scripts/release`: tests, release build, backup, install as an update, data check, alarm check, tag
-- `scripts/backup-db`, `scripts/logs`, `scripts/screenshot`, `scripts/alarm-check`
+- `scripts/backup-db`, `scripts/logs`, `scripts/screenshot`, `scripts/alarm-check`, `scripts/demo-data` (emulator only: replaces app data with made-up history)
 - `./gradlew assembleDebug` / `testDebugUnitTest` for a build or unit tests without a device
 
 Check a build by its exit code, not by filtered output.
