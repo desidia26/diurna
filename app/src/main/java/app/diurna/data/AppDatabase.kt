@@ -24,7 +24,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FoodEntryEntity::class,
         MealEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -37,6 +37,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         // v6 is data only: see MIGRATION_5_6.
         // v7: barcodes on saved meals.
         AutoMigration(from = 6, to = 7),
+        // v8: an optional photo on food entries.
+        AutoMigration(from = 7, to = 8),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -1,6 +1,7 @@
 package app.diurna.data
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -24,8 +25,11 @@ import java.util.concurrent.TimeUnit
  * (/sdcard/Android/data/app.diurna/files/backups), which a computer can pull over adb even from
  * a release build. Each backup is a consistent copy of the database plus the settings file. The
  * API key is left out on purpose: it's encrypted with a key that never leaves this phone.
+ *
+ * Meal photos are mirrored into backups/food-photos rather than copied per backup, so a photo is
+ * stored once however many backups refer to it.
  */
-class Backups(private val context: Context, private val db: AppDatabase) {
+class Backups(private val context: Context, private val db: AppDatabase, private val photos: FoodPhotos) {
     private val mutex = Mutex()
     private val _last = MutableStateFlow(latest()?.let { stampOf(it) })
 
@@ -51,6 +55,7 @@ class Backups(private val context: Context, private val db: AppDatabase) {
                 File(context.filesDir, "datastore/settings.preferences_pb").takeIf { it.exists() }
                     ?.copyTo(File(dir, "settings-$stamp.preferences_pb"), overwrite = true)
                 prune()
+                mirrorPhotos()
                 _last.value = now
                 Log.d(TAG, "backup written: ${dbFile.name}")
                 dbFile
@@ -73,6 +78,33 @@ class Backups(private val context: Context, private val db: AppDatabase) {
             File(dir, "settings-$s.preferences_pb").delete()
         }
     }
+
+    /**
+     * Copies new photos into the mirror, and drops mirrored ones that neither the app nor any kept
+     * backup refers to. A failure here leaves the database backup in place.
+     */
+    private fun mirrorPhotos() = runCatching {
+        val mirror = File(dir, "food-photos").apply { mkdirs() }
+        val current = photos.dir.listFiles().orEmpty().filter { it.isFile }
+        current.forEach { f ->
+            val copy = File(mirror, f.name)
+            if (!copy.exists() || copy.length() != f.length()) f.copyTo(copy, overwrite = true)
+        }
+        val keep = current.map { it.name }.toSet() + photosInBackups()
+        mirror.listFiles().orEmpty().filter { it.isFile && it.name !in keep }.forEach { it.delete() }
+    }.onFailure { Log.w(TAG, "photo backup failed", it) }
+
+    /** Photo names the kept database backups point at. Backups from before photos have none. */
+    private fun photosInBackups(): Set<String> =
+        dir.listFiles { f -> f.name.startsWith("daybook-") && f.name.endsWith(".db") }.orEmpty().flatMap { f ->
+            runCatching {
+                SQLiteDatabase.openDatabase(f.path, null, SQLiteDatabase.OPEN_READONLY).use { backup ->
+                    backup.rawQuery("SELECT photo FROM food_entry WHERE photo IS NOT NULL", null).use { c ->
+                        buildList { while (c.moveToNext()) add(c.getString(0)) }
+                    }
+                }
+            }.getOrDefault(emptyList())
+        }.toSet()
 
     /** Once a day in the background. */
     fun scheduleDaily() {

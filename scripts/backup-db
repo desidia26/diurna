@@ -31,6 +31,7 @@ if [[ -n "$latest" && "$latest" != "$before" ]]; then
   stamp="$(basename "$latest" .db)"; stamp="${stamp#daybook-}"
   if adb pull "$latest" "$dest/daybook.db" >/dev/null 2>&1; then
     adb pull "$remote/settings-$stamp.preferences_pb" "$dest/settings.preferences_pb" >/dev/null 2>&1 || true
+    adb pull "$remote/food-photos" "$dest/" >/dev/null 2>&1 || true # meal photos, when there are any
     echo "fresh backup from the app ($stamp)"
     pulled=true
   fi

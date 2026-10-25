@@ -3,6 +3,7 @@ package app.diurna.data
 import android.database.sqlite.SQLiteDatabase
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -14,7 +15,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class BackupsTest {
     private val t = TestDb()
-    private val backups = Backups(InstrumentationRegistry.getInstrumentation().targetContext, t.db)
+    private val backups = Backups(InstrumentationRegistry.getInstrumentation().targetContext, t.db, t.food.photos)
 
     @After fun tearDown() = t.close()
 
@@ -35,5 +36,20 @@ class BackupsTest {
         repeat(16) { backups.backupNow(); Thread.sleep(1_100) } // names are per-second
         val kept = backups.dir.listFiles { f -> f.name.startsWith("daybook-") }!!.size
         assertEquals(14, kept)
+    }
+
+    @Test fun photosAreMirroredAndKeptWhileABackupUsesThem() = runTest {
+        val name = t.food.photos.newName()
+        java.io.File(t.photoDir, name).writeBytes(byteArrayOf(1, 2, 3))
+        t.food.add(t.mon, "pasta", name)
+        backups.backupNow()
+        val mirrored = java.io.File(backups.dir, "food-photos/$name")
+        assertTrue(mirrored.exists())
+
+        // Deleted in the app, but the backup just taken still points at it.
+        t.food.delete(t.food.observe(t.mon).first().single().id)
+        backups.backupNow()
+        assertTrue(mirrored.exists())
+        mirrored.delete()
     }
 }

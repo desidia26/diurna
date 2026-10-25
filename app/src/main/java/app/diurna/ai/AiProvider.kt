@@ -56,9 +56,9 @@ class SelectedFoodEstimator(
     override val model: String get() = current().model
     override val gaveUpMessage: String get() = current().gaveUpMessage
 
-    override suspend fun estimate(text: String): FoodEstimate {
+    override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
         val estimator = current()
         // Recorded with the estimate, so switching provider mid-call can't mislabel it.
-        return estimator.estimate(text).let { it.copy(model = it.model ?: estimator.model) }
+        return estimator.estimate(text, photo).let { it.copy(model = it.model ?: estimator.model) }
     }
 }

@@ -5,6 +5,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import app.diurna.domain.Profile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -28,7 +29,11 @@ class TestDb {
     }
     val finalizer = DayFinalizer(db, days, nutrition, steps) { now }
     val routine = RoutineRepository(db, days, finalizer)
-    val food = FoodRepository(db) { now }
+    /** A fresh photo folder per test, removed by [close]. */
+    val photoDir = File(
+        InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "test-photos-${System.nanoTime()}",
+    ).apply { mkdirs() }
+    val food = FoodRepository(db, FoodPhotos(photoDir)) { now }
     /** Fake Open Food Facts: JSON by normalized barcode. Never touches the network. */
     val products = mutableMapOf<String, String>()
     var productsReachable = true
@@ -54,5 +59,8 @@ class TestDb {
         ex.sets.sortedBy { it.position }.forEachIndexed { i, s -> days.updateSet(s.id, weight, reps.getOrNull(i)) }
     }
 
-    fun close() = db.close()
+    fun close() {
+        db.close()
+        photoDir.deleteRecursively()
+    }
 }

@@ -1,5 +1,6 @@
 package app.diurna.ui
 
+import android.net.Uri
 import app.diurna.AppContainer
 import app.diurna.data.DayEntity
 import app.diurna.data.FoodEntryEntity
@@ -13,7 +14,9 @@ import app.diurna.data.totals
 import app.diurna.domain.AlarmRules
 import app.diurna.domain.NutritionTotals
 import app.diurna.domain.Targets
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -127,9 +130,16 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
     fun moveExercise(loggedId: Long, up: Boolean) = io { c.days.moveExercise(loggedId, up) }
 
     // Food
-    fun addFood(text: String) = io { if (text.isNotBlank()) c.food.add(date, text) }
+    fun addFood(text: String, photo: String? = null) = io { if (text.isNotBlank()) c.food.add(date, text, photo) }
     fun deleteFood(id: Long) = io { c.food.delete(id) }
-    fun editFood(id: Long, text: String, time: String) = io { c.food.edit(id, text, time) }
+    fun editFood(id: Long, text: String, time: String, photo: String?) = io { c.food.edit(id, text, time, photo) }
+
+    val photos get() = c.foodPhotos
+    val captureFile get() = c.photoImporter.captureFile
+    suspend fun importPhoto(uri: Uri) = c.photoImporter.import(uri)
+    suspend fun importCapture() = c.photoImporter.importCapture()
+    /** A photo attached and then removed, replaced or abandoned before it was saved with an entry. */
+    fun discardPhoto(name: String?) = io { withContext(Dispatchers.IO) { c.foodPhotos.delete(name) } }
     fun retryEstimates() = io { c.food.retryFailedEstimates() }
 
     // Saved meals

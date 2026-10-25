@@ -178,4 +178,23 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v7ToV8AddsPhotoAndKeepsFood() {
+        helper.createDatabase(dbName + "-8", 7).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-12', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, source, servings) " +
+                    "VALUES (1, '2026-10-12', '12:30', 'burrito', 1, 700, 900, 'ai', 1.0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-8", 8, true)
+        db.query("SELECT text, kcal_low, kcal_high, photo FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("burrito", it.getString(0))
+            assertEquals(700, it.getInt(1))
+            assertEquals(900, it.getInt(2))
+            assertTrue("no photo yet", it.isNull(3))
+        }
+        db.close()
+    }
 }
