@@ -11,6 +11,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.time.Duration.Companion.minutes
 
 @RunWith(AndroidJUnit4::class)
 class BackupsTest {
@@ -32,7 +33,8 @@ class BackupsTest {
         assertNotNull("Setup shows when it happened", backups.last.value)
     }
 
-    @Test fun keepsOnlyTheNewestFourteen() = runTest {
+    // 16 real backups a second apart: past runTest's 1-minute default on a slow, unaccelerated emulator.
+    @Test fun keepsOnlyTheNewestFourteen() = runTest(timeout = 5.minutes) {
         repeat(16) { backups.backupNow(); Thread.sleep(1_100) } // names are per-second
         val kept = backups.dir.listFiles { f -> f.name.startsWith("daybook-") }!!.size
         assertEquals(14, kept)
