@@ -12,12 +12,17 @@ data class FoodEstimate(
     val fatG: Int,
     /** What the estimate assumed, e.g. "1 cup rice, no guac". */
     val note: String,
+    /** Which model made it, when the estimator knows better than its own [FoodEstimator.model]. */
+    val model: String? = null,
 )
 
 /** Behind an interface so tests use a fake and never call the real API. */
 interface FoodEstimator {
     /** Recorded on each entry, so a better model can re-estimate history later. */
     val model: String
+
+    /** Shown on every waiting entry when the last allowed attempt still can't get through. */
+    val gaveUpMessage: String get() = EstimateErrors.GAVE_UP
 
     suspend fun estimate(text: String): FoodEstimate
 }
@@ -26,7 +31,7 @@ interface FoodEstimator {
 class EstimateFailed(message: String) : Exception(message)
 
 /** Missing key: entries wait until one is added in Setup. */
-class NoApiKey : Exception("Add an Anthropic API key in Setup to estimate food")
+class NoApiKey(message: String = "Add an Anthropic API key in Setup to estimate food") : Exception(message)
 
 object EstimatePrompt {
     const val SYSTEM = """You estimate nutrition for one food log entry, written casually by one person about what they ate.

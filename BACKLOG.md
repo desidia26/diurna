@@ -8,6 +8,7 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 
 | # | P | Item | Notes |
 |---|---|---|---|
+| — | Grok (xAI) as an alternative to Claude for food estimates, chosen in Setup | 2026-10-25 |
 | B1 | P2 | "Last time" on today's workout doesn't refresh after editing an older workout | Only re-queried when today's workout changes. Workaround: switch days. |
 | B2 | P3 | Scheduler records `scheduled_alarm` even when the system refused to arm it | `AlarmScheduler.reschedule` marks the day before `arm()`; with exact alarms denied, the frozen time is one that never rang. |
 | B3 | P3 | Alarm screen shows the "wrong code" hint briefly even for the right code | The screen closes right after, so it's barely visible. |

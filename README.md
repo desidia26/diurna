@@ -51,7 +51,7 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Porch QR: generate (ZXing) and scan (CameraX + ML Kit, offline) | `scan/Qr.kt` |
 | Lock-screen summary: drawn as a lock-only wallpaper, redrawn when its content changes, at 10pm and at midnight | `wallpaper/` |
 | Targets: Mifflin–St Jeor × activity + goal, macros from body weight and fat % | `domain/Targets.kt` |
-| Food estimates: one Claude API call per entry (`claude-haiku-5-5`, structured JSON) when logged or its text changes; retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); API key encrypted with the Android Keystore | `ai/` |
+| Food estimates: one AI call per entry (structured JSON) when logged or its text changes, to the provider picked in Setup: Claude (`claude-haiku-5-5`, the default) or Grok (`grok-4.20-non-reasoning` via xAI's chat completions); retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); one key per provider, encrypted with the Android Keystore | `ai/` |
 | Barcode scanning: EAN/UPC codes looked up on Open Food Facts and checked in the meal form before saving; rescans come from the library and work offline. Answers are treated as untrusted: HTTPS only, no redirects, size and time caps, sanity limits on numbers, plain short text | `data/BarcodeLookup.kt`, `ui/BarcodeScanDialog.kt` |
 | Library: saved meals (exact numbers, tap to log, servings, optional barcode) and the exercise catalog (seeded with common lifts and a typical Planet Fitness lineup; rename, hide, delete if unused), under Setup | `data/LibraryRepository.kt`, `data/ExerciseSeed.kt`, `ui/LibraryScreens.kt` |
 | Workout logging: Enter walks weight → reps → next set; an empty field's grey hint (the set above, else last time) is accepted with Enter; exercises can be moved or removed; tapping an exercise name folds it to one line, and finished exercises turn green | `ui/DayScreen.kt`, `domain/SetHints.kt` |
@@ -85,7 +85,7 @@ Requires JDK 17 and the Android SDK at `~/Android/Sdk` (platform 36), or `sdk.di
   keyPassword=…
   ```
   Back the keystore up somewhere safe: Android only installs updates signed with the same key, so losing it means uninstalling (and losing the app's data) to install a new build.
-- **In the app:** open **Setup**, clear the permission checklist, add a Claude API key for food estimates (a separate workspace with a spend limit is a good idea), print the porch code and scan it once to arm alarms, then try **Test alarm in 1 minute**.
+- **In the app:** open **Setup**, clear the permission checklist, add a Claude API key for food estimates, or pick Grok and add an xAI key (a separate workspace or team with a spend limit is a good idea), print the porch code and scan it once to arm alarms, then try **Test alarm in 1 minute**.
 
 ## Scripts
 
