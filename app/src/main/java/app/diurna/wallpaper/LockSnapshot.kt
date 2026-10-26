@@ -52,10 +52,23 @@ suspend fun buildSnapshot(
     val workoutLine: String
     var workoutDone = false
     if (workout != null) {
-        val total = workout.exercises.size
-        val done = workout.exercises.count { e -> e.sets.any { it.reps != null } }
-        workoutDone = total > 0 && done == total
-        workoutLine = DayText.workout(workout.workout.name, done, total)
+        val lines = workout.exercises.sortedBy { it.logged.position }.map { e ->
+            val pieces = e.sets.filter { it.isDone }
+            val one = pieces.singleOrNull()
+            DayText.ExerciseLine(
+                name = e.exercise.name,
+                cardio = e.exercise.isCardio,
+                done = pieces.isNotEmpty(),
+                distanceM = pieces.mapNotNull { it.distanceM }.takeIf { it.isNotEmpty() }?.sum(),
+                durationS = pieces.mapNotNull { it.durationS }.takeIf { it.isNotEmpty() }?.sum(),
+                // The machine's own split for a single piece; intervals' split is worked out from the totals.
+                splitS = one?.splitS,
+                kcal = pieces.mapNotNull { it.kcal }.takeIf { it.isNotEmpty() }?.sum(),
+                style = e.exercise.style,
+            )
+        }
+        workoutDone = lines.isNotEmpty() && lines.all { it.done }
+        workoutLine = DayText.workout(workout.workout.name, lines)
     } else {
         val routineDay = db.routineDao().getDay(today.dayOfWeek.value)
         val template = routineDay?.templateId?.let { db.routineDao().getTemplate(it) }

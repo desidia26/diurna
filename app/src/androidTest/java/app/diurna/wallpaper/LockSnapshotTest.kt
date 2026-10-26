@@ -4,6 +4,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.diurna.data.TestDb
 import app.diurna.domain.AlarmRules
 import app.diurna.domain.AlarmRules.Morning
+import app.diurna.domain.Cardio
+import app.diurna.domain.CardioPiece
+import app.diurna.domain.DayText
 import app.diurna.domain.Targets
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -64,6 +67,63 @@ class LockSnapshotTest {
         t.fill(mon, "Dips", 0.0, 12)
         assertEquals("Push A · 2 of 2 exercises", snap().workoutLine)
         assertTrue(snap().workoutDone)
+    }
+
+    /** The in-memory test database isn't seeded, so cardio exercises are added with their style. */
+    private suspend fun cardio(name: String, style: Cardio.Style) = t.library.addExercise(name, style)
+
+    private suspend fun logOnly(piece: CardioPiece) {
+        val set = t.days.observeWorkout(mon).first()!!.exercises.single().sets.single()
+        t.days.updatePiece(set.id, piece)
+    }
+
+    @Test fun aRowOnItsOwnReadsAsThePiece() = runTest {
+        cardio("Rowing machine", Cardio.Style.ROW)
+        t.days.startBlankWorkout(mon)
+        t.days.addExercise(mon, "Rowing machine")
+        assertEquals("Rowing machine · not logged yet", snap().workoutLine)
+        assertFalse(snap().workoutDone)
+        logOnly(CardioPiece(3260, 907.0, 130.0, 104.0, 158, 120, null))
+        assertEquals("Rowing machine · 3,260 m · 2:10/500m", snap().workoutLine)
+        assertTrue(snap().workoutDone)
+    }
+
+    @Test fun aRunReadsInItsUnits() = runTest {
+        cardio("Run", Cardio.Style.RUN_KM)
+        t.days.startBlankWorkout(mon)
+        t.days.addExercise(mon, "Run")
+        logOnly(CardioPiece(distanceM = 5000, durationS = 1560.0))
+        assertEquals("Run · 5.0 km · 5:12/km", snap().workoutLine)
+    }
+
+    @Test fun anEllipticalReadsAsTimeAndCalories() = runTest {
+        cardio("Elliptical", Cardio.Style.TIME)
+        t.days.startBlankWorkout(mon)
+        t.days.addExercise(mon, "Elliptical")
+        logOnly(CardioPiece(durationS = 1800.0, kcal = 250))
+        assertEquals("Elliptical · 30 min · 250 kcal", snap().workoutLine)
+        assertTrue(snap().workoutDone)
+    }
+
+    @Test fun rowAfterLiftingAddsTheMetres() = runTest {
+        cardio("Rowing machine", Cardio.Style.ROW)
+        val push = t.template("Push A", "Bench press", "Rowing machine")
+        t.days.startWorkout(mon, push)
+        t.fill(mon, "Bench press", 185.0, 8, 8, 8)
+        assertEquals("Push A · 1 of 2 exercises", snap().workoutLine)
+        val row = t.days.observeWorkout(mon).first()!!.exercises.first { it.exercise.name == "Rowing machine" }
+        t.days.updatePiece(row.sets.single().id, CardioPiece(distanceM = 2000, durationS = 480.0))
+        assertEquals("Push A · 2 of 2 exercises · 2,000 m cardio", snap().workoutLine)
+    }
+
+    /** Someone who only lifts gets exactly the line from before cardio existed. */
+    @Test fun liftingOnlyLinesAreUnchanged() = runTest {
+        val push = t.template("Push A", "Bench press", "Squat")
+        t.days.startWorkout(mon, push)
+        assertEquals(DayText.workout("Push A", 0, 2), snap().workoutLine)
+        t.fill(mon, "Bench press", 185.0, 8, 8, 8)
+        assertEquals(DayText.workout("Push A", 1, 2), snap().workoutLine)
+        assertEquals("Push A · 1 of 2 exercises", snap().workoutLine)
     }
 
     @Test fun foodLine() = runTest {

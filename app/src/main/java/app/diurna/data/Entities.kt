@@ -7,6 +7,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import app.diurna.domain.Cardio
 
 // Dates are "yyyy-MM-dd" and times of day "HH:mm", both local. Days roll over at midnight.
 
@@ -17,7 +18,26 @@ data class ExerciseEntity(
     val name: String,
     /** Left out of suggestions. Used instead of deleting when the exercise has history. */
     @ColumnInfo(defaultValue = "0") val hidden: Boolean = false,
-)
+    /**
+     * [KIND_STRENGTH] sets are weight × reps; [KIND_CARDIO] sets are a piece of distance, time and
+     * so on (a run, a ride, a row). Only changeable while nothing is logged, so history never mixes the two.
+     */
+    @ColumnInfo(defaultValue = "'strength'") val kind: String = KIND_STRENGTH,
+    /**
+     * For cardio, which fields it asks for and how pace reads: a [app.diurna.domain.Cardio.Style]
+     * key ("500m", "km", "mi", "kmh", "mph", "time"). Null for strength. Changeable any time,
+     * since stored values don't depend on it.
+     */
+    @ColumnInfo(name = "cardio_style") val cardioStyle: String? = null,
+) {
+    val isCardio: Boolean get() = kind == KIND_CARDIO
+    val style: Cardio.Style get() = Cardio.Style.of(cardioStyle)
+
+    companion object {
+        const val KIND_STRENGTH = "strength"
+        const val KIND_CARDIO = "cardio"
+    }
+}
 
 /** A saved food with exact numbers, typed in once and logged with a tap. Flat: no sub-meals. */
 @Entity(tableName = "meal", indices = [Index(value = ["name"], unique = true), Index(value = ["barcode"], unique = true)])
@@ -133,7 +153,28 @@ data class ExerciseSetEntity(
     val position: Int,
     val weight: Double? = null,
     val reps: Int? = null,
-)
+    // Cardio pieces (exercise kind "cardio") use these instead of weight and reps; all optional.
+    /** Metres. */
+    @ColumnInfo(name = "distance_m") val distanceM: Int? = null,
+    /** Seconds, tenths allowed. */
+    @ColumnInfo(name = "duration_s") val durationS: Double? = null,
+    /**
+     * Average pace in seconds per 500 m, whatever the exercise shows it as (per km, mph…); as the
+     * machine showed it when it did. Null means work it out from distance and time; some rowing
+     * machines average per stroke and show a faster split than that.
+     */
+    @ColumnInfo(name = "split_s") val splitS: Double? = null,
+    @ColumnInfo(name = "best_split_s") val bestSplitS: Double? = null,
+    /** Average power, watts. */
+    val watts: Int? = null,
+    /** Energy as the machine reported it ("Cal"); not counted toward food targets. */
+    val kcal: Int? = null,
+    /** Average heart rate, bpm. */
+    @ColumnInfo(name = "avg_hr") val avgHr: Int? = null,
+) {
+    /** Strength sets count once reps are in; cardio pieces once a distance or a time is. */
+    val isDone: Boolean get() = reps != null || distanceM != null || durationS != null
+}
 
 @Entity(
     tableName = "food_entry",
@@ -204,12 +245,31 @@ data class TemplateExerciseName(val templateId: Long, val position: Int, val nam
 
 data class LastTimeRef(val loggedExerciseId: Long, val date: String)
 
-data class SetRow(val date: String, val exerciseId: Long, val name: String, val loggedId: Long, val weight: Double?, val reps: Int?)
+data class SetRow(
+    val date: String, val exerciseId: Long, val name: String, val loggedId: Long, val weight: Double?, val reps: Int?,
+    val kind: String = ExerciseEntity.KIND_STRENGTH,
+    val cardioStyle: String? = null,
+    val distanceM: Int? = null, val durationS: Double? = null, val splitS: Double? = null, val bestSplitS: Double? = null,
+    val watts: Int? = null, val kcal: Int? = null, val avgHr: Int? = null,
+)
 
-data class DateName(val date: String, val name: String)
+data class DateName(
+    val date: String,
+    val name: String,
+    val exercises: Int = 0,
+    /** The workout's cardio exercise, when it has one; see [app.diurna.domain.DayText.workoutTitle]. */
+    val cardioName: String? = null,
+    val cardioCount: Int = 0,
+)
 
 data class DateKcal(val date: String, val kcal: Int)
 
-data class CatalogExercise(val id: Long, val name: String, val hidden: Boolean, val logged: Int, val inRoutine: Int) {
+data class CatalogExercise(
+    val id: Long, val name: String, val hidden: Boolean, val logged: Int, val inRoutine: Int,
+    val kind: String = ExerciseEntity.KIND_STRENGTH,
+    val cardioStyle: String? = null,
+) {
     val inUse: Boolean get() = logged > 0 || inRoutine > 0
+    val isCardio: Boolean get() = kind == ExerciseEntity.KIND_CARDIO
+    val style: Cardio.Style get() = Cardio.Style.of(cardioStyle)
 }

@@ -1,6 +1,7 @@
 package app.diurna.data
 
 import androidx.room.withTransaction
+import app.diurna.domain.Cardio
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
@@ -139,11 +140,15 @@ class LibraryRepository(
 
     fun observeCatalog(): Flow<List<CatalogExercise>> = exercises.observeCatalog()
 
-    suspend fun addExercise(name: String): Result {
+    /** [cardio]: logged in that style (distance, time, pace…) instead of weight × reps; null for strength. */
+    suspend fun addExercise(name: String, cardio: Cardio.Style? = null): Result {
         val n = name.trim()
         if (n.isEmpty()) return Result.Problem("Give the exercise a name.")
         if (exercises.idFor(n) != null) return Result.Problem("\"$n\" is already in your library.")
-        exercises.insertIgnore(ExerciseEntity(name = n))
+        exercises.insertIgnore(
+            if (cardio == null) ExerciseEntity(name = n)
+            else ExerciseEntity(name = n, kind = ExerciseEntity.KIND_CARDIO, cardioStyle = cardio.key)
+        )
         return Result.Ok
     }
 
@@ -157,6 +162,24 @@ class LibraryRepository(
     }
 
     suspend fun setExerciseHidden(id: Long, hidden: Boolean) = exercises.setHidden(id, hidden)
+
+    /**
+     * Strength (null) or cardio in a [Cardio.Style]. Switching between strength and cardio is
+     * refused once the exercise is logged, so its history never mixes the two; a cardio exercise's
+     * style can change any time, since it only changes how pieces are typed and shown.
+     */
+    suspend fun setExerciseCardio(id: Long, cardio: Cardio.Style?): Result {
+        val e = exercises.get(id) ?: return Result.Ok
+        if (e.isCardio && cardio != null) {
+            exercises.setCardioStyle(id, cardio.key)
+            return Result.Ok
+        }
+        if (!e.isCardio && cardio == null) return Result.Ok
+        val changed = exercises.setKindIfUnlogged(
+            id, if (cardio != null) ExerciseEntity.KIND_CARDIO else ExerciseEntity.KIND_STRENGTH, cardio?.key,
+        )
+        return if (changed > 0) Result.Ok else Result.Problem("Logged exercises keep their kind. Add a new exercise instead.")
+    }
 
     /** False when the exercise has history or is in a routine workout; hide it instead. */
     suspend fun deleteExercise(id: Long): Boolean = exercises.deleteIfUnused(id) > 0

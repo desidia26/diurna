@@ -32,20 +32,7 @@ class GrokFoodEstimator(
 
     override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
         val key = apiKey() ?: throw NoApiKey(NO_KEY)
-        val reply = try {
-            transport.post(key, XaiChat.request(model, EstimatePrompt.SYSTEM, text, photo))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: IOException) {
-            throw EstimateRetryable(e) // offline, timeout, dropped connection
-        }
-        if (reply.status != 200) {
-            when (val o = GrokErrors.classify(reply.status, reply.body, model)) {
-                EstimateErrors.Retry -> throw EstimateRetryable(IOException("HTTP ${reply.status}"))
-                is EstimateErrors.Fail -> throw EstimateFailed(o.message)
-            }
-        }
-        return EstimatePrompt.parse(XaiChat.content(reply.body))
+        return EstimatePrompt.parse(XaiChat.call(transport, key, model, XaiChat.request(model, EstimatePrompt.SYSTEM, text, photo)))
     }
 
     companion object {
@@ -67,7 +54,35 @@ object XaiChat {
     const val MAX_COMPLETION_TOKENS = 1024
 
     /** [photoJpeg]: an optional JPEG sent with the text as a base64 data URI (xAI takes jpg/png up to 20 MiB). */
-    fun request(model: String, system: String, userText: String, photoJpeg: ByteArray? = null): String = JSONObject()
+    /**
+     * Posts [request] and returns the structured JSON text. Offline and temporary trouble become
+     * [EstimateRetryable]; errors map through [GrokErrors]. Shared by food and cardio-screen reading.
+     */
+    suspend fun call(transport: XaiTransport, key: String, model: String, request: String): String {
+        val reply = try {
+            transport.post(key, request)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            throw EstimateRetryable(e) // offline, timeout, dropped connection
+        }
+        if (reply.status != 200) {
+            when (val o = GrokErrors.classify(reply.status, reply.body, model)) {
+                EstimateErrors.Retry -> throw EstimateRetryable(IOException("HTTP ${reply.status}"))
+                is EstimateErrors.Fail -> throw EstimateFailed(o.message)
+            }
+        }
+        return content(reply.body)
+    }
+
+    fun request(
+        model: String,
+        system: String,
+        userText: String,
+        photoJpeg: ByteArray? = null,
+        schemaName: String = "food_estimate",
+        schema: Map<String, Any> = EstimatePrompt.SCHEMA,
+    ): String = JSONObject()
         .put("model", model)
         .put("messages", JSONArray()
             .put(JSONObject().put("role", "system").put("content", system))
@@ -75,9 +90,9 @@ object XaiChat {
         .put("response_format", JSONObject()
             .put("type", "json_schema")
             .put("json_schema", JSONObject()
-                .put("name", "food_estimate")
+                .put("name", schemaName)
                 .put("strict", true)
-                .put("schema", toJson(EstimatePrompt.SCHEMA))))
+                .put("schema", toJson(schema))))
         .put("max_completion_tokens", MAX_COMPLETION_TOKENS)
         .put("stream", false)
         .toString()

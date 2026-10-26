@@ -197,4 +197,27 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v8ToV9AddsCardioAndKeepsStrengthSets() {
+        helper.createDatabase(dbName + "-9", 8).use { db ->
+            db.execSQL("INSERT INTO exercise (id, name, hidden) VALUES (3, 'Bench press', 0)")
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-20', 1)")
+            db.execSQL("INSERT INTO day_workout (id, date, name) VALUES (1, '2026-10-20', 'Push A')")
+            db.execSQL("INSERT INTO logged_exercise (id, workout_id, exercise_id, position) VALUES (1, 1, 3, 0)")
+            db.execSQL("INSERT INTO exercise_set (id, logged_exercise_id, position, weight, reps) VALUES (1, 1, 0, 135.0, 8)")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-9", 9, true)
+        db.query("SELECT kind, cardio_style FROM exercise WHERE id = 3").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("existing exercises are strength", "strength", it.getString(0))
+            assertTrue("no cardio style", it.isNull(1))
+        }
+        db.query("SELECT weight, reps, distance_m, duration_s, split_s, best_split_s, watts, kcal, avg_hr FROM exercise_set WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(135.0, it.getDouble(0), 1e-9)
+            assertEquals(8, it.getInt(1))
+            for (col in 2..8) assertTrue("cardio column $col starts empty", it.isNull(col))
+        }
+        db.close()
+    }
 }

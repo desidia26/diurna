@@ -109,7 +109,11 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
         item {
             val meals by library.meals.collectAsStateWithLifecycle()
             val catalog by library.catalog.collectAsStateWithLifecycle()
-            LibraryCard(meals.size, catalog.size, onMeals = { onOpen("meals") }, onExercises = { onOpen("exercises") })
+            val cardio by library.cardio.collectAsStateWithLifecycle()
+            LibraryCard(
+                meals.size, catalog.size, cardio, onCardio = library::setCardio,
+                onMeals = { onOpen("meals") }, onExercises = { onOpen("exercises") },
+            )
         }
         item { StepsCard(vm) }
         item { BackupsCard(vm) }

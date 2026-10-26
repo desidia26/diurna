@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,12 +16,30 @@ class ExerciseCatalogTest {
 
     @After fun tearDown() = t.close()
 
-    private suspend fun names() = t.routine.observeExerciseNames().first()
+    private suspend fun names(cardio: Boolean = true) = t.routine.observeExerciseNames(cardio).first()
 
     @Test fun seedingAddsEveryExerciseOnce() = runTest {
         seedExercises(t.db.openHelper.writableDatabase)
         seedExercises(t.db.openHelper.writableDatabase) // runs on every open; must stay idempotent
-        assertEquals(SEED_EXERCISES.size, names().size)
+        assertEquals(SEED_EXERCISES.size + SEED_CARDIO.size, names().size)
+    }
+
+    @Test fun cardioStaysOutOfSuggestionsUntilTurnedOn() = runTest {
+        seedExercises(t.db.openHelper.writableDatabase)
+        val strength = names(cardio = false)
+        assertEquals(SEED_EXERCISES.size, strength.size)
+        SEED_CARDIO.forEach { (name, _) -> assertFalse(name, name in strength) }
+        assertTrue(SEED_CARDIO.all { (name, _) -> name in names(cardio = true) })
+    }
+
+    @Test fun cardioSeedsAreCardio() = runTest {
+        seedExercises(t.db.openHelper.writableDatabase)
+        SEED_CARDIO.forEach { (name, style) ->
+            val e = t.db.exerciseDao().get(t.db.exerciseDao().idFor(name)!!)!!
+            assertTrue(name, e.isCardio)
+            assertEquals(name, style, e.style)
+        }
+        assertEquals(false, t.db.exerciseDao().get(t.db.exerciseDao().idFor("Bench press")!!)!!.isCardio)
     }
 
     @Test fun seedingKeepsYourSpellingInsteadOfDuplicating() = runTest {

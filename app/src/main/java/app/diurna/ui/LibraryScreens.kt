@@ -15,6 +15,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Switch
+import app.diurna.domain.Cardio
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -45,12 +50,21 @@ import kotlinx.coroutines.launch
 fun MealEntity.macroLine(): String = "%,d kcal · P %d · C %d · F %d".format(kcal, proteinG, carbsG, fatG)
 
 @Composable
-fun LibraryCard(mealCount: Int, exerciseCount: Int, onMeals: () -> Unit, onExercises: () -> Unit) {
+fun LibraryCard(
+    mealCount: Int, exerciseCount: Int, cardio: Boolean, onCardio: (Boolean) -> Unit, onMeals: () -> Unit, onExercises: () -> Unit,
+) {
     SectionCard("Library") {
         Hint("Saved meals log with exact numbers and no AI call. Exercises are the names workouts and suggestions draw from.")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onMeals) { Text("Meals ($mealCount)") }
             OutlinedButton(onClick = onExercises) { Text("Exercises ($exerciseCount)") }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Cardio exercises", fontWeight = FontWeight.SemiBold)
+                Hint("Runs, rides, rows and machines like the elliptical, logged by distance, time and pace instead of weight × reps. Off keeps them out of suggestions and Library.")
+            }
+            Switch(checked = cardio, onCheckedChange = onCardio)
         }
     }
 }
@@ -155,14 +169,20 @@ fun MealDialog(title: String, initial: MealEntity, onDismiss: () -> Unit, onSave
 @Composable
 fun ExercisesPage(vm: LibraryViewModel, onBack: () -> Unit) {
     val catalog by vm.catalog.collectAsStateWithLifecycle()
+    val cardioOn by vm.cardio.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var renaming by remember { mutableStateOf<CatalogExercise?>(null) }
     var newName by remember { mutableStateOf("") }
     var addProblem by remember { mutableStateOf<String?>(null) }
+    // Null: strength. Only offered with Setup's Cardio switch on.
+    var newCardio by remember { mutableStateOf<Cardio.Style?>(null) }
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { PageHeader("Exercises", onBack) }
         item {
-            Hint("Renaming keeps history: workouts point at the exercise, not its spelling. Exercises with history can't be deleted, only hidden from suggestions.")
+            Hint(
+                "Renaming keeps history: workouts point at the exercise, not its spelling. Exercises with history can't be deleted, only hidden from suggestions." +
+                    if (cardioOn) " Cardio exercises log distance, time and pace instead of weight × reps." else ""
+            )
         }
         item {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -170,15 +190,19 @@ fun ExercisesPage(vm: LibraryViewModel, onBack: () -> Unit) {
                     newName, { newName = it; addProblem = null }, Modifier.weight(1f), placeholder = { Text("New exercise") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 )
+                if (cardioOn) {
+                    FilterChip(newCardio != null, { newCardio = if (newCardio == null) Cardio.Style.TIME else null }, label = { Text("Cardio") })
+                }
                 OutlinedButton(onClick = {
                     scope.launch {
-                        when (val r = vm.addExercise(newName)) {
-                            Result.Ok -> newName = ""
+                        when (val r = vm.addExercise(newName, newCardio.takeIf { cardioOn })) {
+                            Result.Ok -> { newName = ""; newCardio = null }
                             is Result.Problem -> addProblem = r.message
                         }
                     }
                 }) { Text("Add") }
             }
+            newCardio?.takeIf { cardioOn }?.let { st -> StylePicker(st) { newCardio = it } }
             addProblem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
         }
         items(catalog, key = { it.id }) { e ->
@@ -187,6 +211,7 @@ fun ExercisesPage(vm: LibraryViewModel, onBack: () -> Unit) {
                     Text(e.name, color = if (e.hidden) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                     Hint(
                         listOfNotNull(
+                            e.style.label.lowercase().takeIf { e.isCardio },
                             "hidden".takeIf { e.hidden },
                             "logged ${e.logged}×".takeIf { e.logged > 0 },
                             "in a routine workout".takeIf { e.inRoutine > 0 },
@@ -203,33 +228,66 @@ fun ExercisesPage(vm: LibraryViewModel, onBack: () -> Unit) {
             }
         }
     }
-    renaming?.let { e -> RenameDialog(e, onDismiss = { renaming = null }) { vm.renameExercise(e.id, it) } }
+    renaming?.let { e ->
+        // With cardio off this is the plain rename it always was; cardio already logged still gets its style.
+        val editKind = cardioOn || e.isCardio
+        RenameDialog(e, editKind, onDismiss = { renaming = null }) { name, cardio ->
+            val r = vm.renameExercise(e.id, name)
+            val current = e.style.takeIf { e.isCardio }
+            if (r == Result.Ok && editKind && cardio != current) vm.setExerciseCardio(e.id, cardio) else r
+        }
+    }
+}
+
+/** How a cardio exercise asks for and shows its numbers. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StylePicker(selected: Cardio.Style, onPick: (Cardio.Style) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Cardio.Style.entries.forEach { st -> FilterChip(st == selected, { onPick(st) }, label = { Text(st.label) }) }
+    }
 }
 
 @Composable
-private fun RenameDialog(e: CatalogExercise, onDismiss: () -> Unit, onRename: suspend (String) -> Result) {
+private fun RenameDialog(e: CatalogExercise, editKind: Boolean, onDismiss: () -> Unit, onRename: suspend (String, Cardio.Style?) -> Result) {
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(e.name) }
+    // Null: strength.
+    var cardio by remember { mutableStateOf(e.style.takeIf { e.isCardio }) }
     var problem by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename exercise") },
+        title = { Text(if (editKind) "Edit exercise" else "Rename exercise") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { name = it; problem = null }, Modifier.fillMaxWidth(), singleLine = true)
                 if (e.logged > 0) Hint("Past workouts will show the new name.")
+                if (editKind) {
+                    // Kind only changes before anything is logged, so sets and pieces never mix in history.
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            cardio != null, { cardio = if (cardio == null) Cardio.Style.TIME else null },
+                            enabled = e.logged == 0, label = { Text("Cardio") },
+                        )
+                        Hint(if (e.logged == 0) "Distance, time and pace instead of weight × reps" else "Logged exercises keep their kind")
+                    }
+                    cardio?.let { st ->
+                        StylePicker(st) { cardio = it }
+                        Hint("Changes which numbers it asks for and how pace reads. Logged pieces keep their numbers.")
+                    }
+                }
                 problem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
             TextButton(enabled = name.isNotBlank(), onClick = {
                 scope.launch {
-                    when (val r = onRename(name)) {
+                    when (val r = onRename(name, cardio)) {
                         Result.Ok -> onDismiss()
                         is Result.Problem -> problem = r.message
                     }
                 }
-            }) { Text("Rename") }
+            }) { Text(if (editKind) "Save" else "Rename") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

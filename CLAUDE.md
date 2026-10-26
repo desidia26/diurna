@@ -1,6 +1,6 @@
 # Diurna
 
-Personal Android app (Kotlin, Jetpack Compose, Room) for one person's phone: a porch-QR alarm, food logging with AI estimates and barcodes, workouts from a weekly routine, steps and an evening check-in. Read [README.md](README.md) for the mission, principles and architecture map, and [BACKLOG.md](BACKLOG.md) for the work list.
+Personal Android app (Kotlin, Jetpack Compose, Room) for one person's phone: a porch-QR alarm, food logging with AI estimates and barcodes, workouts from a weekly routine (lifting, plus optional cardio), steps and an evening check-in. Read [README.md](README.md) for the mission, principles and architecture map, and [BACKLOG.md](BACKLOG.md) for the work list.
 
 ## Commands
 
@@ -26,6 +26,7 @@ Check a build by its exit code, not by filtered output.
 - Pure rules live in `domain/` as plain Kotlin with unit tests. Repositories own all writes; screens go through one ViewModel each.
 - Dates are `yyyy-MM-dd` and times `HH:mm`, both local text. Days roll over at midnight. Finished days are frozen by `DayFinalizer`, and history is never rewritten by later edits.
 - Data from outside the app (Open Food Facts, the Claude API) is untrusted: validate, cap and parse it into plain values.
+- Cardio (`exercise.kind = 'cardio'`) shares `exercise_set` with lifting but never counts toward volume, e1RM or weight/reps hints; anything that sums sets must check the kind. `split_s` is always seconds per 500 m; the exercise's `cardio_style` (`Cardio.Style`) only changes how it's typed and shown (/500m, /km, /mi, km/h, mph, none). Cardio is opt-in (Setup → Library): with it off, or with no cardio logged, every lifting screen and line must read exactly as before; keep rowing-specific wording to the rowing style.
 - Match the surrounding code's comment density and naming. Comments explain why, not what.
 - UI is dark only: grey, black, purple, white.
 - New features start with a discussion of the data shape before code, unless asked to just build.

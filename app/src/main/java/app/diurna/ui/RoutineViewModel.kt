@@ -1,12 +1,15 @@
 package app.diurna.ui
 
 import app.diurna.AppContainer
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class RoutineViewModel(private val c: AppContainer) : ScreenViewModel() {
     val routineDays = c.routine.observeRoutine().state(emptyList())
     val templateList = c.routine.observeTemplates().state(emptyList())
-    val exerciseNames = c.routine.observeExerciseNames().state(emptyList())
+    val exerciseNames = c.settings.cardio.flatMapLatest { c.routine.observeExerciseNames(it) }.state(emptyList())
 
     fun setRoutineAlarm(weekday: Int, time: String) = io { c.routine.setAlarm(weekday, time) }
     fun setRoutineTemplate(weekday: Int, templateId: Long?) = io { c.routine.setTemplate(weekday, templateId) }

@@ -251,17 +251,40 @@ private fun WorkoutCard(s: DayUi, vm: DayViewModel) {
 
     var confirmRemove by remember { mutableStateOf(false) }
     val swapped = planned != null && planned.name != w.workout.name
-    val volume = s.exercises.sumOf { e -> e.logged.sets.sumOf { (it.weight ?: 0.0) * (it.reps ?: 0) } }
-    val setsDone = s.exercises.sumOf { e -> e.logged.sets.count { it.reps != null } }
-    val summary = "${s.exercises.size} exercises · $setsDone sets · ${volume.fmt()} lb"
-    SectionCard("Workout", chip = { Chip(w.workout.name + if (swapped) " (swapped)" else "", Tone.Sky) }, fold = rememberFold(vm, "workout", summary)) {
+    val (cardio, strength) = s.exercises.partition { it.logged.exercise.isCardio }
+    val volume = strength.sumOf { e -> e.logged.sets.sumOf { (it.weight ?: 0.0) * (it.reps ?: 0) } }
+    val setsDone = strength.sumOf { e -> e.logged.sets.count { it.reps != null } }
+    // "3,260 m" or "3.1 mi" (or minutes) across the cardio done today, in the first one's units.
+    val cardioTotal = DayText.cardioTotal(cardio.map { e ->
+        val done = e.logged.sets.filter { it.isDone }
+        DayText.ExerciseLine(
+            e.logged.exercise.name, cardio = true, done = done.isNotEmpty(),
+            distanceM = done.sumOf { it.distanceM ?: 0 }, durationS = done.sumOf { it.durationS ?: 0.0 },
+            style = e.logged.exercise.style,
+        )
+    }.filter { it.done })
+    val summary = if (cardio.isEmpty()) {
+        // Lifting only: exactly as before cardio existed.
+        "${s.exercises.size} exercises · $setsDone sets · ${volume.fmt()} lb"
+    } else {
+        listOfNotNull(
+            "${s.exercises.size} exercises".takeIf { s.exercises.size != 1 || strength.isNotEmpty() },
+            "$setsDone sets · ${volume.fmt()} lb".takeIf { strength.isNotEmpty() },
+            cardio.singleOrNull()?.takeIf { strength.isEmpty() }?.let {
+                cardioSummary(it.logged.sets, it.logged.exercise.style).ifEmpty { "Not logged yet" }
+            },
+            cardioTotal?.takeIf { strength.isNotEmpty() || cardio.size > 1 },
+        ).joinToString(" · ")
+    }
+    val title = DayText.workoutTitle(w.workout.name, s.exercises.size, cardio.firstOrNull()?.logged?.exercise?.name, cardio.size)
+    SectionCard("Workout", chip = { Chip(title + if (swapped) " (swapped)" else "", Tone.Sky) }, fold = rememberFold(vm, "workout", summary)) {
         // Enter walks weight → reps → next set's weight, across exercises; explicit requesters so
         // focus skips the buttons in between.
         val requesters = remember { mutableMapOf<Pair<Long, Boolean>, FocusRequester>() }
         fun focusOf(setId: Long, reps: Boolean) = requesters.getOrPut(setId to reps) { FocusRequester() }
         // Folded exercises' fields aren't on screen, so the chain skips them.
         val folded by vm.folded.collectAsStateWithLifecycle()
-        val order = s.exercises.filter { exerciseFoldKey(it) !in folded }.flatMap { e -> e.logged.sets.map { it.id } }
+        val order = s.exercises.filter { exerciseFoldKey(it) !in folded && !it.logged.exercise.isCardio }.flatMap { e -> e.logged.sets.map { it.id } }
         s.exercises.forEachIndexed { i, ex ->
             ExerciseBlock(
                 ex, vm, isFirst = i == 0, isLast = i == s.exercises.lastIndex,
@@ -273,7 +296,12 @@ private fun WorkoutCard(s: DayUi, vm: DayViewModel) {
         val names by vm.exerciseNames.collectAsStateWithLifecycle()
         ExerciseInput(names, onAdd = vm::addExercise)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Hint("${volume.fmt()} lb volume")
+            Hint(
+                listOfNotNull(
+                    "${volume.fmt()} lb volume".takeIf { strength.isNotEmpty() || cardio.isEmpty() },
+                    cardioTotal?.let { "$it cardio" },
+                ).joinToString(" · ")
+            )
             TextButton(onClick = { confirmRemove = true }) { Text("Remove workout") }
         }
     }
@@ -296,7 +324,8 @@ private fun ExerciseBlock(
     val logged = ex.logged
     val last = ex.last
     val sets = logged.sets
-    val done = sets.count { it.reps != null }
+    val isCardio = logged.exercise.isCardio
+    val done = sets.count { it.isDone }
     val complete = sets.isNotEmpty() && done == sets.size
     var menu by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
@@ -339,11 +368,15 @@ private fun ExerciseBlock(
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text("Remove") }, onClick = {
                         menu = false
-                        if (sets.any { it.weight != null || it.reps != null }) confirmRemove = true
+                        if (sets.any { it.weight != null || it.isDone }) confirmRemove = true
                         else vm.removeExercise(logged.logged.id)
                     })
                 }
             }
+        }
+        if (isCardio) {
+            CardioPieces(ex, vm, collapsed)
+            return@Column
         }
         if (collapsed) {
             Hint(
@@ -374,7 +407,7 @@ private fun ExerciseBlock(
     }
     if (confirmRemove) {
         ConfirmDialog(
-            "Remove ${logged.exercise.name}?", "This deletes the sets logged for it today.", "Remove",
+            "Remove ${logged.exercise.name}?", "This deletes the ${if (isCardio) "pieces" else "sets"} logged for it today.", "Remove",
             onDismiss = { confirmRemove = false },
         ) { vm.removeExercise(logged.logged.id); confirmRemove = false }
     }

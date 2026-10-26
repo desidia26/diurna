@@ -30,18 +30,22 @@ class ClaudeFoodEstimator(
 ) : FoodEstimator {
 
     override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate = withContext(Dispatchers.IO) {
+        EstimatePrompt.parse(ClaudeCall.json(apiKey, model, ClaudeRequest.params(model, text, photo)))
+    }
+}
+
+/** One structured-output Messages call with the app's error mapping; shared by food and cardio-screen reading. */
+internal object ClaudeCall {
+    suspend fun json(apiKey: () -> String?, model: String, params: MessageCreateParams, declined: String = "The model declined to estimate this entry"): String = withContext(Dispatchers.IO) {
         val key = apiKey() ?: throw NoApiKey()
         val client = AnthropicOkHttpClient.builder().apiKey(key).build()
         try {
-            val params = ClaudeRequest.params(model, text, photo)
-
             val response = client.messages().create(params)
             if (response.stopReason().orElse(null) == StopReason.REFUSAL) {
-                throw EstimateFailed("The model declined to estimate this entry")
+                throw EstimateFailed(declined)
             }
-            val json = response.content().firstNotNullOfOrNull { it.text().orElse(null)?.text() }
-                ?: throw EstimateFailed("The estimate came back empty")
-            EstimatePrompt.parse(json)
+            response.content().firstNotNullOfOrNull { it.text().orElse(null)?.text() }
+                ?: throw EstimateFailed("The reply came back empty")
         } catch (e: EstimateFailed) {
             throw e
         } catch (e: AnthropicServiceException) {
@@ -66,11 +70,17 @@ class ClaudeFoodEstimator(
 
 /** Builds the Messages API request; separate from the call so tests can check what gets sent. */
 internal object ClaudeRequest {
-    fun params(model: String, text: String, photo: ByteArray? = null): MessageCreateParams =
+    fun params(
+        model: String,
+        text: String,
+        photo: ByteArray? = null,
+        system: String = EstimatePrompt.SYSTEM,
+        schema: Map<String, Any> = EstimatePrompt.SCHEMA,
+    ): MessageCreateParams =
         MessageCreateParams.builder()
             .model(model)
             .maxTokens(16000L)
-            .system(EstimatePrompt.SYSTEM)
+            .system(system)
             .apply {
                 if (photo == null) {
                     addUserMessage(text)
@@ -100,7 +110,7 @@ internal object ClaudeRequest {
                     .format(
                         JsonOutputFormat.builder()
                             .schema(JsonOutputFormat.Schema.builder().apply {
-                                EstimatePrompt.SCHEMA.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) }
+                                schema.forEach { (k, v) -> putAdditionalProperty(k, JsonValue.from(v)) }
                             }.build())
                             .build()
                     )

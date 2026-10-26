@@ -2,6 +2,12 @@ package app.diurna.ui
 
 import android.net.Uri
 import app.diurna.AppContainer
+import app.diurna.ai.CardioReading
+import app.diurna.ai.EstimateFailed
+import app.diurna.ai.EstimateRetryable
+import app.diurna.ai.NoApiKey
+import app.diurna.domain.CardioPiece
+import kotlinx.coroutines.CancellationException
 import app.diurna.data.DayEntity
 import app.diurna.data.FoodEntryEntity
 import app.diurna.data.LastTime
@@ -23,6 +29,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.mapLatest
 import java.time.LocalDate
+
+sealed interface CardioPhotoResult {
+    data class Read(val reading: CardioReading) : CardioPhotoResult
+    data class Problem(val message: String) : CardioPhotoResult
+}
 
 data class ExerciseUi(val logged: LoggedExerciseWithSets, val last: LastTime?)
 
@@ -95,7 +106,7 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
 
     val armed = c.scheduler.state
     val online = c.network.online
-    val exerciseNames = c.routine.observeExerciseNames().state(emptyList())
+    val exerciseNames = c.settings.cardio.flatMapLatest { c.routine.observeExerciseNames(it) }.state(emptyList())
 
     /** Cards folded down to their summary, by section; kept while the app is open. */
     val folded = MutableStateFlow(emptySet<String>())
@@ -124,6 +135,30 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
     fun addSet(loggedId: Long) = io { c.days.addSet(loggedId) }
     fun useLast(loggedId: Long, exerciseId: Long) = io { c.days.useLast(loggedId, exerciseId, date) }
     fun updateSet(id: Long, weight: Double?, reps: Int?) = io { c.days.updateSet(id, weight, reps) }
+    fun updatePiece(id: Long, piece: CardioPiece) = io { c.days.updatePiece(id, piece) }
+
+    /**
+     * Reads a cardio machine's summary screen from an imported photo for the confirm step. The photo is only
+     * needed for the call, so it's deleted straight after reading. Nothing is saved here.
+     */
+    suspend fun readCardioPhoto(name: String): CardioPhotoResult = withContext(Dispatchers.IO) {
+        val bytes = c.foodPhotos.read(name)
+        c.foodPhotos.delete(name)
+        if (bytes == null) return@withContext CardioPhotoResult.Problem("Couldn't read that photo")
+        try {
+            CardioPhotoResult.Read(c.cardioReader.read(bytes))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: NoApiKey) {
+            CardioPhotoResult.Problem(e.message ?: "Add an API key in Setup to read photos")
+        } catch (e: EstimateFailed) {
+            CardioPhotoResult.Problem(e.message ?: "Couldn't read the screen")
+        } catch (e: EstimateRetryable) {
+            CardioPhotoResult.Problem("Couldn't reach the AI. Check your connection and try again.")
+        } catch (e: Exception) {
+            CardioPhotoResult.Problem("Couldn't read the screen (${e.javaClass.simpleName})")
+        }
+    }
     fun deleteSet(setId: Long, loggedId: Long) = io { c.days.deleteSet(setId, loggedId) }
     fun removeWorkout() = io { c.days.removeWorkout(date) }
     fun removeExercise(loggedId: Long) = io { c.days.removeExercise(loggedId) }
