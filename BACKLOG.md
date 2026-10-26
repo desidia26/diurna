@@ -44,7 +44,7 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | # | P | Item | Notes |
 |---|---|---|---|
 | A1 | P1 | Verify on the Pixel 9a: alarm through reboot and deep sleep | Only tested on the emulator. `adb reboot` and `adb shell dumpsys deviceidle force-idle` with an alarm pending. |
-| A2 | P1 | Verify the lock-screen summary's position on the Pixel 9a | Check it doesn't collide with the clock or shortcuts; move it if it does. |
+| A2 | P1 | ~~Verify the lock-screen summary's position on the Pixel 9a~~ | ~~Check it doesn't collide with the clock or shortcuts; move it if it does.~~ Shipped 2026-10-25: the fingerprint icon covered it; see Done. |
 | A3 | P3 | Restore the previous lock wallpaper when turning the summary off | Currently falls back to the home wallpaper. |
 
 ## Tech debt
@@ -95,3 +95,4 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | — | Crash: "launchAnimation called when previous animation was running" (three times on the phone) when the keyboard shrank the screen while a scroll-into-view was running, a Compose 1.8 bug. Fixed by moving to Compose BOM 2026.06.00 (foundation 1.11), whose rewritten code path no longer has the crashing call; outlined buttons kept purple after Material 3 1.4 made them grey | 2026-10-22 |
 | — | Tap an exercise name to fold it to one line of its sets (Enter skips folded exercises); exercises with every set done show their name in green | 2026-10-23 |
 | F5 | Metrics tab: weight (daily dots and 7-day average), mood and energy (7-day averages past 4 weeks), weekly training volume, workouts and PRs, and the most-logged lifts by estimated 1RM; each lift opens a screen with e1RM or volume per session, records and session history. Ranges 4w/12w/1y/All, remembered | 2026-10-24 |
+| A2 | Lock screen: the fingerprint sensor's icon covered the summary and the nutrition line ran off the right edge. The day's lines now sit just above the sensor (growing upward, shrinking text if a short screen needs it) and the week's dots just below; lines wrap at the " · " between facts with a hanging indent. The sensor's position comes from the platform when the maker sets it, else a band measured on the Pixel | 2026-10-25 |

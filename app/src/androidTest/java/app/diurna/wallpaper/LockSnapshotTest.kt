@@ -114,6 +114,38 @@ class LockSnapshotTest {
         assertEquals(2424, bmp.height)
     }
 
+    /** The day from Larry's screenshot, with the long nutrition line that used to run off the edge. */
+    private fun busyDay() = LockSnapshot(
+        date = mon.plusDays(6),
+        morningLine = "Missed the 06:30 alarm", morningTone = LockSnapshot.Tone.Warn,
+        workoutLine = "Workout · 1 of 1 exercises", workoutDone = true,
+        foodLine = "3,170 / 3,070 kcal · P 84/141 · C 445/386 · F 120/85 · 2 estimating",
+        stepsLine = "525 / 10,000 steps", stepsReached = false,
+        week = (0L..6L).map { mon.plusDays(it) to Morning.MISSED },
+        tomorrowLine = "Tomorrow · 06:30 · locked",
+    )
+
+    /** The background is a vertical gradient, so a row with anything drawn on it isn't one colour. */
+    private fun android.graphics.Bitmap.rowIsBlank(y: Int) = (0 until width).all { getPixel(it, y) == getPixel(0, y) }
+
+    @Test fun nothingDrawnUnderTheFingerprintSensor() = runTest {
+        for ((w, h) in listOf(1080 to 2424, 1080 to 2400, 720 to 1280, 1440 to 3120)) {
+            val zone = FingerprintZone.DEFAULT
+            val bmp = draw(busyDay(), w, h, zone)
+            val drawnIn = ((zone.top * h).toInt()..(zone.bottom * h).toInt()).filterNot { bmp.rowIsBlank(it) }
+            assertTrue("${w}x$h: rows drawn under the sensor: ${drawnIn.take(5)}", drawnIn.isEmpty())
+        }
+    }
+
+    @Test fun longLinesWrapInsteadOfRunningOffTheEdge() = runTest {
+        val (w, h) = 1080 to 2424
+        val bmp = draw(busyDay(), w, h)
+        // The right margin matches the left one, so its last columns stay empty.
+        val margin = (w * 0.05f).toInt()
+        val clipped = (0 until h).filter { y -> (w - margin until w).any { bmp.getPixel(it, y) != bmp.getPixel(0, y) } }
+        assertTrue("drawn into the right margin at rows ${clipped.take(5)}", clipped.isEmpty())
+    }
+
     @Test fun stepsLineAndGoal() = runTest {
         assertNull(buildSnapshot(t.db, t.days, t.now).stepsLine)
         val under = buildSnapshot(t.db, t.days, t.now, steps = 6_240, stepGoal = 10_000)
