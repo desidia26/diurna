@@ -181,8 +181,8 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
             }
         }
         when (provider) {
-            AiProvider.ANTHROPIC -> Hint("Each food entry is sent once to Claude (claude-haiku-5-5) for a calorie range and macros, when you log it or change its text. Only the entry text is sent.")
-            AiProvider.XAI -> Hint("Each food entry is sent once to Grok (${GrokFoodEstimator.DEFAULT_MODEL}) for a calorie range and macros, when you log it or change its text. Only the entry text is sent.")
+            AiProvider.ANTHROPIC -> Hint("Each food entry is sent once to Claude (claude-haiku-5-5) for a calorie range and macros, when you log it or change its text or photo. The text is sent, plus the photo if you attach one; nothing else.")
+            AiProvider.XAI -> Hint("Each food entry is sent once to Grok (${GrokFoodEstimator.DEFAULT_MODEL}) for a calorie range and macros, when you log it or change its text or photo. The text is sent, plus the photo if you attach one; nothing else.")
         }
         if (lastFour != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {

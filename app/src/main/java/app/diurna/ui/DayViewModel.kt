@@ -179,7 +179,7 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
 
     // Saved meals
     val meals = c.library.observeMeals().state(emptyList())
-    fun logMeal(mealId: Long, servings: Double = 1.0) = io { c.library.logMeal(date, mealId, servings) }
+    fun logMeal(mealId: Long, servings: Double = 1.0, photo: String? = null) = io { c.library.logMeal(date, mealId, servings, photo) }
     suspend fun scanBarcode(code: String, upcE: Boolean) = c.library.scan(code, upcE)
     suspend fun saveMeal(meal: MealEntity) = c.library.saveMeal(meal)
     suspend fun mealByBarcode(code: String) = c.library.mealByBarcode(code)

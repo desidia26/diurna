@@ -39,6 +39,14 @@ class LibraryRepositoryTest {
         assertTrue("never queued for AI", t.db.foodDao().pendingEstimates().isEmpty())
     }
 
+    @Test fun aMealLoggedWithAPhotoKeepsIt() = runTest {
+        lib.saveMeal(shake)
+        lib.logMeal(mon, meals().single().id, photo = "shake.jpg")
+        val e = food().single()
+        assertEquals("shake.jpg", e.photo)
+        assertTrue("still exact, never queued for AI", e.isMeal && t.db.foodDao().pendingEstimates().isEmpty())
+    }
+
     @Test fun servingsScaleTheNumbers() = runTest {
         lib.saveMeal(shake)
         lib.logMeal(mon, meals().single().id)
