@@ -152,10 +152,10 @@ class LibraryRepositoryTest {
         assertFalse(lib.deleteExercise(used.id))
 
         lib.setExerciseHidden(used.id, true)
-        assertFalse("hidden from suggestions", "Used" in t.routine.observeExerciseNames().first())
+        assertFalse("hidden from suggestions", "Used" in t.routine.observeExerciseNames(cardio = false).first())
         // Typing it again brings it back.
         t.days.addExercise(mon, "used")
-        assertTrue("Used" in t.routine.observeExerciseNames().first())
+        assertTrue("Used" in t.routine.observeExerciseNames(cardio = false).first())
     }
 
     // ---- Barcodes ----

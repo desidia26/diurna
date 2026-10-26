@@ -20,6 +20,61 @@ object DayText {
     /** [done] counts exercises with at least one set filled in. */
     fun workout(name: String, done: Int, total: Int): String = "$name · $done of $total exercises"
 
+    /** The name a blank workout gets before anything says otherwise. */
+    const val BLANK_WORKOUT = "Workout"
+
+    /** One exercise of today's workout, for the lock-screen line. */
+    data class ExerciseLine(
+        val name: String,
+        val cardio: Boolean,
+        val done: Boolean,
+        val distanceM: Int? = null,
+        val durationS: Double? = null,
+        val splitS: Double? = null,
+        val kcal: Int? = null,
+        val style: Cardio.Style = Cardio.Style.TIME,
+    )
+
+    /**
+     * A blank workout that's just one cardio exercise goes by that exercise ("Treadmill"), without a
+     * parenthesised note like "(incline)"; anything else keeps its own name.
+     */
+    fun workoutTitle(name: String, exercises: Int, cardioName: String?, cardioCount: Int): String =
+        if (name == BLANK_WORKOUT && exercises == 1 && cardioCount == 1 && cardioName != null) shortName(cardioName) else name
+
+    fun shortName(exercise: String): String =
+        exercise.replace(Regex("""\s*\([^)]*\)\s*$"""), "").ifBlank { exercise }
+
+    /**
+     * The lock screen's workout line. Cardio alone reads as the piece in its exercise's style:
+     * "Rowing machine · 3,260 m · 2:10/500m", "Run · 3.1 mi · 8:23/mi", "Elliptical · 30 min · 250 kcal".
+     * With lifting (or several cardio exercises) it's the usual exercise count plus the cardio done,
+     * "Push A · 3 of 4 exercises · 3.1 mi cardio". With no cardio it's exactly the plain count.
+     */
+    fun workout(name: String, exercises: List<ExerciseLine>): String {
+        val cardio = exercises.filter { it.cardio }
+        val title = workoutTitle(name, exercises.size, cardio.firstOrNull()?.name, cardio.size)
+        if (exercises.size == 1 && cardio.size == 1) {
+            val c = cardio.single()
+            if (!c.done) return "$title · not logged yet"
+            val parts = Cardio.headline(c.style, c.distanceM, c.durationS, c.splitS, c.kcal)
+            return if (parts.isEmpty()) title else "$title · $parts"
+        }
+        val line = workout(title, exercises.count { it.done }, exercises.size)
+        return cardioTotal(cardio.filter { it.done })?.let { "$line · $it cardio" } ?: line
+    }
+
+    /**
+     * "3,260 m", "3.1 mi" (in the first distance exercise's units), or the minutes when nothing had
+     * a distance; null with no cardio done.
+     */
+    fun cardioTotal(done: List<ExerciseLine>): String? {
+        val withDistance = done.filter { it.style.hasDistance && (it.distanceM ?: 0) > 0 }
+        if (withDistance.isNotEmpty()) return Cardio.distanceText(withDistance.sumOf { it.distanceM ?: 0 }, withDistance.first().style)
+        val seconds = done.sumOf { it.durationS ?: 0.0 }
+        return if (seconds > 0) Cardio.durationText(seconds) else null
+    }
+
     fun plannedWorkout(name: String?): String = if (name != null) "$name planned" else "Rest day"
 
     /**

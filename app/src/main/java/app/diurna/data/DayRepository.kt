@@ -2,6 +2,8 @@ package app.diurna.data
 
 import androidx.room.withTransaction
 import app.diurna.domain.AlarmRules
+import app.diurna.domain.CardioPiece
+import app.diurna.domain.DayText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
@@ -11,6 +13,8 @@ import java.time.format.DateTimeFormatter
 private val HM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 fun LocalDateTime.hhmm(): String = format(HM)
 fun LocalDate.key(): String = toString()
+
+fun ExerciseSetEntity.piece() = CardioPiece(distanceM, durationS, splitS, bestSplitS, watts, kcal, avgHr)
 
 data class LastTime(val date: LocalDate, val sets: List<ExerciseSetEntity>)
 
@@ -54,7 +58,7 @@ class DayRepository(
                 WeekRow(
                     date = d,
                     day = dayRows.find { it.date == d.key() },
-                    workoutName = names.find { it.date == d.key() }?.name,
+                    workoutName = names.find { it.date == d.key() }?.let { DayText.workoutTitle(it.name, it.exercises, it.cardioName, it.cardioCount) },
                     kcal = kcal.find { it.date == d.key() }?.kcal,
                 )
             }
@@ -148,10 +152,10 @@ class DayRepository(
         return LastTime(LocalDate.parse(ref.date), workouts.filledSets(ref.loggedExerciseId))
     }
 
-    /** New exercises get as many blank sets as last time, or 3 if never done. */
+    /** New exercises get as many blank sets as last time, or 3 if never done (1 piece for cardio). */
     private suspend fun addLogged(workoutId: Long, exerciseId: Long, position: Int, date: LocalDate) {
         val loggedId = workouts.insertLogged(LoggedExerciseEntity(workoutId = workoutId, exerciseId = exerciseId, position = position))
-        val n = lastTime(exerciseId, date)?.sets?.size ?: 3
+        val n = lastTime(exerciseId, date)?.sets?.size ?: if (exercises.get(exerciseId)?.isCardio == true) 1 else 3
         workouts.insertSets((0 until n).map { ExerciseSetEntity(loggedExerciseId = loggedId, position = it) })
     }
 
@@ -168,7 +172,7 @@ class DayRepository(
     suspend fun startBlankWorkout(date: LocalDate) = db.withTransaction {
         ensureDay(date)
         workouts.deleteWorkout(date.key())
-        workouts.insertWorkout(DayWorkoutEntity(date = date.key(), name = "Workout"))
+        workouts.insertWorkout(DayWorkoutEntity(date = date.key(), name = DayText.BLANK_WORKOUT))
     }
 
     suspend fun addExercise(date: LocalDate, name: String) = db.withTransaction {
@@ -176,8 +180,13 @@ class DayRepository(
         addLogged(workoutId, exercises.getOrCreate(name.trim()), workouts.maxLoggedPosition(workoutId) + 1, date)
     }
 
-    /** Adds a set that copies the one above it. */
+    /** Adds a set that copies the one above it; a new cardio piece starts empty. */
     suspend fun addSet(loggedId: Long) {
+        val logged = workouts.getLogged(loggedId) ?: return
+        if (exercises.get(logged.exerciseId)?.isCardio == true) {
+            workouts.insertSets(listOf(ExerciseSetEntity(loggedExerciseId = loggedId, position = workouts.sets(loggedId).size)))
+            return
+        }
         val sets = workouts.sets(loggedId)
         val prev = sets.lastOrNull()
         workouts.insertSets(listOf(ExerciseSetEntity(loggedExerciseId = loggedId, position = sets.size, weight = prev?.weight, reps = prev?.reps)))
@@ -186,10 +195,16 @@ class DayRepository(
     suspend fun useLast(loggedId: Long, exerciseId: Long, date: LocalDate) = db.withTransaction {
         val last = lastTime(exerciseId, date) ?: return@withTransaction
         workouts.clearSets(loggedId)
-        workouts.insertSets(last.sets.mapIndexed { i, s -> ExerciseSetEntity(loggedExerciseId = loggedId, position = i, weight = s.weight, reps = s.reps) })
+        workouts.insertSets(last.sets.mapIndexed { i, s -> s.copy(id = 0, loggedExerciseId = loggedId, position = i) })
     }
 
     suspend fun updateSet(id: Long, weight: Double?, reps: Int?) = workouts.updateSet(id, weight, reps)
+
+    /** Saves a cardio piece. Values outside [Cardio]'s bounds are dropped, not stored. */
+    suspend fun updatePiece(id: Long, p: CardioPiece) {
+        val c = p.clean()
+        workouts.updatePiece(id, c.distanceM, c.durationS, c.splitS, c.bestSplitS, c.watts, c.kcal, c.avgHr)
+    }
 
     /** Removing an exercise's last set removes the exercise. */
     suspend fun deleteSet(setId: Long, loggedId: Long) = db.withTransaction {

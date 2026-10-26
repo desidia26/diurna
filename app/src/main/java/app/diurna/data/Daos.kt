@@ -80,17 +80,20 @@ interface ExerciseDao {
     @Query("SELECT id FROM exercise WHERE name = :name COLLATE NOCASE ORDER BY id LIMIT 1")
     suspend fun idFor(name: String): Long?
 
-    /** Visible exercise names for suggestions, the ones you've logged most often first. */
+    /**
+     * Visible exercise names for suggestions, the ones you've logged most often first. Cardio is
+     * left out unless [cardio] (Setup's Cardio switch), so it never crowds out lifts for people who don't do it.
+     */
     @Query(
         """SELECT e.name FROM exercise e LEFT JOIN logged_exercise le ON le.exercise_id = e.id
-           WHERE e.hidden = 0
+           WHERE e.hidden = 0 AND (:cardio OR e.kind != 'cardio')
            GROUP BY e.id ORDER BY COUNT(le.id) DESC, e.name COLLATE NOCASE"""
     )
-    fun observeNamesByUse(): Flow<List<String>>
+    fun observeNamesByUse(cardio: Boolean): Flow<List<String>>
 
     /** The whole catalog for the Library page, with how often each is used. */
     @Query(
-        """SELECT e.id, e.name, e.hidden,
+        """SELECT e.id, e.name, e.hidden, e.kind, e.cardio_style AS cardioStyle,
              (SELECT COUNT(*) FROM logged_exercise le WHERE le.exercise_id = e.id) AS logged,
              (SELECT COUNT(*) FROM template_exercise te WHERE te.exercise_id = e.id) AS inRoutine
            FROM exercise e ORDER BY e.hidden, e.name COLLATE NOCASE"""
@@ -105,6 +108,20 @@ interface ExerciseDao {
 
     @Query("UPDATE exercise SET hidden = :hidden WHERE id = :id")
     suspend fun setHidden(id: Long, hidden: Boolean)
+
+    @Query("SELECT * FROM exercise WHERE id = :id")
+    suspend fun get(id: Long): ExerciseEntity?
+
+    /** Only while nothing is logged, so no history mixes sets and pieces; returns rows changed. */
+    @Query(
+        """UPDATE exercise SET kind = :kind, cardio_style = :style WHERE id = :id
+           AND NOT EXISTS (SELECT 1 FROM logged_exercise WHERE exercise_id = :id)"""
+    )
+    suspend fun setKindIfUnlogged(id: Long, kind: String, style: String?): Int
+
+    /** Only for cardio; a style just changes how pieces are typed and shown. */
+    @Query("UPDATE exercise SET cardio_style = :style WHERE id = :id AND kind = 'cardio'")
+    suspend fun setCardioStyle(id: Long, style: String): Int
 
     /** Only removes exercises no workout or routine refers to; returns rows deleted. */
     @Query(
@@ -196,13 +213,24 @@ interface RoutineDao {
     suspend fun insertTemplateExercises(rows: List<TemplateExerciseEntity>)
 }
 
+/** A set counts as done: reps for strength, a distance or a time for a cardio piece. Alias the set table "s". */
+private const val DONE = "(s.reps IS NOT NULL OR s.distance_m IS NOT NULL OR s.duration_s IS NOT NULL)"
+
 @Dao
 interface WorkoutDao {
     @Transaction
     @Query("SELECT * FROM day_workout WHERE date = :date")
     fun observe(date: String): Flow<WorkoutWithExercises?>
 
-    @Query("SELECT date, name FROM day_workout WHERE date BETWEEN :from AND :to")
+    @Query(
+        """SELECT w.date, w.name,
+             (SELECT COUNT(*) FROM logged_exercise le WHERE le.workout_id = w.id) AS exercises,
+             (SELECT e.name FROM logged_exercise le JOIN exercise e ON e.id = le.exercise_id
+                WHERE le.workout_id = w.id AND e.kind = 'cardio' ORDER BY le.position LIMIT 1) AS cardioName,
+             (SELECT COUNT(*) FROM logged_exercise le JOIN exercise e ON e.id = le.exercise_id
+                WHERE le.workout_id = w.id AND e.kind = 'cardio') AS cardioCount
+           FROM day_workout w WHERE w.date BETWEEN :from AND :to"""
+    )
     fun observeNames(from: String, to: String): Flow<List<DateName>>
 
     @Query("SELECT id FROM day_workout WHERE date = :date")
@@ -241,28 +269,42 @@ interface WorkoutDao {
     @Query("UPDATE exercise_set SET weight = :weight, reps = :reps WHERE id = :id")
     suspend fun updateSet(id: Long, weight: Double?, reps: Int?)
 
+    @Query(
+        """UPDATE exercise_set SET distance_m = :distanceM, duration_s = :durationS, split_s = :splitS,
+             best_split_s = :bestSplitS, watts = :watts, kcal = :kcal, avg_hr = :avgHr WHERE id = :id"""
+    )
+    suspend fun updatePiece(
+        id: Long, distanceM: Int?, durationS: Double?, splitS: Double?, bestSplitS: Double?,
+        watts: Int?, kcal: Int?, avgHr: Int?,
+    )
+
     @Query("DELETE FROM exercise_set WHERE id = :id")
     suspend fun deleteSet(id: Long)
 
     @Query("DELETE FROM exercise_set WHERE logged_exercise_id = :loggedId")
     suspend fun clearSets(loggedId: Long)
 
-    /** The most recent earlier session of an exercise that has at least one set with reps filled in. */
+    /**
+     * The most recent earlier session of an exercise that has at least one set filled in: reps
+     * for strength, a distance or time for cardio (the same rule as [ExerciseSetEntity.isDone]).
+     */
     @Query(
         """SELECT le.id AS loggedExerciseId, w.date AS date
            FROM logged_exercise le JOIN day_workout w ON w.id = le.workout_id
            WHERE le.exercise_id = :exerciseId AND w.date < :before
-             AND EXISTS (SELECT 1 FROM exercise_set s WHERE s.logged_exercise_id = le.id AND s.reps IS NOT NULL)
+             AND EXISTS (SELECT 1 FROM exercise_set s WHERE s.logged_exercise_id = le.id AND $DONE)
            ORDER BY w.date DESC LIMIT 1"""
     )
     suspend fun lastTimeRef(exerciseId: Long, before: String): LastTimeRef?
 
-    @Query("SELECT * FROM exercise_set WHERE logged_exercise_id = :loggedId AND reps IS NOT NULL ORDER BY position")
+    @Query("SELECT * FROM exercise_set s WHERE logged_exercise_id = :loggedId AND $DONE ORDER BY position")
     suspend fun filledSets(loggedId: Long): List<ExerciseSetEntity>
 
     /** Every set ever logged, oldest first. All of history, because PRs are judged against it. */
     @Query(
-        """SELECT w.date AS date, le.exercise_id AS exerciseId, e.name AS name, le.id AS loggedId, s.weight AS weight, s.reps AS reps
+        """SELECT w.date AS date, le.exercise_id AS exerciseId, e.name AS name, le.id AS loggedId, s.weight AS weight, s.reps AS reps,
+             e.kind AS kind, e.cardio_style AS cardioStyle, s.distance_m AS distanceM, s.duration_s AS durationS, s.split_s AS splitS,
+             s.best_split_s AS bestSplitS, s.watts AS watts, s.kcal AS kcal, s.avg_hr AS avgHr
            FROM exercise_set s
            JOIN logged_exercise le ON le.id = s.logged_exercise_id
            JOIN day_workout w ON w.id = le.workout_id

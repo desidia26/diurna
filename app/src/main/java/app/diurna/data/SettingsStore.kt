@@ -61,6 +61,15 @@ class SettingsStore(private val context: Context) : StepStateStore {
         }
     }
 
+    // ---- Cardio ----
+    // Off by default, so people who only lift never see cardio exercises in suggestions or Library.
+    private val cardioKey = booleanPreferencesKey("cardio_enabled")
+    val cardio: Flow<Boolean> = context.dataStore.data.map { it[cardioKey] ?: false }.distinctUntilChanged()
+
+    suspend fun setCardio(enabled: Boolean) {
+        context.dataStore.edit { it[cardioKey] = enabled }
+    }
+
     // ---- Steps ----
     private val stepGoalKey = intPreferencesKey("step_goal")
     val stepGoal: Flow<Int> = context.dataStore.data.map { it[stepGoalKey] ?: 10_000 }.distinctUntilChanged()

@@ -16,7 +16,8 @@ class RoutineRepository(
 
     fun observeRoutine(): Flow<List<RoutineDayEntity>> = routine.observeDays()
 
-    fun observeExerciseNames(): Flow<List<String>> = exercises.observeNamesByUse()
+    /** Suggestions; cardio only when [cardio] (Setup's Cardio switch). */
+    fun observeExerciseNames(cardio: Boolean): Flow<List<String>> = exercises.observeNamesByUse(cardio)
 
     fun observeTemplates(): Flow<List<Template>> =
         combine(routine.observeTemplates(), routine.observeTemplateExercises()) { templates, rows ->

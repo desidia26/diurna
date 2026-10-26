@@ -1,6 +1,7 @@
 package app.diurna.data
 
 import androidx.sqlite.db.SupportSQLiteDatabase
+import app.diurna.domain.Cardio
 
 /**
  * Common lifts, so autocomplete has something to offer before you've typed them yourself. Names put
@@ -45,6 +46,21 @@ val SEED_EXERCISES = listOf(
 )
 
 /**
+ * Common cardio, logged as distance, time, pace and so on instead of weight × reps, each with the
+ * [Cardio.Style] its machine or app usually shows. Miles to match the app's pounds; any exercise's
+ * style can be changed in Library. Left out of suggestions until Setup's Cardio switch is on.
+ */
+val SEED_CARDIO: List<Pair<String, Cardio.Style>> = listOf(
+    "Treadmill" to Cardio.Style.RUN_MI,
+    "Run" to Cardio.Style.RUN_MI,
+    "Walk" to Cardio.Style.RUN_MI,
+    "Stationary bike" to Cardio.Style.RIDE_MI,
+    "Rowing machine" to Cardio.Style.ROW,
+    "Elliptical" to Cardio.Style.TIME,
+    "Stair climber" to Cardio.Style.TIME,
+)
+
+/**
  * Adds any seed exercise that isn't in the catalog yet, ignoring case so an existing
  * "bench press" isn't duplicated as "Bench press". Safe to run on every open.
  */
@@ -53,6 +69,14 @@ fun seedExercises(db: SupportSQLiteDatabase) {
         db.execSQL(
             "INSERT INTO exercise (name) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM exercise WHERE name = ? COLLATE NOCASE)",
             arrayOf<Any>(name, name),
+        )
+    }
+    // A same-named exercise you made yourself keeps its kind: it may already have strength sets.
+    SEED_CARDIO.forEach { (name, style) ->
+        db.execSQL(
+            "INSERT INTO exercise (name, kind, cardio_style) SELECT ?, 'cardio', ? " +
+                "WHERE NOT EXISTS (SELECT 1 FROM exercise WHERE name = ? COLLATE NOCASE)",
+            arrayOf<Any>(name, style.key, name),
         )
     }
 }

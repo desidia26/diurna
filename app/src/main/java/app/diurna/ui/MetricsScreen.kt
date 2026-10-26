@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.diurna.R
+import app.diurna.domain.Cardio
 import app.diurna.domain.Metrics
 import app.diurna.ui.theme.LocalStatusColors
 import java.time.LocalDate
@@ -47,13 +48,15 @@ private const val TOP_LIFTS = 5
 fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val detail by vm.detail.collectAsStateWithLifecycle()
+    val cardioDetail by vm.cardioDetail.collectAsStateWithLifecycle()
     val m = ui ?: return
-    BackHandler(enabled = detail != null) { vm.closeExercise() }
+    BackHandler(enabled = detail != null || cardioDetail != null) { vm.closeExercise() }
     val padding = PaddingValues(
         start = 16.dp, end = 16.dp, top = contentPadding.calculateTopPadding() + 16.dp,
         bottom = contentPadding.calculateBottomPadding() + 16.dp,
     )
     detail?.let { ExerciseScreen(it, m.range, padding, vm); return }
+    cardioDetail?.let { CardioScreen(it, m.range, padding, vm); return }
     var allLifts by rememberSaveable { mutableStateOf(false) }
     LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -66,6 +69,8 @@ fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues) {
         item { WeightCardView(m.weight, m.showDots, m.from, m.to) }
         item { MoodCardView(m.mood, m.from, m.to) }
         item { TrainingCardView(m.training) }
+        // Only once cardio has been logged; lifting-only Metrics is unchanged.
+        m.cardio?.let { c -> item { CardioCardView(c, onOpen = vm::openCardio) } }
         item {
             LiftsCard(if (allLifts) m.lifts else m.lifts.take(TOP_LIFTS), more = m.lifts.size - TOP_LIFTS, expanded = allLifts,
                 onToggle = { allLifts = !allLifts }, onOpen = vm::openExercise)
@@ -161,6 +166,129 @@ private fun TrainingCardView(t: TrainingCard) {
             label = ::volume,
         )
         t.weeks.firstOrNull()?.let { ChartDates(it.monday.short(), "This week") }
+    }
+}
+
+@Composable
+private fun CardioCardView(c: CardioCard, onOpen: (Long) -> Unit) {
+    SectionCard("Cardio", chip = { Hint(if (c.sessions == 1) "1 session" else "${c.sessions} sessions") }) {
+        if (c.sessions == 0) {
+            Hint("No cardio logged in this range.")
+            return@SectionCard
+        }
+        val unitText = { v: Double -> if (c.unit == "m") metres(v) else if (c.unit == "min") "${v.roundToInt()}" else "%.1f".format(v) }
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Stat(if (c.unit == "m") "%,d".format(c.thisWeek.roundToInt()) else unitText(c.thisWeek), "${c.unit} this week")
+            Stat("${c.prs}", if (c.prs == 1) "PR" else "PRs")
+        }
+        BarChart(
+            c.weekly,
+            description = "Weekly cardio ${if (c.unit == "min") "time" else "distance"}, ${c.weeks.size} weeks, this week ${unitText(c.thisWeek)} ${c.unit}",
+            label = unitText,
+        )
+        c.weeks.firstOrNull()?.let { ChartDates(it.monday.short(), "This week") }
+        Column {
+            c.rows.forEach { r ->
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(onClickLabel = "Open ${r.name}") { onOpen(r.exerciseId) },
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(r.name, style = MaterialTheme.typography.bodyLarge)
+                        if (r.last.isNotEmpty()) Hint(r.last)
+                    }
+                    Sparkline(r.spark, MaterialTheme.colorScheme.primary, Modifier.size(width = 96.dp, height = 28.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardioScreen(d: CardioDetail, range: Metrics.Range, padding: PaddingValues, vm: MetricsViewModel) {
+    val label = d.metric.label(d.style)
+    LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(vm::closeExercise) {
+                    Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = "Back")
+                }
+                Text(d.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                d.metrics.forEach { m -> FilterChip(m == d.metric, { vm.setCardioMetric(m) }, label = { Text(m.label(d.style)) }) }
+            }
+        }
+        item { RangeChips(range, vm::setRange) }
+        item {
+            val s = LocalStatusColors.current
+            val lower = d.metric.lowerIsBetter(d.style)
+            val better = d.change?.let { if (lower) it <= 0 else it >= 0 }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Headline(
+                    value = d.current?.let { cardioValue(d.metric, d.style, it) } ?: "—",
+                    unit = if (d.metric == CardioMetric.PACE || d.metric == CardioMetric.POWER) "avg, last session" else "last session",
+                    delta = d.change?.let {
+                        val mag = when (d.metric) {
+                            CardioMetric.PACE -> if (lower) "%.1fs".format(abs(it)) else "%.1f".format(abs(it))
+                            CardioMetric.DISTANCE -> if (d.style.unitM == 1.0) "%,d".format(abs(it).roundToInt()) else "%.1f".format(abs(it))
+                            else -> "%,d".format(abs(it).roundToInt())
+                        }
+                        "${if (lower) (if (it <= 0) "faster" else "slower") else arrow(it)} $mag"
+                    },
+                    deltaColor = better?.let { if (it) s.good else s.warn },
+                )
+                if (d.values.any { it != null }) {
+                    val c = MaterialTheme.colorScheme
+                    LineChart(
+                        listOf(LineSeries(d.values, c.primary, dots = c.primary)),
+                        description = "${d.name} $label per session",
+                        height = 170.dp,
+                        label = when (d.metric) {
+                            CardioMetric.DISTANCE -> if (d.style.unitM == 1.0) ::metres else { v -> "%.1f".format(v) }
+                            CardioMetric.PACE -> if (lower) { v -> Cardio.clock(v) } else { v -> "%.1f".format(v) }
+                            else -> { v -> "${v.roundToInt()}" }
+                        },
+                    )
+                    ChartDates(d.first?.short() ?: "", d.last?.short() ?: "")
+                    if (lower) Hint("Lower is faster.")
+                } else {
+                    Hint("No ${label.lowercase()} logged in this range.")
+                }
+            }
+        }
+        if (d.records.isNotEmpty()) item {
+            SectionCard("Records") {
+                Column { d.records.forEach { RecordRow(it.label, it.value, it.date) } }
+            }
+        }
+        item {
+            SectionCard("Sessions", chip = { Hint(label) }) {
+                Column {
+                    d.sessions.forEachIndexed { i, s ->
+                        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                        Row(Modifier.fillMaxWidth().heightIn(min = 46.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Hint(s.date.short(), Modifier.width(52.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(s.text, style = MaterialTheme.typography.bodyMedium)
+                                s.format?.let { Hint(it) }
+                            }
+                            Text(
+                                if (s.pr) "${s.value} ★" else s.value, fontWeight = FontWeight.SemiBold,
+                                color = if (s.pr) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+                Hint(
+                    if (d.style.hasDistance) "★ a PR: farther, faster or more power than every earlier session of the same length. The first of each is the baseline."
+                    else "★ a PR: more calories or power than every earlier session of the same length. The first of each is the baseline."
+                )
+            }
+        }
     }
 }
 
@@ -311,6 +439,9 @@ private fun Legend(label: String, color: Color) {
 }
 
 private fun arrow(delta: Double) = if (delta < 0) "▼" else "▲"
+
+/** 12,400 m → "12.4k"; short distances stay whole. */
+private fun metres(v: Double): String = volume(v)
 
 /** 41,200 → "41.2k"; small numbers stay whole. */
 private fun volume(v: Double): String = if (v >= 1000) "%.1fk".format(v / 1000) else "${v.roundToInt()}"

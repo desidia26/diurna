@@ -65,6 +65,8 @@ object Metrics {
         val loggedId: Long,
         val weight: Double?,
         val reps: Int?,
+        /** A cardio piece's row; left out of lifting sessions, so never in volume, e1RM or lifting PRs. */
+        val cardio: Boolean = false,
     )
 
     /** One exercise on one day. */
@@ -84,9 +86,12 @@ object Metrics {
         val volume: Double = sets.sumOf { (it.weight ?: 0.0).coerceAtLeast(0.0) * (it.reps ?: 0).coerceAtLeast(0) }
     }
 
-    /** Groups sets by session in the order given, leaving out sessions with no reps filled in (planned, not lifted). */
+    /**
+     * Groups sets by session in the order given, leaving out sessions with no reps filled in (planned,
+     * not lifted) and cardio, which has its own sessions in [Cardio].
+     */
     fun sessions(sets: List<SetEntry>): List<Session> =
-        sets.groupBy { it.loggedId }.values
+        sets.filter { !it.cardio }.groupBy { it.loggedId }.values
             .filter { s -> s.any { it.reps != null } }
             .map { s -> s.first().let { Session(it.date, it.exerciseId, it.name, it.loggedId, s) } }
             .sortedBy { it.date }
