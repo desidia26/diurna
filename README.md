@@ -46,10 +46,10 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 |---|---|
 | Alarm rules (lock time, which alarm applies, next alarm, scoring) | `domain/AlarmRules.kt`, plain Kotlin with unit tests |
 | Storage (Room/SQLite; dates `yyyy-MM-dd`, times `HH:mm`, both local) | `data/Entities.kt`, `data/Daos.kt`, `data/*Repository.kt` |
-| Settings (porch code secret, profile, step goal, lock-screen toggle; DataStore) | `data/SettingsStore.kt` |
+| Settings (porch code secret, profile, step goal, lock-screen toggle, position and text size; DataStore) | `data/SettingsStore.kt` |
 | Alarm: one exact `setAlarmClock` alarm, a foreground service that rings the phone's default alarm sound, a full-screen scan screen | `alarm/` |
 | Porch QR: generate (ZXing) and scan (CameraX + ML Kit, offline) | `scan/Qr.kt` |
-| Lock-screen summary: drawn as a lock-only wallpaper, redrawn when its content changes, at 10pm and at midnight | `wallpaper/` |
+| Lock-screen summary: drawn as a lock-only wallpaper, centred and split around the fingerprint sensor (the day's lines just above it, the week's dots below), lines wrapping, position and text size adjustable in Setup with a live preview, redrawn when its content or settings change, at 10pm and at midnight | `wallpaper/`, `ui/SetupLockScreen.kt` |
 | Targets: Mifflin–St Jeor × activity + goal, macros from body weight and fat % | `domain/Targets.kt` |
 | Food estimates: one AI call per entry (structured JSON) when logged or its text changes, to the provider picked in Setup: Claude (`claude-haiku-5-5`, the default) or Grok (`grok-4.20-non-reasoning` via xAI's chat completions); retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); one key per provider, encrypted with the Android Keystore | `ai/` |
 | Meal photos: optional photo on a food entry from the camera (`TakePicture` into a FileProvider scratch file) or the system photo picker, so no storage permission; decoded straight to at most 1568 px, saved as JPEG under 3.5 MB in `files/food-photos`, sent with the text as a base64 image (Claude image block, xAI `image_url` data URI). Kept out of cloud backup (its 25 MB cap), mirrored into self-backups; unused files swept at startup | `data/FoodPhotos.kt`, `data/PhotoImporter.kt`, `domain/PhotoSizing.kt`, `ui/FoodPhotoUi.kt` |
@@ -108,6 +108,8 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 **Release builds** are shrunk with R8 (about 25 MB, versus about 80 MB for debug) and not debuggable. `versionCode` is the git commit count, so every release is newer than the last.
 
 **Device tests never run on a real phone.** Gradle uninstalls the app after them, which deletes all of Diurna's data, so `scripts/test` refuses anything but the emulator. Run `./gradlew connectedDebugAndroidTest` by hand only if you know which device it will hit.
+
+**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key.
 
 **Wireless debugging** works with the scripts too: pair once in Developer options → Wireless debugging, and `adb` reconnects whenever it's turned on. Keep it on trusted networks only, and off when not in use.
 

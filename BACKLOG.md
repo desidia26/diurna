@@ -45,7 +45,7 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | # | P | Item | Notes |
 |---|---|---|---|
 | A1 | P1 | Verify on the Pixel 9a: alarm through reboot and deep sleep | Only tested on the emulator. `adb reboot` and `adb shell dumpsys deviceidle force-idle` with an alarm pending. |
-| A2 | P1 | Verify the lock-screen summary's position on the Pixel 9a | Check it doesn't collide with the clock or shortcuts; move it if it does. |
+| A2 | P1 | ~~Verify the lock-screen summary's position on the Pixel 9a~~ | ~~Check it doesn't collide with the clock or shortcuts; move it if it does.~~ Shipped 2026-10-26: the fingerprint icon, then notifications, covered it; see Done. |
 | A3 | P3 | Restore the previous lock wallpaper when turning the summary off | Currently falls back to the home wallpaper. |
 
 ## Tech debt
@@ -97,3 +97,5 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | — | Tap an exercise name to fold it to one line of its sets (Enter skips folded exercises); exercises with every set done show their name in green | 2026-10-23 |
 | F5 | Metrics tab: weight (daily dots and 7-day average), mood and energy (7-day averages past 4 weeks), weekly training volume, workouts and PRs, and the most-logged lifts by estimated 1RM; each lift opens a screen with e1RM or volume per session, records and session history. Ranges 4w/12w/1y/All, remembered | 2026-10-24 |
 | — | Meal photos: attach a photo to a food entry (camera or photo picker, no storage permission) from the camera icon next to the food box; the text stays the entry and the photo is sent with it to Claude or Grok for the estimate. Thumbnail on the entry (tap for a larger view); add, replace or remove in the edit dialog. Stored downscaled (1568 px JPEG) in app-private storage, left out of cloud backup, mirrored in self-backups. Database v8 | 2026-10-25 |
+| A2 | Lock screen: the fingerprint sensor's icon covered the summary, the nutrition line ran off the right edge, and then notifications covered it. Split around the sensor and centred: the date and the day's lines end just above the sensor, growing upward as lines wrap, so a typical day starts around the middle of the screen, below a notification or two; the week's dots sit below it, above the shortcuts. Lines wrap at the " · " between facts and the text shrinks only when a day won't fit. Drawn allowing for the 1.1x zoom the system shows wallpapers at. The sensor's position comes from the platform when the maker sets it, else a band measured on the Pixel; there's no API for how far notifications reach, so Setup's Lock screen card has a Position slider (raise from Auto, up to 15% of the screen), a Text size slider (80–125%), Reset to Auto and a live preview | 2026-10-26 |
+
