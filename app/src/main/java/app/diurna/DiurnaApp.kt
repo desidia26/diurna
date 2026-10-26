@@ -2,8 +2,12 @@ package app.diurna
 
 import android.app.Application
 import android.content.Context
+import app.diurna.ai.AiProvider
+import app.diurna.ai.AiProviderStore
 import app.diurna.ai.ApiKeyStore
 import app.diurna.ai.ClaudeFoodEstimator
+import app.diurna.ai.GrokFoodEstimator
+import app.diurna.ai.SelectedFoodEstimator
 import app.diurna.ai.EstimateRunner
 import app.diurna.ai.EstimateWorker
 import app.diurna.ai.NetworkMonitor
@@ -39,9 +43,13 @@ class AppContainer(context: Context) {
     val food = FoodRepository(db)
     val library = LibraryRepository(db)
     val backups = Backups(context, db)
-    val apiKeys = ApiKeyStore(context)
+    val aiProvider = AiProviderStore(context)
+    val apiKeys: Map<AiProvider, ApiKeyStore> = AiProvider.entries.associateWith { ApiKeyStore(context, it) }
     val network = NetworkMonitor(context)
-    val estimates = EstimateRunner(db, ClaudeFoodEstimator({ apiKeys.get() }))
+    val estimates = EstimateRunner(db, SelectedFoodEstimator({ aiProvider.get() }, mapOf(
+        AiProvider.ANTHROPIC to ClaudeFoodEstimator({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
+        AiProvider.XAI to GrokFoodEstimator({ apiKeys.getValue(AiProvider.XAI).get() }),
+    )))
     val selectedDate = SelectedDate()
     val nutrition = NutritionRepository(db, settings.profile)
     val stepSensor = AndroidStepSensor(context)

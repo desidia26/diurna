@@ -48,3 +48,33 @@ object EstimateErrors {
         }
     }
 }
+
+/**
+ * [EstimateErrors] for xAI. Based on docs.x.ai's debugging guide (checked 2026-10-25): 401 is a
+ * bad or missing key, 403 is permission (including a team with no credits or a spending limit
+ * reached, told apart by the message), 404 an unknown model, 400/422 a bad request, 429 a rate
+ * limit. Raw API text is never shown.
+ */
+object GrokErrors {
+    const val BAD_KEY = EstimateErrors.BAD_KEY
+    const val NO_CREDIT = "Out of xAI credit. Add credit in the xAI Console, then tap Retry."
+    const val SPEND_LIMIT = "xAI spending limit reached. Raise it in the xAI Console, then tap Retry."
+    const val GAVE_UP = "Couldn't reach Grok after several tries. Tap Retry."
+
+    fun classify(status: Int, message: String?, model: String): EstimateErrors.Outcome {
+        val m = message.orEmpty().lowercase()
+        return when {
+            "spending limit" in m || "spend limit" in m || "usage limit" in m -> EstimateErrors.Fail(SPEND_LIMIT)
+            "credit" in m || "license" in m -> EstimateErrors.Fail(NO_CREDIT)
+            status == 402 -> EstimateErrors.Fail(NO_CREDIT)
+            status == 401 -> EstimateErrors.Fail(BAD_KEY)
+            "api key" in m && (status == 400 || status == 403) -> EstimateErrors.Fail(BAD_KEY)
+            status == 403 -> EstimateErrors.Fail("This API key isn't allowed to use Grok. Check its permissions in the xAI Console.")
+            status == 404 -> EstimateErrors.Fail("$model isn't available to this API key.")
+            status == 413 -> EstimateErrors.Fail("This entry is too long to estimate. Shorten it, then it will retry.")
+            status == 400 || status == 422 -> EstimateErrors.Fail("Grok couldn't process this entry. Try rewording it.")
+            status == 408 || status == 409 || status == 429 || status >= 500 -> EstimateErrors.Retry
+            else -> EstimateErrors.Fail("Unexpected error from Grok (HTTP $status). Tap Retry.")
+        }
+    }
+}

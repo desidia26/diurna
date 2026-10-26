@@ -13,13 +13,15 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Holds the Anthropic API key, encrypted with an AES key that lives in the Android Keystore.
+ * Holds one provider's API key (Anthropic by default), encrypted with an AES key that lives in the Android Keystore.
  * The Keystore key can't be exported, so copying the app's files off the phone (e.g. scripts/
  * backup-db) yields only ciphertext. The prefs file is also excluded from cloud backup
  * (res/xml/backup_rules.xml). If the Keystore key is ever lost, the stored key reads as absent
  * and just needs re-entering.
  */
-class ApiKeyStore(context: Context) {
+class ApiKeyStore(context: Context, provider: AiProvider = AiProvider.ANTHROPIC) {
+    // Anthropic keeps its original pref name so a key saved before providers existed still reads.
+    private val blobKey = if (provider == AiProvider.ANTHROPIC) KEY_BLOB else "${provider.id}_api_key"
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val _lastFour = MutableStateFlow(get()?.takeLast(4))
 
@@ -27,7 +29,7 @@ class ApiKeyStore(context: Context) {
     val lastFour: StateFlow<String?> = _lastFour
 
     fun get(): String? {
-        val blob = prefs.getString(KEY_BLOB, null) ?: return null
+        val blob = prefs.getString(blobKey, null) ?: return null
         return runCatching {
             val bytes = Base64.decode(blob, Base64.NO_WRAP)
             val iv = bytes.copyOfRange(0, IV_BYTES)
@@ -41,12 +43,12 @@ class ApiKeyStore(context: Context) {
         val cipher = Cipher.getInstance(TRANSFORM)
         cipher.init(Cipher.ENCRYPT_MODE, keystoreKey())
         val blob = cipher.iv + cipher.doFinal(apiKey.trim().toByteArray(Charsets.UTF_8))
-        prefs.edit().putString(KEY_BLOB, Base64.encodeToString(blob, Base64.NO_WRAP)).apply()
+        prefs.edit().putString(blobKey, Base64.encodeToString(blob, Base64.NO_WRAP)).apply()
         _lastFour.value = apiKey.trim().takeLast(4)
     }
 
     fun clear() {
-        prefs.edit().remove(KEY_BLOB).apply()
+        prefs.edit().remove(blobKey).apply()
         _lastFour.value = null
     }
 

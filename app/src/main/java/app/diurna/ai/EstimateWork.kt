@@ -35,7 +35,7 @@ class EstimateRunner(private val db: AppDatabase, private val estimator: FoodEst
                     // already queued the new text for the next pass.
                     food.setEstimate(
                         entry.id, entry.text, e.kcalLow, e.kcalHigh, e.proteinG, e.carbsG, e.fatG, e.note,
-                        estimator.model, System.currentTimeMillis(),
+                        e.model ?: estimator.model, System.currentTimeMillis(),
                     )
                 } catch (e: CancellationException) {
                     throw e
@@ -51,7 +51,7 @@ class EstimateRunner(private val db: AppDatabase, private val estimator: FoodEst
                     }
                     // Rate limited or a server hiccup: leave it pending and try later, up to a point.
                     if (!giveUp) return Outcome.RETRY
-                    food.failAllPending(EstimateErrors.GAVE_UP)
+                    food.failAllPending(estimator.gaveUpMessage)
                     return Outcome.DONE
                 }
             }

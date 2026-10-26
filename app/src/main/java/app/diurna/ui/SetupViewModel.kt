@@ -1,6 +1,7 @@
 package app.diurna.ui
 
 import app.diurna.AppContainer
+import app.diurna.ai.AiProvider
 import app.diurna.data.SettingsStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -54,13 +55,20 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
     fun backupNow() = io { c.backups.backupNow() }
 
     // Food estimates
-    val apiKeyLastFour = c.apiKeys.lastFour
-    fun setApiKey(key: String) = io {
-        if (key.isBlank()) return@io
-        c.apiKeys.set(key)
-        c.food.retryFailedEstimates() // entries that failed for lack of a key
+    val aiProvider = c.aiProvider.selected
+    fun apiKeyLastFour(provider: AiProvider) = c.apiKeys.getValue(provider).lastFour
+    fun setAiProvider(provider: AiProvider) = io {
+        if (provider == c.aiProvider.get()) return@io
+        c.aiProvider.set(provider)
+        // Entries that failed on the old provider (e.g. no key) get a try on the new one.
+        if (c.apiKeys.getValue(provider).get() != null) c.food.retryFailedEstimates()
     }
-    fun clearApiKey() = io { c.apiKeys.clear() }
+    fun setApiKey(provider: AiProvider, key: String) = io {
+        if (key.isBlank()) return@io
+        c.apiKeys.getValue(provider).set(key)
+        if (provider == c.aiProvider.get()) c.food.retryFailedEstimates() // entries that failed for lack of a key
+    }
+    fun clearApiKey(provider: AiProvider) = io { c.apiKeys.getValue(provider).clear() }
 
     fun setLockWallpaper(enabled: Boolean) = io {
         c.settings.setLockWallpaper(enabled) // turning on: the wallpaper's own collector redraws

@@ -35,6 +35,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.diurna.ai.AiProvider
+import app.diurna.ai.GrokFoodEstimator
 import app.diurna.data.SettingsStore.ProfileDraft
 import app.diurna.domain.Activity
 import app.diurna.domain.Goal
@@ -168,11 +170,20 @@ private fun NumberField(
 
 @Composable
 fun FoodEstimatesCard(vm: SetupViewModel) {
-    val lastFour by vm.apiKeyLastFour.collectAsStateWithLifecycle()
-    var key by remember { mutableStateOf("") }
+    val provider by vm.aiProvider.collectAsStateWithLifecycle()
+    val lastFour by remember(provider) { vm.apiKeyLastFour(provider) }.collectAsStateWithLifecycle()
+    var key by remember(provider) { mutableStateOf("") }
     var confirmRemove by remember { mutableStateOf(false) }
     SectionCard("Food estimates", chip = { if (lastFour != null) Chip("Key set", Tone.Good) else Chip("No key", Tone.Warn) }) {
-        Hint("Each food entry is sent once to Claude (claude-haiku-5-5) for a calorie range and macros, when you log it or change its text. Only the entry text is sent.")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiProvider.entries.forEach { p ->
+                FilterChip(p == provider, { vm.setAiProvider(p) }, label = { Text(p.label) })
+            }
+        }
+        when (provider) {
+            AiProvider.ANTHROPIC -> Hint("Each food entry is sent once to Claude (claude-haiku-5-5) for a calorie range and macros, when you log it or change its text. Only the entry text is sent.")
+            AiProvider.XAI -> Hint("Each food entry is sent once to Grok (${GrokFoodEstimator.DEFAULT_MODEL}) for a calorie range and macros, when you log it or change its text. Only the entry text is sent.")
+        }
         if (lastFour != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Key ending ••••$lastFour", Modifier.weight(1f), fontFamily = FontFamily.Monospace)
@@ -181,20 +192,23 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
         } else {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
-                    key, { key = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text("sk-ant-…") },
+                    key, { key = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text(provider.keyPlaceholder) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 )
-                Button(onClick = { vm.setApiKey(key); key = "" }, enabled = key.isNotBlank()) { Text("Save") }
+                Button(onClick = { vm.setApiKey(provider, key); key = "" }, enabled = key.isNotBlank()) { Text("Save") }
             }
         }
-        Hint("Use a key from its own Anthropic workspace with a monthly spend limit, so a leaked key can only cost that much. It's stored encrypted on this phone and left out of backups.")
+        when (provider) {
+            AiProvider.ANTHROPIC -> Hint("Use a key from its own Anthropic workspace with a monthly spend limit, so a leaked key can only cost that much. It's stored encrypted on this phone and left out of backups.")
+            AiProvider.XAI -> Hint("Use a key from its own xAI team with a spending limit, so a leaked key can only cost that much. It's stored encrypted on this phone and left out of backups.")
+        }
     }
     if (confirmRemove) {
         ConfirmDialog(
-            "Remove API key?", "New food entries won't be estimated until you add a key again.", "Remove",
+            "Remove ${provider.company} API key?", "New food entries won't be estimated until you add a key again.", "Remove",
             onDismiss = { confirmRemove = false },
-        ) { vm.clearApiKey(); confirmRemove = false }
+        ) { vm.clearApiKey(provider); confirmRemove = false }
     }
 }
 
