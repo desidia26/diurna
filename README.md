@@ -46,10 +46,10 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 |---|---|
 | Alarm rules (lock time, which alarm applies, next alarm, scoring) | `domain/AlarmRules.kt`, plain Kotlin with unit tests |
 | Storage (Room/SQLite; dates `yyyy-MM-dd`, times `HH:mm`, both local) | `data/Entities.kt`, `data/Daos.kt`, `data/*Repository.kt` |
-| Settings (porch code secret, profile, step goal, lock-screen toggle; DataStore) | `data/SettingsStore.kt` |
+| Settings (porch code secret, profile, step goal, lock-screen toggle, position and text size; DataStore) | `data/SettingsStore.kt` |
 | Alarm: one exact `setAlarmClock` alarm, a foreground service that rings the phone's default alarm sound, a full-screen scan screen | `alarm/` |
 | Porch QR: generate (ZXing) and scan (CameraX + ML Kit, offline) | `scan/Qr.kt` |
-| Lock-screen summary: drawn as a lock-only wallpaper, centred below the fingerprint sensor (above it is left to notifications), lines wrapping, redrawn when its content changes, at 10pm and at midnight | `wallpaper/` |
+| Lock-screen summary: drawn as a lock-only wallpaper, centred and split around the fingerprint sensor (the day's lines just above it, the week's dots below), lines wrapping, position and text size adjustable in Setup with a live preview, redrawn when its content or settings change, at 10pm and at midnight | `wallpaper/`, `ui/SetupLockScreen.kt` |
 | Targets: Mifflin–St Jeor × activity + goal, macros from body weight and fat % | `domain/Targets.kt` |
 | Food estimates: one Claude API call per entry (`claude-haiku-5-5`, structured JSON) when logged or its text changes; retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); API key encrypted with the Android Keystore | `ai/` |
 | Barcode scanning: EAN/UPC codes looked up on Open Food Facts and checked in the meal form before saving; rescans come from the library and work offline. Answers are treated as untrusted: HTTPS only, no redirects, size and time caps, sanity limits on numbers, plain short text | `data/BarcodeLookup.kt`, `ui/BarcodeScanDialog.kt` |

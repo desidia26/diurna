@@ -71,14 +71,14 @@ class LockWallpaper(
     private val settings: SettingsStore,
 ) {
     private val mutex = Mutex()
-    private var lastDrawn: LockSnapshot? = null
+    private var lastDrawn: Pair<LockSnapshot, LockStyle>? = null
     private val wallpapers = WallpaperManager.getInstance(context)
     private val alarms = context.getSystemService(AlarmManager::class.java)
 
     @OptIn(FlowPreview::class)
     fun start(scope: CoroutineScope) = scope.launch {
         // Targets come from the profile, which lives in settings rather than the database.
-        combine(settings.lockWallpaper, db.invalidationTracker.createFlow(*TABLES), settings.profile) { enabled, _, _ -> enabled }
+        combine(settings.lockWallpaper, db.invalidationTracker.createFlow(*TABLES), settings.profile, settings.lockStyle) { enabled, _, _, _ -> enabled }
             .debounce(2_000) // typing into a set field writes on every keystroke
             .collectLatest { enabled ->
                 if (enabled) {
@@ -98,23 +98,40 @@ class LockWallpaper(
         if (!settings.lockWallpaper.first()) return@withLock
         try {
             val (w, h) = screenSize()
-            val today = LocalDateTime.now().toLocalDate()
-            val snapshot = buildSnapshot(
-                db, days, targets = nutrition.observeTargets(today).first(),
-                // The saved count, not a fresh sensor look: looking writes to the database, which
-                // would trigger another redraw. The 15-minute sampler does the looking.
-                steps = db.dayDao().get(today.key())?.steps, stepGoal = settings.stepGoal.first(),
-            )
+            val drawn = snapshot() to settings.lockStyle.first()
             // Setting a wallpaper makes the lock screen flash, so only do it when the picture changes.
-            if (snapshot != lastDrawn) {
-                wallpapers.setBitmap(draw(snapshot, w, h, fingerprintZone(), wallpaperZoom()), null, true, WallpaperManager.FLAG_LOCK)
-                lastDrawn = snapshot
+            if (drawn != lastDrawn) {
+                wallpapers.setBitmap(draw(drawn.first, w, h, fingerprintZone(), wallpaperZoom(), drawn.second), null, true, WallpaperManager.FLAG_LOCK)
+                lastDrawn = drawn
                 Log.d("DiurnaLock", "lock screen redrawn")
             }
         } catch (e: Exception) {
             Log.w("Diurna", "Lock wallpaper update failed", e)
         }
         scheduleNextTick()
+    }
+
+    /**
+     * Today's lock screen with [style], as it looks on screen (so without the zoom allowance),
+     * [width] pixels wide, for Setup's preview, and the sensor band to mark on it.
+     */
+    suspend fun preview(style: LockStyle, width: Int): Pair<Bitmap, FingerprintZone> {
+        val (w, h) = screenSize()
+        val zone = fingerprintZone()
+        val full = draw(snapshot(), w, h, zone, 1f, style)
+        val small = Bitmap.createScaledBitmap(full, width, (width.toLong() * h / w).toInt(), true)
+        if (small !== full) full.recycle()
+        return small to zone
+    }
+
+    private suspend fun snapshot(): LockSnapshot {
+        val today = LocalDateTime.now().toLocalDate()
+        return buildSnapshot(
+            db, days, targets = nutrition.observeTargets(today).first(),
+            // The saved count, not a fresh sensor look: looking writes to the database, which
+            // would trigger another redraw. The 15-minute sampler does the looking.
+            steps = db.dayDao().get(today.key())?.steps, stepGoal = settings.stepGoal.first(),
+        )
     }
 
     /** Turning it off hands the lock screen back to the home wallpaper. */
@@ -238,9 +255,9 @@ private const val WARN = 0xFFF0A868.toInt()
 
 
 /**
- * Black-to-deep-purple gradient with the day's summary centred between the fingerprint sensor
- * and the bottom shortcuts: the date, the day's lines (wrapping), then the week's mornings.
- * Above the sensor is left to the clock, the at-a-glance cards and notifications.
+ * Black-to-deep-purple gradient with the day's summary split around the fingerprint sensor:
+ * the date and the day's lines (wrapping, centred) just above it, below the clock, cards and a
+ * notification or two; the week's mornings below it, above the bottom shortcuts.
  *
  * [zoom] is how much the system enlarges the lock wallpaper about its centre (Pixels show it
  * at 1.1); the canvas is scaled down by it so positions and sizes here are what's seen on screen.
@@ -251,6 +268,7 @@ fun draw(
     height: Int,
     fingerprint: FingerprintZone = FingerprintZone.DEFAULT,
     zoom: Float = 1f,
+    style: LockStyle = LockStyle.AUTO,
 ): Bitmap {
     val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
@@ -261,8 +279,7 @@ fun draw(
 
     val u = width / 100f // layout unit: 1% of screen width
     val centre = width / 2f
-    // Narrow enough that the bottom lines clear the two shortcut buttons in the corners.
-    val textWidth = (70 * u).toInt()
+    val textWidth = (84 * u).toInt()
     fun text(size: Float, color: Int, bold: Boolean = false) = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = size * u
         this.color = color
@@ -286,49 +303,47 @@ fun draw(
     // Formatter built per draw so a language change on the phone is picked up.
     val eyebrow = s.date.format(DateTimeFormatter.ofPattern("EEEE · MMM d", Locale.getDefault())).uppercase()
 
-    /** The date, the rows and the week, laid out at a text scale but not yet drawn. */
-    class Block(val k: Float) {
-        val eyebrowLayout = wrap(eyebrow, text(3.2f * k, GREY).apply { letterSpacing = 0.12f }, textWidth)
+    /** The date and the day's lines, laid out at a text scale but not yet drawn. */
+    class Summary(val k: Float) {
+        val eyebrowLayout = wrap(eyebrow, text(3.4f * k, GREY).apply { letterSpacing = 0.12f }, textWidth)
         val layouts = rows.map { row ->
             if (row.plain) return@map wrap(row.label, text(3.6f * k, row.color), textWidth)
-            val dot = DotSpan(row.color, row.filled, radius = 1.2f * u * k, stroke = 0.45f * u * k, width = 4f * u * k, lift = 1.4f * u * k)
-            wrap(row.label, text(4.2f * k, WHITE), textWidth, dot)
+            val dot = DotSpan(row.color, row.filled, radius = 1.4f * u * k, stroke = 0.5f * u * k, width = 4.6f * u * k, lift = 1.6f * u * k)
+            wrap(row.label, text(4.6f * k, WHITE), textWidth, dot)
         }
         val afterEyebrow = 2.2f * u * k
-        val rowGap = 1.4f * u * k
-        val beforeWeek = 3.2f * u * k
-        val r = 2f * u * k
-        val dayGap = 10 * u * k
-        val letterDrop = 5.6f * u * k
-        val weekHeight = r + letterDrop + 0.8f * u * k
-        val height = eyebrowLayout.height + afterEyebrow + layouts.sumOf { it.height } + rowGap * (layouts.size - 1) +
-            beforeWeek + weekHeight
+        val rowGap = 1.8f * u * k
+        val height = eyebrowLayout.height + afterEyebrow + layouts.sumOf { it.height } + rowGap * (layouts.size - 1)
     }
-    val blocks = HashMap<Float, Block>()
-    fun block(scale: Float) = blocks.getOrPut(scale) { Block(scale) }
+    val summaries = HashMap<Float, Summary>()
+    fun summary(scale: Float) = summaries.getOrPut(scale) { Summary(scale) }
+    // The week's dots: radius, spacing and where the letters sit, at a text scale.
+    fun r(k: Float) = 2.2f * u * k
+    fun weekHeight(k: Float) = r(k) + 7f * u * k + 1f * u * k
 
-    val place = LockLayout.place(height.toFloat(), fingerprint, 2.5f * u) { block(it).height.toFloat() }
-    val b = block(place.scale)
-    var y = place.top
+    val place = LockLayout.place(height.toFloat(), fingerprint, 1.2f * u, style, { summary(it).height.toFloat() }, ::weekHeight)
+    val sum = summary(place.summaryScale)
+    var y = place.summaryTop
     fun drawCentred(layout: StaticLayout) {
         c.withTranslation(centre - textWidth / 2f, y) { layout.draw(this) }
         y += layout.height
     }
-    drawCentred(b.eyebrowLayout)
-    y += b.afterEyebrow
-    b.layouts.forEachIndexed { i, layout ->
-        if (i > 0) y += b.rowGap
+    drawCentred(sum.eyebrowLayout)
+    y += sum.afterEyebrow
+    sum.layouts.forEachIndexed { i, layout ->
+        if (i > 0) y += sum.rowGap
         drawCentred(layout)
     }
-    y += b.beforeWeek
 
     // This week's mornings, Monday to Sunday.
-    val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 0.5f * u * place.scale }
-    val r = b.r
-    val cy = y + r
-    val firstX = centre - 3 * b.dayGap
+    val k = place.weekScale
+    val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 0.5f * u * k }
+    val r = r(k)
+    val cy = place.weekTop + r
+    val dayGap = 11 * u * k
+    val firstX = centre - 3 * dayGap
     s.week.forEachIndexed { i, (date, status) ->
-        val cx = firstX + i * b.dayGap
+        val cx = firstX + i * dayGap
         when (status) {
             Morning.ON_TIME -> { dot.style = Paint.Style.FILL; dot.color = PURPLE; c.drawCircle(cx, cy, r, dot) }
             Morning.LATE, Morning.MISSED -> { dot.style = Paint.Style.STROKE; dot.color = WARN; c.drawCircle(cx, cy, r, dot) }
@@ -337,8 +352,8 @@ fun draw(
         }
         val isToday = date == s.date
         val letter = date.dayOfWeek.getDisplayName(java.time.format.TextStyle.NARROW, Locale.getDefault())
-        val p = text(2.6f * place.scale, if (isToday) WHITE else GREY, bold = isToday).apply { textAlign = Paint.Align.CENTER }
-        c.drawText(letter, cx, cy + b.letterDrop, p)
+        val p = text(2.8f * k, if (isToday) WHITE else GREY, bold = isToday).apply { textAlign = Paint.Align.CENTER }
+        c.drawText(letter, cx, cy + 7f * u * k, p)
     }
     return bmp
 }

@@ -2,6 +2,9 @@ package app.diurna.ui
 
 import app.diurna.AppContainer
 import app.diurna.data.SettingsStore
+import app.diurna.wallpaper.LockStyle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -61,6 +64,10 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
         c.food.retryFailedEstimates() // entries that failed for lack of a key
     }
     fun clearApiKey() = io { c.apiKeys.clear() }
+
+    val lockStyle = c.settings.lockStyle.state(LockStyle.AUTO)
+    fun setLockStyle(style: LockStyle) = io { c.settings.setLockStyle(style) } // the wallpaper's collector redraws
+    suspend fun lockPreview(style: LockStyle) = withContext(Dispatchers.Default) { c.lockWallpaper.preview(style, 360) }
 
     fun setLockWallpaper(enabled: Boolean) = io {
         c.settings.setLockWallpaper(enabled) // turning on: the wallpaper's own collector redraws

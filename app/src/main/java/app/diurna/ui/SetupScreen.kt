@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -116,18 +115,7 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
         item { BackupsCard(vm) }
         item { TargetsCard(vm) }
         item { FoodEstimatesCard(vm) }
-        item {
-            val lockOn by vm.lockWallpaper.collectAsStateWithLifecycle()
-            SectionCard("Lock screen") {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Show today on lock screen", fontWeight = FontWeight.SemiBold)
-                        Hint("Replaces your lock screen wallpaper with a dark summary of your day. Turning it off goes back to your home screen wallpaper.")
-                    }
-                    Switch(checked = lockOn, onCheckedChange = vm::setLockWallpaper)
-                }
-            }
-        }
+        item { LockScreenCard(vm) }
         item {
             SectionCard("Permissions") {
                 checks.forEach { c ->

@@ -136,14 +136,38 @@ class LockSnapshotTest {
 
     private val sizes = listOf(1080 to 2424, 1080 to 2400, 720 to 1280, 1440 to 3120)
 
-    @Test fun nothingDrawnUnderTheFingerprintSensorOrInTheNotificationArea() {
-        // Everything above the sensor's bottom edge: notifications stack down from under the clock to the sensor.
-        for ((w, h) in sizes.filter { (w, h) -> h >= 2 * w }) for (zoom in listOf(1f, 1.1f)) {
+    private val styles = listOf(LockStyle.AUTO, LockStyle(raise = 0.06f), LockStyle(raise = LockStyle.MAX_RAISE, textScale = LockStyle.MAX_TEXT))
+
+    @Test fun splitAroundTheSensorWithItsBandClear() {
+        for ((w, h) in sizes.filter { (w, h) -> h >= 2 * w }) for (zoom in listOf(1f, 1.1f)) for (style in styles) {
             val zone = FingerprintZone.DEFAULT
-            val bmp = draw(busyDay(), w, h, zone, zoom)
-            val drawn = (0..bitmapRow(zone.bottom, h, zoom)).filterNot { bmp.rowIsBlank(it) }
-            assertTrue("${w}x$h zoom $zoom: rows drawn above the sensor's bottom: ${drawn.take(5)}", drawn.isEmpty())
+            val bmp = draw(busyDay(), w, h, zone, zoom, style)
+            val label = "${w}x$h zoom $zoom $style"
+            val band = (bitmapRow(zone.top, h, zoom)..bitmapRow(zone.bottom, h, zoom)).filterNot { bmp.rowIsBlank(it) }
+            assertTrue("$label: rows drawn under the sensor: ${band.take(5)}", band.isEmpty())
+            assertTrue("$label: nothing above the sensor", (0 until bitmapRow(zone.top, h, zoom)).any { !bmp.rowIsBlank(it) })
+            assertTrue("$label: nothing below the sensor", (bitmapRow(zone.bottom, h, zoom) until h).any { !bmp.rowIsBlank(it) })
+            // Never up into the clock, however it's set.
+            val clock = (0..bitmapRow(LockLayout.CLOCK_LIMIT, h, zoom)).filterNot { bmp.rowIsBlank(it) }
+            assertTrue("$label: rows drawn by the clock: ${clock.take(5)}", clock.isEmpty())
+            bmp.recycle() // a dozen full-screen bitmaps otherwise outgrow the test process
         }
+    }
+
+    @Test fun autoLeavesTheNotificationAreaClear() {
+        // A busy day still stays under where a notification or two end, shrinking if it must.
+        for ((w, h) in sizes.filter { (w, h) -> h >= 2 * w }) for (zoom in listOf(1f, 1.1f)) {
+            val bmp = draw(busyDay(), w, h, FingerprintZone.DEFAULT, zoom)
+            val drawn = (0..bitmapRow(LockLayout.TOP_LIMIT, h, zoom)).filterNot { bmp.rowIsBlank(it) }
+            assertTrue("${w}x$h zoom $zoom: rows drawn in the notification area: ${drawn.take(5)}", drawn.isEmpty())
+            bmp.recycle()
+        }
+    }
+
+    @Test fun raisingMovesTheLinesUp() {
+        val (w, h) = 1080 to 2424
+        fun firstDrawn(style: LockStyle) = draw(busyDay(), w, h, zoom = 1.1f, style = style).let { b -> (0 until h).first { !b.rowIsBlank(it) }.also { b.recycle() } }
+        assertTrue(firstDrawn(LockStyle(raise = 0.06f)) < firstDrawn(LockStyle.AUTO) - 0.04f * h)
     }
 
     @Test fun shortScreenNeverDrawsUnderTheSensorEither() {
@@ -178,9 +202,11 @@ class LockSnapshotTest {
             val left = drawnCols.first()
             val right = w - 1 - drawnCols.last()
             // Clear of the corner shortcut buttons, and as much space on each side.
-            assertTrue("${w}x$h: drawn ${left}px from the left edge", left > w * 0.12f)
-            assertTrue("${w}x$h: drawn ${right}px from the right edge", right > w * 0.12f)
+            // The lines are the widest thing and sit well above the corner shortcut buttons.
+            assertTrue("${w}x$h: drawn ${left}px from the left edge", left > w * 0.07f)
+            assertTrue("${w}x$h: drawn ${right}px from the right edge", right > w * 0.07f)
             assertTrue("${w}x$h: off centre by ${left - right}px", kotlin.math.abs(left - right) < w * 0.03f)
+            bmp.recycle()
         }
     }
 
