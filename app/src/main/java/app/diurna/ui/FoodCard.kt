@@ -76,6 +76,12 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         text = ""
         photo = null
     }
+    // A saved meal or a scan logged while a photo is attached keeps the photo: it's a picture of that food.
+    fun logMeal(id: Long, servings: Double = 1.0) {
+        vm.logMeal(id, servings, photo)
+        text = ""
+        photo = null
+    }
     var editing by remember { mutableStateOf<FoodEntryEntity?>(null) }
     var servingsFor by remember { mutableStateOf<FoodEntryEntity?>(null) }
     var savingAsMeal by remember { mutableStateOf<FoodEntryEntity?>(null) }
@@ -116,7 +122,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 matches.forEach { m ->
                     SuggestionChip(
-                        onClick = { vm.logMeal(m.id); text = "" },
+                        onClick = { logMeal(m.id) },
                         label = { Text("${m.name} · ${m.kcal}") },
                         colors = SuggestionChipDefaults.suggestionChipColors(labelColor = MaterialTheme.colorScheme.onSurface),
                     )
@@ -162,7 +168,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
     }
     servingsOf?.let { m ->
         ServingsDialog(1.0, title = "${m.name} · ${m.kcal} kcal each", onDismiss = { servingsOf = null }) {
-            vm.logMeal(m.id, it); servingsOf = null
+            logMeal(m.id, it); servingsOf = null
         }
     }
     servingsFor?.let { f ->
