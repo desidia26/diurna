@@ -126,24 +126,62 @@ class LockSnapshotTest {
     )
 
     /** The background is a vertical gradient, so a row with anything drawn on it isn't one colour. */
-    private fun android.graphics.Bitmap.rowIsBlank(y: Int) = (0 until width).all { getPixel(it, y) == getPixel(0, y) }
+    private fun android.graphics.Bitmap.rowIsBlank(y: Int): Boolean {
+        val row = IntArray(width).also { getPixels(it, 0, width, 0, y, width, 1) }
+        return row.all { it == row[0] }
+    }
 
-    @Test fun nothingDrawnUnderTheFingerprintSensor() = runTest {
-        for ((w, h) in listOf(1080 to 2424, 1080 to 2400, 720 to 1280, 1440 to 3120)) {
+    /** The bitmap row that the system's centred [zoom] shows at screen fraction [f]. */
+    private fun bitmapRow(f: Float, h: Int, zoom: Float) = ((f * h - h / 2f) / zoom + h / 2f).toInt()
+
+    private val sizes = listOf(1080 to 2424, 1080 to 2400, 720 to 1280, 1440 to 3120)
+
+    @Test fun nothingDrawnUnderTheFingerprintSensorOrInTheNotificationArea() {
+        // Everything above the sensor's bottom edge: notifications stack down from under the clock to the sensor.
+        for ((w, h) in sizes.filter { (w, h) -> h >= 2 * w }) for (zoom in listOf(1f, 1.1f)) {
             val zone = FingerprintZone.DEFAULT
-            val bmp = draw(busyDay(), w, h, zone)
-            val drawnIn = ((zone.top * h).toInt()..(zone.bottom * h).toInt()).filterNot { bmp.rowIsBlank(it) }
-            assertTrue("${w}x$h: rows drawn under the sensor: ${drawnIn.take(5)}", drawnIn.isEmpty())
+            val bmp = draw(busyDay(), w, h, zone, zoom)
+            val drawn = (0..bitmapRow(zone.bottom, h, zoom)).filterNot { bmp.rowIsBlank(it) }
+            assertTrue("${w}x$h zoom $zoom: rows drawn above the sensor's bottom: ${drawn.take(5)}", drawn.isEmpty())
         }
     }
 
-    @Test fun longLinesWrapInsteadOfRunningOffTheEdge() = runTest {
+    @Test fun shortScreenNeverDrawsUnderTheSensorEither() {
+        // 16:9 leaves too little room below a sensor at the fallback height, so the summary goes above it.
+        val (w, h) = 720 to 1280
+        val zone = FingerprintZone.DEFAULT
+        for (zoom in listOf(1f, 1.1f)) {
+            val bmp = draw(busyDay(), w, h, zone, zoom)
+            val drawn = (bitmapRow(zone.top, h, zoom)..bitmapRow(zone.bottom, h, zoom)).filterNot { bmp.rowIsBlank(it) }
+            assertTrue("zoom $zoom: rows drawn under the sensor: ${drawn.take(5)}", drawn.isEmpty())
+        }
+    }
+
+    @Test fun reportedSensorPositionKeepsItsBandClear() {
         val (w, h) = 1080 to 2424
-        val bmp = draw(busyDay(), w, h)
-        // The right margin matches the left one, so its last columns stay empty.
-        val margin = (w * 0.05f).toInt()
-        val clipped = (0 until h).filter { y -> (w - margin until w).any { bmp.getPixel(it, y) != bmp.getPixel(0, y) } }
-        assertTrue("drawn into the right margin at rows ${clipped.take(5)}", clipped.isEmpty())
+        val zone = FingerprintZone.fromSensor(centerY = 0.80f * h, radius = 0.02f * h, screenHeight = h.toFloat())!!
+        val bmp = draw(busyDay(), w, h, zone, 1.1f)
+        val drawn = (bitmapRow(zone.top, h, 1.1f)..bitmapRow(zone.bottom, h, 1.1f)).filterNot { bmp.rowIsBlank(it) }
+        assertTrue("rows drawn under the sensor: ${drawn.take(5)}", drawn.isEmpty())
+    }
+
+    @Test fun longLinesWrapAndEverythingIsCentred() {
+        for ((w, h) in sizes) {
+            val bmp = draw(busyDay(), w, h, zoom = 1.1f)
+            val drawn = BooleanArray(w)
+            val row = IntArray(w)
+            for (y in 0 until h step 2) {
+                bmp.getPixels(row, 0, w, 0, y, w, 1)
+                for (x in 0 until w) if (row[x] != row[0]) drawn[x] = true
+            }
+            val drawnCols = (0 until w).filter { drawn[it] }
+            val left = drawnCols.first()
+            val right = w - 1 - drawnCols.last()
+            // Clear of the corner shortcut buttons, and as much space on each side.
+            assertTrue("${w}x$h: drawn ${left}px from the left edge", left > w * 0.12f)
+            assertTrue("${w}x$h: drawn ${right}px from the right edge", right > w * 0.12f)
+            assertTrue("${w}x$h: off centre by ${left - right}px", kotlin.math.abs(left - right) < w * 0.03f)
+        }
     }
 
     @Test fun stepsLineAndGoal() = runTest {

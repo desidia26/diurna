@@ -16,7 +16,12 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.text.Layout
+import android.text.SpannableString
+import android.text.Spanned
 import android.text.StaticLayout
+import android.text.style.ReplacementSpan
+import kotlin.math.roundToInt
 import android.text.TextPaint
 import androidx.core.graphics.withTranslation
 import android.os.Build
@@ -102,7 +107,7 @@ class LockWallpaper(
             )
             // Setting a wallpaper makes the lock screen flash, so only do it when the picture changes.
             if (snapshot != lastDrawn) {
-                wallpapers.setBitmap(draw(snapshot, w, h, fingerprintZone()), null, true, WallpaperManager.FLAG_LOCK)
+                wallpapers.setBitmap(draw(snapshot, w, h, fingerprintZone(), wallpaperZoom()), null, true, WallpaperManager.FLAG_LOCK)
                 lastDrawn = snapshot
                 Log.d("DiurnaLock", "lock screen redrawn")
             }
@@ -181,6 +186,19 @@ class LockWallpaper(
         null
     } ?: FingerprintZone.DEFAULT
 
+    /**
+     * The system draws wallpapers enlarged by config_wallpaperMaxScale (1.1 on AOSP and the
+     * Pixel) and zooms out to 1.0 only while the shade or recents is open. Measured on Larry's
+     * Pixel: the lock-screen picture was 1.1x about its centre.
+     */
+    private fun wallpaperZoom(): Float = try {
+        val res = Resources.getSystem()
+        val id = res.getIdentifier("config_wallpaperMaxScale", "dimen", "android")
+        if (id != 0) res.getFloat(id).takeIf { it in 1f..1.3f } ?: 1f else 1f
+    } catch (e: Exception) {
+        1f
+    }
+
     private companion object {
         const val STEPS_WORK = "lock-wallpaper-steps"
         val TABLES = arrayOf("day", "day_workout", "logged_exercise", "exercise_set", "food_entry", "routine_day", "workout_template")
@@ -220,89 +238,97 @@ private const val WARN = 0xFFF0A868.toInt()
 
 
 /**
- * Black-to-deep-purple gradient with the day's lines just above the fingerprint sensor (below
- * the clock and at-a-glance cards) and the week's dots just below it, above the bottom
- * shortcuts. Long lines wrap instead of running off the edge.
+ * Black-to-deep-purple gradient with the day's summary centred between the fingerprint sensor
+ * and the bottom shortcuts: the date, the day's lines (wrapping), then the week's mornings.
+ * Above the sensor is left to the clock, the at-a-glance cards and notifications.
+ *
+ * [zoom] is how much the system enlarges the lock wallpaper about its centre (Pixels show it
+ * at 1.1); the canvas is scaled down by it so positions and sizes here are what's seen on screen.
  */
-fun draw(s: LockSnapshot, width: Int, height: Int, fingerprint: FingerprintZone = FingerprintZone.DEFAULT): Bitmap {
+fun draw(
+    s: LockSnapshot,
+    width: Int,
+    height: Int,
+    fingerprint: FingerprintZone = FingerprintZone.DEFAULT,
+    zoom: Float = 1f,
+): Bitmap {
     val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
     c.drawPaint(Paint().apply {
         shader = LinearGradient(0f, 0f, 0f, height.toFloat(), BG_TOP, BG_BOTTOM, Shader.TileMode.CLAMP)
     })
+    c.scale(1f / zoom, 1f / zoom, width / 2f, height / 2f)
 
     val u = width / 100f // layout unit: 1% of screen width
-    val left = 9 * u
-    val textLeft = left + 5.5f * u // rows hang past their dot
-    val textWidth = (width - left - textLeft).toInt().coerceAtLeast(1)
+    val centre = width / 2f
+    // Narrow enough that the bottom lines clear the two shortcut buttons in the corners.
+    val textWidth = (70 * u).toInt()
     fun text(size: Float, color: Int, bold: Boolean = false) = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = size * u
         this.color = color
         typeface = Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
         if (!bold) letterSpacing = 0.02f
     }
-    val dot = Paint(Paint.ANTI_ALIAS_FLAG)
 
     val morningColor = when (s.morningTone) {
         LockSnapshot.Tone.Good -> PURPLE
         LockSnapshot.Tone.Warn -> WARN
         LockSnapshot.Tone.Neutral -> GREY
     }
-    class Row(val label: String, val color: Int, val filled: Boolean)
+    class Row(val label: String, val color: Int, val filled: Boolean, val plain: Boolean = false)
     val rows = listOfNotNull(
         Row(s.morningLine, morningColor, s.morningTone != LockSnapshot.Tone.Neutral),
         Row(s.workoutLine, if (s.workoutDone) PURPLE else GREY, s.workoutDone),
         Row(s.foodLine, GREY, false),
         s.stepsLine?.let { Row(it, if (s.stepsReached) PURPLE else GREY, s.stepsReached) },
+        s.tomorrowLine?.let { Row(it, PURPLE, false, plain = true) },
     )
     // Formatter built per draw so a language change on the phone is picked up.
     val eyebrow = s.date.format(DateTimeFormatter.ofPattern("EEEE · MMM d", Locale.getDefault())).uppercase()
 
-    /** The eyebrow, the rows and tomorrow's alarm, laid out at a text scale but not yet drawn. */
-    class Summary(val scale: Float) {
-        val eyebrowPaint = text(3.4f * scale, GREY).apply { letterSpacing = 0.12f }
-        val eyebrowAscent = -eyebrowPaint.fontMetrics.ascent
-        val layouts = rows.map { wrap(it.label, text(4.6f * scale, WHITE), textWidth) }
-        val tomorrow = s.tomorrowLine?.let { wrap(it, text(3.6f * scale, PURPLE), width - 2 * left.toInt()) }
-        // Baseline to baseline: eyebrow to first row, and between single-line rows, as before.
-        val firstGap = 9 * u * scale - layouts.firstOrNull().baseline0()
-        val rowGap = 8 * u * scale - layouts.firstOrNull().lineHeight0()
-        val height = eyebrowAscent + firstGap + layouts.sumOf { it.height } +
-            rowGap * (layouts.size - 1).coerceAtLeast(0) +
-            (tomorrow?.let { 3 * u * scale + it.height } ?: 0f)
+    /** The date, the rows and the week, laid out at a text scale but not yet drawn. */
+    class Block(val k: Float) {
+        val eyebrowLayout = wrap(eyebrow, text(3.2f * k, GREY).apply { letterSpacing = 0.12f }, textWidth)
+        val layouts = rows.map { row ->
+            if (row.plain) return@map wrap(row.label, text(3.6f * k, row.color), textWidth)
+            val dot = DotSpan(row.color, row.filled, radius = 1.2f * u * k, stroke = 0.45f * u * k, width = 4f * u * k, lift = 1.4f * u * k)
+            wrap(row.label, text(4.2f * k, WHITE), textWidth, dot)
+        }
+        val afterEyebrow = 2.2f * u * k
+        val rowGap = 1.4f * u * k
+        val beforeWeek = 3.2f * u * k
+        val r = 2f * u * k
+        val dayGap = 10 * u * k
+        val letterDrop = 5.6f * u * k
+        val weekHeight = r + letterDrop + 0.8f * u * k
+        val height = eyebrowLayout.height + afterEyebrow + layouts.sumOf { it.height } + rowGap * (layouts.size - 1) +
+            beforeWeek + weekHeight
     }
-    val summaries = HashMap<Float, Summary>()
-    fun summary(scale: Float) = summaries.getOrPut(scale) { Summary(scale) }
-    fun weekHeight(scale: Float) = 10.5f * u * scale // dots plus the letters under them
+    val blocks = HashMap<Float, Block>()
+    fun block(scale: Float) = blocks.getOrPut(scale) { Block(scale) }
 
-    val place = LockLayout.place(height.toFloat(), fingerprint, 3 * u, { summary(it).height }, ::weekHeight)
-    val sm = summary(place.scale)
-
-    var y = place.summaryTop + sm.eyebrowAscent
-    c.drawText(eyebrow, left, y, sm.eyebrowPaint)
-    y += sm.firstGap
-    rows.zip(sm.layouts).forEach { (row, layout) ->
-        val baseline = y + layout.getLineBaseline(0)
-        dot.color = row.color
-        dot.style = if (row.filled) Paint.Style.FILL else Paint.Style.STROKE
-        dot.strokeWidth = 0.5f * u * place.scale
-        c.drawCircle(left + 1.4f * u, baseline - 1.6f * u * place.scale, 1.4f * u * place.scale, dot)
-        c.withTranslation(textLeft, y) { layout.draw(this) }
-        y += layout.height + sm.rowGap
+    val place = LockLayout.place(height.toFloat(), fingerprint, 2.5f * u) { block(it).height.toFloat() }
+    val b = block(place.scale)
+    var y = place.top
+    fun drawCentred(layout: StaticLayout) {
+        c.withTranslation(centre - textWidth / 2f, y) { layout.draw(this) }
+        y += layout.height
     }
-    sm.tomorrow?.let { t ->
-        y += 3 * u * place.scale - sm.rowGap
-        c.withTranslation(left, y) { t.draw(this) }
+    drawCentred(b.eyebrowLayout)
+    y += b.afterEyebrow
+    b.layouts.forEachIndexed { i, layout ->
+        if (i > 0) y += b.rowGap
+        drawCentred(layout)
     }
+    y += b.beforeWeek
 
     // This week's mornings, Monday to Sunday.
-    val ws = if (place.weekBelowZone) 1f else place.scale
-    val gap = 11 * u
-    val r = 2.2f * u * ws
-    val cy = place.weekTop + r + 0.3f * u
+    val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 0.5f * u * place.scale }
+    val r = b.r
+    val cy = y + r
+    val firstX = centre - 3 * b.dayGap
     s.week.forEachIndexed { i, (date, status) ->
-        val cx = left + 1.4f * u + i * gap
-        dot.strokeWidth = 0.5f * u * ws
+        val cx = firstX + i * b.dayGap
         when (status) {
             Morning.ON_TIME -> { dot.style = Paint.Style.FILL; dot.color = PURPLE; c.drawCircle(cx, cy, r, dot) }
             Morning.LATE, Morning.MISSED -> { dot.style = Paint.Style.STROKE; dot.color = WARN; c.drawCircle(cx, cy, r, dot) }
@@ -311,23 +337,49 @@ fun draw(s: LockSnapshot, width: Int, height: Int, fingerprint: FingerprintZone 
         }
         val isToday = date == s.date
         val letter = date.dayOfWeek.getDisplayName(java.time.format.TextStyle.NARROW, Locale.getDefault())
-        val p = text(2.8f * ws, if (isToday) WHITE else GREY, bold = isToday).apply { textAlign = Paint.Align.CENTER }
-        c.drawText(letter, cx, cy + 7 * u * ws, p)
+        val p = text(2.6f * place.scale, if (isToday) WHITE else GREY, bold = isToday).apply { textAlign = Paint.Align.CENTER }
+        c.drawText(letter, cx, cy + b.letterDrop, p)
     }
     return bmp
 }
 
 /**
- * Wraps at the " · " between facts, keeping each fact ("P 84/141", "3,170 / 3,070 kcal") on
- * one line, so a wrapped line still reads as whole pieces. A single fact wider than the
- * screen still breaks inside rather than being cut off.
+ * Centred, wrapping at the " · " between facts so each fact ("P 84/141", "3,170 / 3,070 kcal")
+ * stays on one line. A single fact wider than [width] still breaks inside rather than being
+ * cut off. [dot] goes inline before the first word, so a row's first line is centred with it.
  */
-private fun wrap(label: String, paint: TextPaint, width: Int): StaticLayout {
-    val text = label.split(" · ").joinToString("\u00A0· ") { it.replace(' ', '\u00A0') }
+private fun wrap(label: String, paint: TextPaint, width: Int, dot: DotSpan? = null): StaticLayout {
+    val body = label.split(" · ").joinToString("\u00A0· ") { it.replace(' ', '\u00A0') }
+    // A no-break space carries the dot, so a line can't break between dot and text.
+    val text = if (dot == null) SpannableString(body) else SpannableString("\u00A0" + body).apply {
+        setSpan(dot, 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
     return StaticLayout.Builder.obtain(text, 0, text.length, paint, width)
+        .setAlignment(Layout.Alignment.ALIGN_CENTER)
         .setIncludePad(false)
         .build()
 }
 
-private fun StaticLayout?.baseline0(): Float = this?.getLineBaseline(0)?.toFloat() ?: 0f
-private fun StaticLayout?.lineHeight0(): Float = this?.let { (it.getLineBottom(0) - it.getLineTop(0)).toFloat() } ?: 0f
+/** A row's status dot, drawn in its own slot of text so it moves with the centred line. */
+private class DotSpan(
+    private val color: Int,
+    private val filled: Boolean,
+    private val radius: Float,
+    private val stroke: Float,
+    private val width: Float,
+    private val lift: Float,
+) : ReplacementSpan() {
+    override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+        if (fm != null) paint.getFontMetricsInt(fm)
+        return width.roundToInt()
+    }
+
+    override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: Paint) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = this@DotSpan.color
+            style = if (filled) Paint.Style.FILL else Paint.Style.STROKE
+            strokeWidth = stroke
+        }
+        canvas.drawCircle(x + stroke + radius, y - lift, radius, p)
+    }
+}

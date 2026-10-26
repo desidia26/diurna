@@ -49,7 +49,7 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Settings (porch code secret, profile, step goal, lock-screen toggle; DataStore) | `data/SettingsStore.kt` |
 | Alarm: one exact `setAlarmClock` alarm, a foreground service that rings the phone's default alarm sound, a full-screen scan screen | `alarm/` |
 | Porch QR: generate (ZXing) and scan (CameraX + ML Kit, offline) | `scan/Qr.kt` |
-| Lock-screen summary: drawn as a lock-only wallpaper around the fingerprint sensor, lines wrapping, redrawn when its content changes, at 10pm and at midnight | `wallpaper/` |
+| Lock-screen summary: drawn as a lock-only wallpaper, centred below the fingerprint sensor (above it is left to notifications), lines wrapping, redrawn when its content changes, at 10pm and at midnight | `wallpaper/` |
 | Targets: Mifflin–St Jeor × activity + goal, macros from body weight and fat % | `domain/Targets.kt` |
 | Food estimates: one Claude API call per entry (`claude-haiku-5-5`, structured JSON) when logged or its text changes; retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); API key encrypted with the Android Keystore | `ai/` |
 | Barcode scanning: EAN/UPC codes looked up on Open Food Facts and checked in the meal form before saving; rescans come from the library and work offline. Answers are treated as untrusted: HTTPS only, no redirects, size and time caps, sanity limits on numbers, plain short text | `data/BarcodeLookup.kt`, `ui/BarcodeScanDialog.kt` |
