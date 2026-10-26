@@ -2,12 +2,14 @@ package app.diurna.ai
 
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import java.util.Base64
 
 class GrokFoodEstimatorTest {
     private val estimateJson = """{"kcal_low":650,"kcal_high":950,"protein_g":45,"carbs_g":80,"fat_g":28,"note":"1 cup rice"}"""
@@ -48,6 +50,32 @@ class GrokFoodEstimatorTest {
         assertFalse(schema.getBoolean("additionalProperties"))
         assertEquals(6, schema.getJSONArray("required").length())
         assertEquals("integer", schema.getJSONObject("properties").getJSONObject("kcal_low").getString("type"))
+    }
+
+    @Test fun requestWithAPhotoSendsAnImagePartThenTheText() {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 1, 2, 3)
+        val r = JSONObject(XaiChat.request("grok-test", "SYS", "burrito bowl", jpeg))
+        val messages = r.getJSONArray("messages")
+        assertEquals("SYS", messages.getJSONObject(0).getString("content"))
+        val parts = messages.getJSONObject(1).getJSONArray("content")
+        assertEquals(2, parts.length())
+        val image = parts.getJSONObject(0)
+        assertEquals("image_url", image.getString("type"))
+        val url = image.getJSONObject("image_url").getString("url")
+        assertTrue(url.startsWith("data:image/jpeg;base64,"))
+        assertArrayEquals(jpeg, Base64.getDecoder().decode(url.removePrefix("data:image/jpeg;base64,")))
+        assertEquals("high", image.getJSONObject("image_url").getString("detail"))
+        assertEquals("text", parts.getJSONObject(1).getString("type"))
+        assertEquals("burrito bowl", parts.getJSONObject(1).getString("text"))
+        // Same structured output as text-only.
+        assertTrue(r.getJSONObject("response_format").getJSONObject("json_schema").getBoolean("strict"))
+    }
+
+    @Test fun estimatorSendsThePhotoItIsGiven() = runTest {
+        val t = FakeTransport { XaiReply(200, reply(estimateJson)) }
+        GrokFoodEstimator({ "xai-key" }, "grok-test", t).estimate("salad", byteArrayOf(9, 9))
+        val user = JSONObject(t.sent.single().second).getJSONArray("messages").getJSONObject(1)
+        assertEquals("image_url", user.getJSONArray("content").getJSONObject(0).getString("type"))
     }
 
     @Test fun requestEscapesUserText() {
@@ -144,7 +172,11 @@ class GrokErrorsTest {
 
 class SelectedFoodEstimatorTest {
     private class Named(override val model: String, override val gaveUpMessage: String) : FoodEstimator {
-        override suspend fun estimate(text: String) = FoodEstimate(1, 2, 0, 0, 0, text)
+        var photo: ByteArray? = null
+        override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
+            this.photo = photo
+            return FoodEstimate(1, 2, 0, 0, 0, text)
+        }
     }
 
     @Test fun delegatesToTheSelectedProviderAndRecordsItsModel() = runTest {
@@ -159,6 +191,14 @@ class SelectedFoodEstimatorTest {
         assertEquals("grok-m", s.estimate("a").model)
         assertEquals("grok-m", s.model)
         assertEquals("grok gave up", s.gaveUpMessage)
+    }
+
+    @Test fun passesThePhotoThrough() = runTest {
+        val grok = Named("grok-m", "")
+        val s = SelectedFoodEstimator({ AiProvider.XAI }, mapOf(AiProvider.ANTHROPIC to Named("c", ""), AiProvider.XAI to grok))
+        val jpeg = byteArrayOf(1, 2, 3)
+        s.estimate("a", jpeg)
+        assertArrayEquals(jpeg, grok.photo)
     }
 
     @Test fun unknownStoredProviderFallsBackToAnthropic() {

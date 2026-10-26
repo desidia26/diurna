@@ -12,14 +12,23 @@ import androidx.work.WorkerParameters
 import app.diurna.container
 import app.diurna.data.AppDatabase
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
  * Works through every food entry waiting for an estimate. Kept free of WorkManager so tests can
  * drive it with a fake estimator.
+ *
+ * [photo] reads an entry's photo by name. It's read fresh on every attempt (retries included) rather
+ * than carried in the work request; a photo that has gone missing just means a text-only estimate.
  */
-class EstimateRunner(private val db: AppDatabase, private val estimator: FoodEstimator) {
+class EstimateRunner(
+    private val db: AppDatabase,
+    private val estimator: FoodEstimator,
+    private val photo: (String) -> ByteArray? = { null },
+) {
     enum class Outcome { DONE, RETRY }
 
     /** [giveUp]: this is the last allowed attempt, so temporary trouble becomes a visible failure. */
@@ -30,11 +39,12 @@ class EstimateRunner(private val db: AppDatabase, private val estimator: FoodEst
             if (batch.isEmpty()) return Outcome.DONE
             for (entry in batch) {
                 try {
-                    val e = estimator.estimate(entry.text)
-                    // Guarded on the text: if it was edited mid-call this no-ops, and the edit has
-                    // already queued the new text for the next pass.
+                    val jpeg = entry.photo?.let { name -> withContext(Dispatchers.IO) { photo(name) } }
+                    val e = estimator.estimate(entry.text, jpeg)
+                    // Guarded on the text and photo: if either was edited mid-call this no-ops, and
+                    // the edit has already queued the entry for the next pass.
                     food.setEstimate(
-                        entry.id, entry.text, e.kcalLow, e.kcalHigh, e.proteinG, e.carbsG, e.fatG, e.note,
+                        entry.id, entry.text, entry.photo, e.kcalLow, e.kcalHigh, e.proteinG, e.carbsG, e.fatG, e.note,
                         e.model ?: estimator.model, System.currentTimeMillis(),
                     )
                 } catch (e: CancellationException) {

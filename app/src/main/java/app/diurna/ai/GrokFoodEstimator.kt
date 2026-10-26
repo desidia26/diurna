@@ -14,6 +14,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Base64
 
 /**
  * Estimates one entry with a single xAI chat completions call (OpenAI-compatible,
@@ -29,10 +30,10 @@ class GrokFoodEstimator(
 
     override val gaveUpMessage: String get() = GrokErrors.GAVE_UP
 
-    override suspend fun estimate(text: String): FoodEstimate {
+    override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
         val key = apiKey() ?: throw NoApiKey(NO_KEY)
         val reply = try {
-            transport.post(key, XaiChat.request(model, EstimatePrompt.SYSTEM, text))
+            transport.post(key, XaiChat.request(model, EstimatePrompt.SYSTEM, text, photo))
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
@@ -65,11 +66,12 @@ object XaiChat {
     /** The reply is a few dozen tokens; the cap only stops a runaway from costing much. */
     const val MAX_COMPLETION_TOKENS = 1024
 
-    fun request(model: String, system: String, userText: String): String = JSONObject()
+    /** [photoJpeg]: an optional JPEG sent with the text as a base64 data URI (xAI takes jpg/png up to 20 MiB). */
+    fun request(model: String, system: String, userText: String, photoJpeg: ByteArray? = null): String = JSONObject()
         .put("model", model)
         .put("messages", JSONArray()
             .put(JSONObject().put("role", "system").put("content", system))
-            .put(JSONObject().put("role", "user").put("content", userText)))
+            .put(JSONObject().put("role", "user").put("content", userContent(userText, photoJpeg))))
         .put("response_format", JSONObject()
             .put("type", "json_schema")
             .put("json_schema", JSONObject()
@@ -79,6 +81,16 @@ object XaiChat {
         .put("max_completion_tokens", MAX_COMPLETION_TOKENS)
         .put("stream", false)
         .toString()
+
+    /** Plain text alone; with a photo, an image part then a text part, as the vision docs show. */
+    private fun userContent(text: String, photoJpeg: ByteArray?): Any {
+        if (photoJpeg == null) return text
+        val url = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(photoJpeg)
+        return JSONArray()
+            // "high" detail: portion size is judged from small cues in the picture.
+            .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", url).put("detail", "high")))
+            .put(JSONObject().put("type", "text").put("text", text))
+    }
 
     /** The structured JSON text from a 200 reply. A refusal or an empty or cut-off reply fails. */
     fun content(body: String): String {

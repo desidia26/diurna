@@ -300,9 +300,9 @@ interface FoodDao {
     @Query(
         """UPDATE food_entry SET kcal_low = :kcalLow, kcal_high = :kcalHigh, protein_g = :protein, carbs_g = :carbs,
            fat_g = :fat, estimate_note = :note, estimate_model = :model, estimated_at = :at, estimate_error = NULL
-           WHERE id = :id AND text = :forText"""
+           WHERE id = :id AND text = :forText AND photo IS :forPhoto"""
     )
-    suspend fun setEstimate(id: Long, forText: String, kcalLow: Int, kcalHigh: Int, protein: Int, carbs: Int, fat: Int, note: String, model: String, at: Long)
+    suspend fun setEstimate(id: Long, forText: String, forPhoto: String?, kcalLow: Int, kcalHigh: Int, protein: Int, carbs: Int, fat: Int, note: String, model: String, at: Long)
 
     @Query("UPDATE food_entry SET estimate_error = :error WHERE id = :id")
     suspend fun setEstimateError(id: Long, error: String)
@@ -311,13 +311,20 @@ interface FoodDao {
     suspend fun failAllPending(error: String)
 
     /** Edits clear the estimate; the text is the source of truth and gets re-estimated. */
-    /** New text means new food: the entry becomes an AI entry and is re-estimated. */
+    /** New text or photo means new food: the entry becomes an AI entry and is re-estimated. */
     @Query(
-        """UPDATE food_entry SET text = :text, time = :time, kcal_low = NULL, kcal_high = NULL, protein_g = NULL,
+        """UPDATE food_entry SET text = :text, time = :time, photo = :photo, kcal_low = NULL, kcal_high = NULL, protein_g = NULL,
            carbs_g = NULL, fat_g = NULL, estimate_note = NULL, estimate_model = NULL, estimated_at = NULL,
            estimate_error = NULL, source = 'ai', meal_id = NULL, servings = 1.0 WHERE id = :id"""
     )
-    suspend fun edit(id: Long, text: String, time: String)
+    suspend fun edit(id: Long, text: String, time: String, photo: String?)
+
+    /** A photo added to or taken off a saved-meal entry: its numbers are exact, so nothing is re-estimated. */
+    @Query("UPDATE food_entry SET photo = :photo WHERE id = :id")
+    suspend fun setPhoto(id: Long, photo: String?)
+
+    @Query("SELECT photo FROM food_entry WHERE photo IS NOT NULL")
+    suspend fun photosInUse(): List<String>
 
     /** Sets a meal entry's numbers (already multiplied by servings). */
     @Query(

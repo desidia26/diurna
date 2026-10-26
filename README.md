@@ -52,6 +52,7 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Lock-screen summary: drawn as a lock-only wallpaper, redrawn when its content changes, at 10pm and at midnight | `wallpaper/` |
 | Targets: Mifflin–St Jeor × activity + goal, macros from body weight and fat % | `domain/Targets.kt` |
 | Food estimates: one AI call per entry (structured JSON) when logged or its text changes, to the provider picked in Setup: Claude (`claude-haiku-5-5`, the default) or Grok (`grok-4.20-non-reasoning` via xAI's chat completions); retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); one key per provider, encrypted with the Android Keystore | `ai/` |
+| Meal photos: optional photo on a food entry from the camera (`TakePicture` into a FileProvider scratch file) or the system photo picker, so no storage permission; decoded straight to at most 1568 px, saved as JPEG under 3.5 MB in `files/food-photos`, sent with the text as a base64 image (Claude image block, xAI `image_url` data URI). Kept out of cloud backup (its 25 MB cap), mirrored into self-backups; unused files swept at startup | `data/FoodPhotos.kt`, `data/PhotoImporter.kt`, `domain/PhotoSizing.kt`, `ui/FoodPhotoUi.kt` |
 | Barcode scanning: EAN/UPC codes looked up on Open Food Facts and checked in the meal form before saving; rescans come from the library and work offline. Answers are treated as untrusted: HTTPS only, no redirects, size and time caps, sanity limits on numbers, plain short text | `data/BarcodeLookup.kt`, `ui/BarcodeScanDialog.kt` |
 | Library: saved meals (exact numbers, tap to log, servings, optional barcode) and the exercise catalog (seeded with common lifts and a typical Planet Fitness lineup; rename, hide, delete if unused), under Setup | `data/LibraryRepository.kt`, `data/ExerciseSeed.kt`, `ui/LibraryScreens.kt` |
 | Workout logging: Enter walks weight → reps → next set; an empty field's grey hint (the set above, else last time) is accepted with Enter; exercises can be moved or removed; tapping an exercise name folds it to one line, and finished exercises turn green | `ui/DayScreen.kt`, `domain/SetHints.kt` |
@@ -60,7 +61,7 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Week view: each day's morning, workout, steps and calories | `ui/WeekScreen.kt` |
 | Metrics: weight with a 7-day average, mood and energy, weekly training volume and PRs, lifts by estimated 1RM (Epley, sets of up to 12 reps) with a per-exercise screen. Worked out from current data on the fly; nothing extra is stored. Charts are drawn with Compose `Canvas` | `domain/Metrics.kt`, `data/MetricsRepository.kt`, `ui/MetricsScreen.kt`, `ui/Charts.kt` |
 | Finalizing days: once a day ends, its alarm, planned workout, targets and steps are frozen so later routine or profile edits don't rewrite history | `data/DayFinalizer.kt` |
-| Self-backups: a consistent copy of the database and settings daily (keeps 14) in the app's shared-storage folder, readable over `adb` | `data/Backups.kt` |
+| Self-backups: a consistent copy of the database and settings daily (keeps 14) in the app's shared-storage folder, readable over `adb`; meal photos mirrored once into `backups/food-photos` | `data/Backups.kt` |
 | Shared one-line summaries for the Day screen and lock screen | `domain/DayText.kt` |
 | UI: Compose, five tabs (Day, Week, Metrics, Routine, Setup), one ViewModel per screen | `ui/` |
 
@@ -68,7 +69,7 @@ Key data rules:
 - A day's alarm is its override if set (a time or `off`), otherwise the routine. Once the day locks, the time that was armed (`day.scheduled_alarm`) is frozen.
 - Workouts copy the template's exercises onto the day. Each exercise has `sets[]` of weight and reps; the set count is just the number of rows.
 - Exercise names are one shared catalog, matched without regard to case.
-- Food text is the source of truth. Estimates (calorie range, macros, assumptions, model) are derived from it; editing the text re-estimates.
+- Food text is the source of truth. Estimates (calorie range, macros, assumptions, model) are derived from it and, when attached, its photo; editing the text or changing the photo re-estimates. A photo needs text with it; where they disagree, the model is told the text wins.
 - A saved meal's numbers are copied onto the entry when it's logged (× servings), so editing or deleting the meal never changes past days. Changing a meal entry's text turns it back into an AI entry.
 - Every schema change ships with a migration test (`MigrationTest`); never a destructive fallback.
 
