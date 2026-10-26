@@ -16,9 +16,15 @@ import kotlin.time.Duration.Companion.minutes
 @RunWith(AndroidJUnit4::class)
 class BackupsTest {
     private val t = TestDb()
-    private val backups = Backups(InstrumentationRegistry.getInstrumentation().targetContext, t.db, t.food.photos)
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    // Its own folder, apart from the app's real backups and the daily job that writes them.
+    private val dir = java.io.File(context.getExternalFilesDir(null), "backups-test-${System.nanoTime()}")
+    private val backups = Backups(context, t.db, t.food.photos, dir)
 
-    @After fun tearDown() = t.close()
+    @After fun tearDown() {
+        t.close()
+        dir.deleteRecursively()
+    }
 
     @Test fun backupIsACompleteReadableCopy() = runTest {
         t.food.add(t.mon, "eggs")
@@ -45,13 +51,13 @@ class BackupsTest {
         java.io.File(t.photoDir, name).writeBytes(byteArrayOf(1, 2, 3))
         t.food.add(t.mon, "pasta", name)
         backups.backupNow()
-        val mirrored = java.io.File(backups.dir, "food-photos/$name")
+        val mirrored = java.io.File(dir, "food-photos/$name")
         assertTrue(mirrored.exists())
 
         // Deleted in the app, but the backup just taken still points at it.
         t.food.delete(t.food.observe(t.mon).first().single().id)
+        Thread.sleep(1_100) // backup names are per-second: a second backup in the same second replaces the first
         backups.backupNow()
         assertTrue(mirrored.exists())
-        mirrored.delete()
     }
 }

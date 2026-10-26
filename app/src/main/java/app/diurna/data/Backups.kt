@@ -29,14 +29,18 @@ import java.util.concurrent.TimeUnit
  * Meal photos are mirrored into backups/food-photos rather than copied per backup, so a photo is
  * stored once however many backups refer to it.
  */
-class Backups(private val context: Context, private val db: AppDatabase, private val photos: FoodPhotos) {
+class Backups(
+    private val context: Context,
+    private val db: AppDatabase,
+    private val photos: FoodPhotos,
+    // Tests pass their own: they run inside the app, whose own daily backup can land in the same second.
+    val dir: File = File(context.getExternalFilesDir(null), "backups"),
+) {
     private val mutex = Mutex()
     private val _last = MutableStateFlow(latest()?.let { stampOf(it) })
 
     /** When the newest backup was taken, for the Setup card. */
     val last: StateFlow<LocalDateTime?> = _last
-
-    val dir: File get() = File(context.getExternalFilesDir(null), "backups")
 
     suspend fun backupNow(): File? = mutex.withLock {
         withContext(Dispatchers.IO) {
