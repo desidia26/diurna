@@ -19,6 +19,8 @@ import app.diurna.domain.Metrics
 import app.diurna.domain.Profile
 import app.diurna.domain.Sex
 import app.diurna.domain.StepMath
+import app.diurna.wallpaper.LockStyle
+import kotlin.math.roundToInt
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.UUID
@@ -42,6 +44,21 @@ class SettingsStore(private val context: Context) : StepStateStore {
 
     suspend fun setLockWallpaper(enabled: Boolean) {
         context.dataStore.edit { it[lockWallpaperKey] = enabled }
+    }
+
+    // Stored as whole thousandths and percents so a slider's steps compare equal.
+    private val lockRaiseKey = intPreferencesKey("lock_raise_permille")
+    private val lockTextKey = intPreferencesKey("lock_text_percent")
+    val lockStyle: Flow<LockStyle> = context.dataStore.data.map {
+        LockStyle(raise = (it[lockRaiseKey] ?: 0) / 1000f, textScale = (it[lockTextKey] ?: 100) / 100f).clamped()
+    }.distinctUntilChanged()
+
+    suspend fun setLockStyle(style: LockStyle) {
+        val st = style.clamped()
+        context.dataStore.edit {
+            it[lockRaiseKey] = (st.raise * 1000).roundToInt()
+            it[lockTextKey] = (st.textScale * 100).roundToInt()
+        }
     }
 
     // ---- Steps ----
