@@ -18,9 +18,11 @@ import app.diurna.data.Backups
 import app.diurna.data.DayFinalizer
 import app.diurna.data.DayRepository
 import app.diurna.data.NutritionRepository
+import app.diurna.data.FoodPhotos
 import app.diurna.data.FoodRepository
 import app.diurna.data.LibraryRepository
 import app.diurna.data.MetricsRepository
+import app.diurna.data.PhotoImporter
 import app.diurna.ui.SelectedDate
 import app.diurna.data.RoutineRepository
 import app.diurna.data.SettingsStore
@@ -33,6 +35,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.File
 
 class AppContainer(context: Context) {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -40,16 +43,18 @@ class AppContainer(context: Context) {
     val settings = SettingsStore(context)
     val days = DayRepository(db)
     val metrics = MetricsRepository(db)
-    val food = FoodRepository(db)
+    val foodPhotos = FoodPhotos(File(context.filesDir, "food-photos"))
+    val food = FoodRepository(db, foodPhotos)
+    val photoImporter = PhotoImporter(context, foodPhotos)
     val library = LibraryRepository(db)
-    val backups = Backups(context, db)
+    val backups = Backups(context, db, foodPhotos)
     val aiProvider = AiProviderStore(context)
     val apiKeys: Map<AiProvider, ApiKeyStore> = AiProvider.entries.associateWith { ApiKeyStore(context, it) }
     val network = NetworkMonitor(context)
     val estimates = EstimateRunner(db, SelectedFoodEstimator({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeFoodEstimator({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
         AiProvider.XAI to GrokFoodEstimator({ apiKeys.getValue(AiProvider.XAI).get() }),
-    )))
+    )), photo = foodPhotos::read)
     val selectedDate = SelectedDate()
     val nutrition = NutritionRepository(db, settings.profile)
     val stepSensor = AndroidStepSensor(context)
@@ -84,6 +89,7 @@ class DiurnaApp : Application() {
             CheckInReminder.schedule(this@DiurnaApp)
             container.backups.scheduleDaily()
             container.scheduler.reschedule()
+            container.food.sweepPhotos() // photos from abandoned drafts or deleted entries
         }
     }
 }

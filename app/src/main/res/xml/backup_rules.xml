@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 11 and older: same exclusion as data_extraction_rules.xml. -->
+<!-- Android 11 and older: same exclusions as data_extraction_rules.xml's cloud backup. -->
 <full-backup-content>
     <exclude domain="sharedpref" path="secure.xml" />
+    <exclude domain="file" path="food-photos/" />
 </full-backup-content>

@@ -24,7 +24,8 @@ interface FoodEstimator {
     /** Shown on every waiting entry when the last allowed attempt still can't get through. */
     val gaveUpMessage: String get() = EstimateErrors.GAVE_UP
 
-    suspend fun estimate(text: String): FoodEstimate
+    /** [photo]: an optional JPEG of the food (already downscaled), sent along with the text. */
+    suspend fun estimate(text: String, photo: ByteArray? = null): FoodEstimate
 }
 
 /** Retrying won't help: bad key, refused request, unparseable reply. Shown on the entry. */
@@ -40,6 +41,7 @@ object EstimatePrompt {
 - Calories: give a realistic low and high for this entry; widen the range when the portion or recipe is genuinely uncertain.
 - Protein, carbs and fat: one best estimate each, in grams, for the middle of the calorie range.
 - note: the assumptions that matter most for the numbers (portion sizes, cooking fat, sides), under 80 characters. The person corrects the estimate by editing their entry, so name what they would need to change.
+- A photo of the food may come with the entry. Use it to judge portion size, preparation and anything the text leaves out; where the text and the photo disagree, the text wins.
 - If the entry isn't food or drink, return zeros and note "not food"."""
 
     /** JSON schema for structured output: guarantees the reply parses into [FoodEstimate]. */

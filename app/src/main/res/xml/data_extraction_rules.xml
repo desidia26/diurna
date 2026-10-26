@@ -3,6 +3,9 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="secure.xml" />
+        <!-- Meal photos would soon pass Auto Backup's 25 MB cap, which stops the whole app's backup.
+             The database still backs up; entries just show no photo after a restore. -->
+        <exclude domain="file" path="food-photos/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="secure.xml" />

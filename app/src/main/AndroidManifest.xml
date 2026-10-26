@@ -28,6 +28,17 @@
         android:label="Diurna"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
+        <!-- Hands the camera app a place to write a meal photo; see PhotoImporter.captureFile. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.photos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

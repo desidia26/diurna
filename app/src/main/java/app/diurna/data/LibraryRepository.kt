@@ -82,7 +82,7 @@ class LibraryRepository(
     suspend fun mealByBarcode(code: String): MealEntity? = meals.byBarcode(code)
 
     /** Logs a saved meal with exact numbers: no AI call. */
-    suspend fun logMeal(date: LocalDate, mealId: Long, servings: Double = 1.0) = db.withTransaction {
+    suspend fun logMeal(date: LocalDate, mealId: Long, servings: Double = 1.0, photo: String? = null) = db.withTransaction {
         val meal = meals.get(mealId) ?: return@withTransaction
         val t = now()
         db.dayDao().insertIgnore(DayEntity(date.key()))
@@ -92,6 +92,7 @@ class LibraryRepository(
                 time = if (date == t.toLocalDate()) t.hhmm() else "12:00",
                 text = meal.name,
                 loggedAt = System.currentTimeMillis(),
+                photo = photo,
             )
         )
         applyMeal(id, meal, servings)

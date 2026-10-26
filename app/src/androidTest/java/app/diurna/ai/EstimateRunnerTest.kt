@@ -6,7 +6,9 @@ import app.diurna.data.TestDb
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -23,8 +25,10 @@ class EstimateRunnerTest {
         val calls = mutableListOf<String>()
         var failNext: Exception? = null
         var beforeReturn: suspend () -> Unit = {}
-        override suspend fun estimate(text: String): FoodEstimate {
+        val photos = mutableListOf<ByteArray?>()
+        override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
             calls += text
+            photos += photo
             failNext?.let { failNext = null; throw it }
             beforeReturn()
             return FoodEstimate(text.length * 10, text.length * 20, 1, 2, 3, "note for $text")
@@ -32,7 +36,7 @@ class EstimateRunnerTest {
     }
 
     private val fake = Fake()
-    private val runner = EstimateRunner(t.db, fake)
+    private val runner = EstimateRunner(t.db, fake, photo = t.food.photos::read)
 
     @After fun tearDown() = t.close()
 
@@ -124,6 +128,41 @@ class EstimateRunnerTest {
         assertEquals("rice and beans", e.text)
         assertEquals("estimated from the new text", 140, e.kcalLow)
         assertEquals(listOf("rice", "rice and beans"), fake.calls)
+    }
+
+    @Test fun photoIsReadFromStorageOnEachAttemptAndEditingItReEstimates() = runTest {
+        val name = t.food.photos.newName()
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 7, 7)
+        java.io.File(t.photoDir, name).writeBytes(jpeg)
+        t.food.add(t.mon, "pasta", name)
+        fake.failNext = IOException("offline")
+        assertEquals(EstimateRunner.Outcome.RETRY, runner.runPending())
+        runner.runPending() // the retry reads the photo again
+        assertEquals(2, fake.photos.size)
+        fake.photos.forEach { assertArrayEquals(jpeg, it) }
+        val id = entries().single().id
+        assertNotNull(entries().single().estimatedAt)
+
+        t.food.edit(id, "pasta", entries().single().time, null)
+        assertNull("removing the photo re-estimates", entries().single().estimatedAt)
+        assertFalse("the removed photo's file is deleted", java.io.File(t.photoDir, name).exists())
+        runner.runPending()
+        assertNull(fake.photos.last())
+    }
+
+    @Test fun missingPhotoFallsBackToTextOnly() = runTest {
+        t.food.add(t.mon, "toast", t.food.photos.newName()) // never written
+        runner.runPending()
+        assertNull(fake.photos.single())
+        assertNotNull(entries().single().estimatedAt)
+    }
+
+    @Test fun deletingAnEntryDeletesItsPhoto() = runTest {
+        val name = t.food.photos.newName()
+        java.io.File(t.photoDir, name).writeBytes(byteArrayOf(1))
+        t.food.add(t.mon, "soup", name)
+        t.food.delete(entries().single().id)
+        assertFalse(java.io.File(t.photoDir, name).exists())
     }
 
     @Test fun apiKeyRoundTripsThroughTheKeystore() {

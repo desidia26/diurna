@@ -151,7 +151,7 @@ data class FoodEntryEntity(
     val text: String,
     /** Epoch millis of when it was entered; differs from [date] when backfilled. */
     @ColumnInfo(name = "logged_at") val loggedAt: Long,
-    // AI estimate, derived from [text]. Editing the text clears these and re-estimates.
+    // AI estimate, derived from [text] (and [photo]). Changing either clears these and re-estimates.
     @ColumnInfo(name = "kcal_low") val kcalLow: Int? = null,
     @ColumnInfo(name = "kcal_high") val kcalHigh: Int? = null,
     @ColumnInfo(name = "protein_g") val proteinG: Int? = null,
@@ -170,6 +170,11 @@ data class FoodEntryEntity(
     @ColumnInfo(name = "meal_id") val mealId: Long? = null,
     /** Meal entries' numbers are the meal's × servings, copied at log time. */
     @ColumnInfo(defaultValue = "1.0") val servings: Double = 1.0,
+    /**
+     * Optional photo of the food, a file name in [FoodPhotos]' folder. It goes alongside the text,
+     * which stays the main description; the estimate uses both.
+     */
+    val photo: String? = null,
 ) {
     val isMeal: Boolean get() = source == SOURCE_MEAL
 
