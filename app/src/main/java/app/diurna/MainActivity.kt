@@ -2,11 +2,9 @@ package app.diurna
 
 import android.content.Intent
 import android.os.Bundle
-import app.diurna.data.Backups
 import app.diurna.checkin.CheckInReminder
 import androidx.compose.runtime.LaunchedEffect
 import java.time.LocalDate
-import kotlinx.coroutines.launch
 import app.diurna.alarm.AlarmActivity
 import app.diurna.alarm.AlarmService
 import androidx.activity.ComponentActivity
@@ -57,7 +55,6 @@ private enum class Tab(val label: String, @DrawableRes val icon: Int) {
 class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        backupIfAsked(intent)
         openCheckInIfAsked(intent)
     }
 
@@ -67,15 +64,9 @@ class MainActivity : ComponentActivity() {
     /** The check-in notification opens the day it was about, on the Day tab. */
     private fun openCheckInIfAsked(intent: Intent?) {
         val date = intent?.getStringExtra(CheckInReminder.EXTRA_DATE) ?: return
-        container.selectedDate.goTo(LocalDate.parse(date))
+        val day = runCatching { LocalDate.parse(date) }.getOrNull() ?: return
+        container.selectedDate.goTo(day)
         showDayRequests++
-    }
-
-    /** scripts/backup-db launches the app with this extra to get a fresh backup to pull. */
-    private fun backupIfAsked(intent: Intent?) {
-        if (intent?.getBooleanExtra(Backups.EXTRA_BACKUP, false) == true) {
-            container.appScope.launch { container.backups.backupNow() }
-        }
     }
 
     /** If the alarm is ringing (say its notification was swiped away), opening the app leads back to it. */
@@ -94,7 +85,6 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         val c = container
-        backupIfAsked(intent)
         if (savedInstanceState == null) openCheckInIfAsked(intent)
         setContent {
             DiurnaTheme {
