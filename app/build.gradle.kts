@@ -102,6 +102,8 @@ dependencies {
     implementation(libs.mlkit.barcode.scanning)
     implementation(libs.zxing.core)
     implementation(libs.anthropic.java)
+    // Raises the SDK's Jackson (it parses every AI reply) to a release with the security fixes.
+    implementation(platform(libs.jackson.bom))
     implementation(libs.androidx.work.runtime.ktx)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
