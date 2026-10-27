@@ -41,6 +41,20 @@ step "Clean working tree"
 [[ -z "$(git status --porcelain)" ]] || die "uncommitted changes. Commit first, so the installed build matches a commit."
 echo "at $(git log --oneline -1)"
 
+step "Changelog"
+# A warning, not a stop: some releases (fixes, refactors) have nothing worth telling.
+changelog="app/src/main/java/app/diurna/domain/Changelog.kt"
+last_tag="$(git describe --tags --abbrev=0 --match 'release-*' 2>/dev/null || true)"
+if [[ -z "$last_tag" ]]; then
+  echo "no earlier release tag to compare with"
+elif git diff --quiet "$last_tag" HEAD -- app/src/main; then
+  echo "no app changes since $last_tag"
+elif git diff --quiet "$last_tag" HEAD -- "$changelog"; then
+  echo "WARNING: the app changed since $last_tag but $changelog didn't; nothing will show in What's new"
+else
+  echo "new entries since $last_tag"
+fi
+
 if ! $skip_tests; then
   step "Tests"
   # Device tests wipe app data, so they must never inherit the phone picked above.
