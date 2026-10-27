@@ -88,6 +88,15 @@ class SettingsStore(private val context: Context) : StepStateStore {
         context.dataStore.edit { it[metricsRangeKey] = range.name }
     }
 
+    private val macroChartModeKey = stringPreferencesKey("macro_chart_mode")
+    val macroChartMode: Flow<Metrics.MacroChartMode> = context.dataStore.data
+        .map { p -> Metrics.MacroChartMode.entries.find { it.name == p[macroChartModeKey] } ?: Metrics.MacroChartMode.KCAL }
+        .distinctUntilChanged()
+
+    suspend fun setMacroChartMode(mode: Metrics.MacroChartMode) {
+        context.dataStore.edit { it[macroChartModeKey] = mode.name }
+    }
+
     private val stepCounterKey = longPreferencesKey("step_last_counter")
     private val stepAtKey = stringPreferencesKey("step_last_at")
 

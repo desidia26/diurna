@@ -125,6 +125,71 @@ fun BarChart(
     }
 }
 
+/**
+ * Stacked bars from zero. Each bar is one [StackBar]; a null bar is a gap.
+ * Segments are drawn bottom-to-top in list order. [yMax] fixes the scale (100 for %);
+ * otherwise it fits the tallest bar. [reference] draws a dashed horizontal (e.g. target kcal).
+ */
+data class StackBar(val segments: List<Double>)
+
+@Composable
+fun StackedBarChart(
+    bars: List<StackBar?>,
+    colors: List<Color>,
+    description: String,
+    modifier: Modifier = Modifier,
+    height: Dp = 120.dp,
+    yMax: Double? = null,
+    reference: Double? = null,
+    label: (Double) -> String = { it.roundToInt().toString() },
+) {
+    val totals = bars.mapNotNull { it?.segments?.sum() }
+    val hi = (yMax ?: (totals.maxOrNull() ?: 0.0).let { t ->
+        val ref = reference?.takeIf { it > 0 }
+        maxOf(t, ref ?: 0.0)
+    }).takeIf { it > 0 } ?: 1.0
+    val grid = MaterialTheme.colorScheme.outline
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val refColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val measurer = rememberTextMeasurer()
+    Canvas(modifier.fillMaxWidth().height(height).semantics { contentDescription = description }) {
+        val plotW = size.width - GutterRight.toPx()
+        val top = 6.dp.toPx()
+        val plotH = size.height - top
+        fun y(v: Double) = top + (plotH * (hi - v) / hi).toFloat()
+        gridlines(listOf(hi, hi / 2, 0.0), ::y, plotW, grid, labelColor, measurer, label)
+        if (bars.isEmpty()) return@Canvas
+        val slot = plotW / bars.size
+        val gap = (slot * 0.2f).coerceAtMost(8.dp.toPx())
+        bars.forEachIndexed { i, bar ->
+            if (bar == null) return@forEachIndexed
+            var from = 0.0
+            bar.segments.forEachIndexed { si, v ->
+                if (v <= 0) return@forEachIndexed
+                val to = from + v
+                val color = colors.getOrElse(si) { colors.last() }
+                drawRoundRect(
+                    color,
+                    topLeft = Offset(i * slot + gap / 2, y(to)),
+                    size = Size(slot - gap, y(from) - y(to)),
+                    cornerRadius = CornerRadius(2.dp.toPx()),
+                )
+                from = to
+            }
+        }
+        reference?.takeIf { it > 0 }?.let { r ->
+            val yy = y(r.coerceAtMost(hi))
+            drawLine(
+                refColor,
+                Offset(0f, yy),
+                Offset(plotW, yy),
+                strokeWidth = 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())),
+            )
+        }
+    }
+}
+
 /** A tiny trend line with no axes, for list rows. */
 @Composable
 fun Sparkline(values: List<Double?>, color: Color, modifier: Modifier = Modifier) {
