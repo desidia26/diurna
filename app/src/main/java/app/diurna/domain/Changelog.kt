@@ -57,6 +57,10 @@ object Changelog {
             12, "2026-10-28", "Several photos per meal",
             "Food entries and saved meals can now hold up to 5 photos. The first one is the one sent for the estimate.",
         ),
+        Entry(
+            13, "2026-10-28", "Import a recipe from a link",
+            "Import URL on the Meals page reads a recipe from a web page and opens the recipe editor with its name, servings and ingredients filled in. Nutrition is left for you to look up per ingredient, and nothing is saved until you tap Save.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
