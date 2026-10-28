@@ -360,10 +360,22 @@ interface FoodDao {
 
     @Query(
         """UPDATE food_entry SET kcal_low = :kcalLow, kcal_high = :kcalHigh, protein_g = :protein, carbs_g = :carbs,
-           fat_g = :fat, estimate_note = :note, estimate_model = :model, estimated_at = :at, estimate_error = NULL
+           fat_g = :fat,
+           fiber_g = :fiber, soluble_fiber_g = :solubleFiber, insoluble_fiber_g = :insolubleFiber,
+           sugars_g = :sugars, added_sugars_g = :addedSugars, starch_g = :starch,
+           sat_fat_g = :satFat, mono_fat_g = :monoFat, poly_fat_g = :polyFat, trans_fat_g = :transFat,
+           cholesterol_mg = :cholesterol, omega3_g = :omega3, omega6_g = :omega6, omega9_g = :omega9,
+           estimate_note = :note, estimate_model = :model, estimated_at = :at, estimate_error = NULL
            WHERE id = :id AND text = :forText AND photo IS :forPhoto"""
     )
-    suspend fun setEstimate(id: Long, forText: String, forPhoto: String?, kcalLow: Int, kcalHigh: Int, protein: Int, carbs: Int, fat: Int, note: String, model: String, at: Long)
+    suspend fun setEstimate(
+        id: Long, forText: String, forPhoto: String?, kcalLow: Int, kcalHigh: Int, protein: Int, carbs: Int, fat: Int,
+        fiber: Int?, solubleFiber: Int?, insolubleFiber: Int?,
+        sugars: Int?, addedSugars: Int?, starch: Int?,
+        satFat: Int?, monoFat: Int?, polyFat: Int?, transFat: Int?,
+        cholesterol: Int?, omega3: Int?, omega6: Int?, omega9: Int?,
+        note: String, model: String, at: Long,
+    )
 
     @Query("UPDATE food_entry SET estimate_error = :error WHERE id = :id")
     suspend fun setEstimateError(id: Long, error: String)

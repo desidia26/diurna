@@ -21,6 +21,10 @@ object Changelog {
             3, "2026-10-28", "Detailed nutrition",
             "Turn on Detailed nutrition in Setup → Library to add fiber, sugars, starch and the kinds of fat to saved meals. Barcode scans fill them in when the label has them, and Day's food entries can expand to show them. Once fiber is logged, the Macros card shows it separately.",
         ),
+        Entry(
+            4, "2026-10-28", "Detailed nutrition from AI estimates",
+            "With Detailed nutrition on, food you describe or photograph is now estimated for fiber, sugars, starch and the kinds of fat too, not just calories and macros. Anything the AI can't judge is left blank instead of guessed as zero.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }

@@ -30,9 +30,15 @@ class GrokFoodEstimator(
 
     override val gaveUpMessage: String get() = GrokErrors.GAVE_UP
 
-    override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
+    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean): FoodEstimate {
         val key = apiKey() ?: throw NoApiKey(NO_KEY)
-        return EstimatePrompt.parse(XaiChat.call(transport, key, model, XaiChat.request(model, EstimatePrompt.SYSTEM, text, photo)))
+        // Detailed replies need a bit more room for the nullable sub-macro fields.
+        val maxTok = if (detailed) XaiChat.MAX_COMPLETION_TOKENS_DETAILED else XaiChat.MAX_COMPLETION_TOKENS
+        return EstimatePrompt.parse(XaiChat.call(transport, key, model, XaiChat.request(
+            model, EstimatePrompt.system(detailed), text, photo,
+            schema = EstimatePrompt.schema(detailed),
+            maxCompletionTokens = maxTok,
+        )))
     }
 
     companion object {
@@ -52,6 +58,8 @@ object XaiChat {
 
     /** The reply is a few dozen tokens; the cap only stops a runaway from costing much. */
     const val MAX_COMPLETION_TOKENS = 1024
+    /** Extra headroom when Detailed nutrition asks for the full sub-macro breakdown. */
+    const val MAX_COMPLETION_TOKENS_DETAILED = 1536
 
     /** [photoJpeg]: an optional JPEG sent with the text as a base64 data URI (xAI takes jpg/png up to 20 MiB). */
     /**
@@ -82,6 +90,7 @@ object XaiChat {
         photoJpeg: ByteArray? = null,
         schemaName: String = "food_estimate",
         schema: Map<String, Any> = EstimatePrompt.SCHEMA,
+        maxCompletionTokens: Int = MAX_COMPLETION_TOKENS,
     ): String = JSONObject()
         .put("model", model)
         .put("messages", JSONArray()
@@ -93,7 +102,7 @@ object XaiChat {
                 .put("name", schemaName)
                 .put("strict", true)
                 .put("schema", toJson(schema))))
-        .put("max_completion_tokens", MAX_COMPLETION_TOKENS)
+        .put("max_completion_tokens", maxCompletionTokens)
         .put("stream", false)
         .toString()
 

@@ -37,6 +37,7 @@ import app.diurna.steps.StepSampling
 import app.diurna.wallpaper.LockWallpaper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
@@ -58,7 +59,7 @@ class AppContainer(context: Context) {
     val estimates = EstimateRunner(db, SelectedFoodEstimator({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeFoodEstimator({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
         AiProvider.XAI to GrokFoodEstimator({ apiKeys.getValue(AiProvider.XAI).get() }),
-    )), photo = foodPhotos::read)
+    )), photo = foodPhotos::read, detailed = { settings.detailedNutrition.first() })
     /** Reads cardio machines' summary screens for pieces, with whichever provider is selected. */
     val cardioReader: CardioReader = SelectedCardioReader({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeCardioReader({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
