@@ -23,6 +23,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -225,3 +226,57 @@ private fun rememberPhoto(photos: FoodPhotos, name: String, targetPx: Int): Imag
             }.getOrNull()
         }
     }.value
+
+/**
+ * Editable gallery of draft photo names (not yet / just being saved). Cap is
+ * [app.diurna.data.FoodPhotoEntity.MAX_PER_OWNER]. First photo is the primary used for AI.
+ */
+@Composable
+fun PhotoGalleryEditor(
+    photos: FoodPhotos,
+    names: List<String>,
+    attacher: PhotoAttacher,
+    onChange: (List<String>) -> Unit,
+    max: Int = app.diurna.data.FoodPhotoEntity.MAX_PER_OWNER,
+) {
+    var viewing by remember { mutableStateOf<String?>(null) }
+    if (attacher.busy) {
+        Hint("Adding photo…")
+    }
+    if (names.isNotEmpty()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            names.forEach { name ->
+                Box {
+                    PhotoThumb(photos, name, 56.dp) { viewing = name }
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            names.forEachIndexed { i, name ->
+                TextButton(onClick = { onChange(names.filterIndexed { j, _ -> j != i }) }) {
+                    Text("Remove ${i + 1}")
+                }
+            }
+        }
+        if (names.size > 1) {
+            Hint("First photo is used for estimates.")
+        }
+    }
+    if (names.size < max && !attacher.busy) {
+        Box {
+            var open by remember { mutableStateOf(false) }
+            OutlinedButton(onClick = { open = true }) {
+                Text(if (names.isEmpty()) "Add photo" else "Add another photo")
+            }
+            PhotoMenu(open, attacher) { open = false }
+        }
+    } else if (names.size >= max) {
+        Hint("Up to $max photos.")
+    }
+    attacher.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn) }
+    viewing?.let { name -> PhotoViewDialog(photos, name) { viewing = null } }
+}

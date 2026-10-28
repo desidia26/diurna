@@ -67,20 +67,20 @@ import java.time.ZoneId
 @Composable
 fun FoodCard(s: DayUi, vm: DayViewModel) {
     var text by remember { mutableStateOf("") }
-    // A photo attached to the entry being typed; saveable so a trip to the camera can't lose it.
-    var photo by rememberSaveable { mutableStateOf<String?>(null) }
-    val attacher = rememberPhotoAttacher(vm) { new -> vm.discardPhoto(photo); photo = new }
+    // Photos attached to the entry being typed; saveable so a trip to the camera can't lose them.
+    var photos by rememberSaveable { mutableStateOf(listOf<String>()) }
+    val attacher = rememberPhotoAttacher(vm) { new -> photos = (photos + new).distinct().take(5) }
     fun log() {
         if (text.isBlank()) return // the text is the entry; a photo only adds to it
-        vm.addFood(text, photo)
+        vm.addFood(text, photos)
         text = ""
-        photo = null
+        photos = emptyList()
     }
-    // A saved meal or a scan logged while a photo is attached keeps the photo: it's a picture of that food.
+    // A saved meal or a scan logged while photos are attached keeps them: pictures of that food.
     fun logMeal(id: Long, servings: Double = 1.0) {
-        vm.logMeal(id, servings, photo)
+        vm.logMeal(id, servings, photos)
         text = ""
-        photo = null
+        photos = emptyList()
     }
     var editing by remember { mutableStateOf<FoodEntryEntity?>(null) }
     var servingsFor by remember { mutableStateOf<FoodEntryEntity?>(null) }
@@ -110,14 +110,17 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { log() }),
             )
-            PhotoMenuButton(attacher)
+            if (photos.size < 5) PhotoMenuButton(attacher)
             IconButton(onClick = { scanning = true }) {
                 Icon(painterResource(R.drawable.ic_barcode), contentDescription = "Scan barcode", tint = MaterialTheme.colorScheme.primary)
             }
             Button(onClick = { log() }) { Text("Log") }
         }
-        AttachedPhoto(vm.photos, photo, attacher, onRemove = { vm.discardPhoto(photo); photo = null })
-        if (photo != null && text.isBlank()) Hint("Add a few words too, e.g. \"chicken burrito\"; the photo helps with portions.")
+        PhotoGalleryEditor(vm.photos, photos, attacher, onChange = { next ->
+            photos.filter { it !in next }.forEach(vm::discardPhoto)
+            photos = next
+        })
+        if (photos.isNotEmpty() && text.isBlank()) Hint("Add a few words too, e.g. \"chicken burrito\"; the photo helps with portions.")
         // Saved meals matching what's typed: a tap logs exact numbers, no AI.
         if (matches.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -145,8 +148,9 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         if (s.food.isEmpty()) Hint("Nothing logged yet.")
         val online by vm.online.collectAsStateWithLifecycle()
         s.food.forEach { f ->
+            val gallery by vm.entryPhotos(f.id).collectAsStateWithLifecycle(emptyList())
             FoodRow(
-                f, s.date, online, vm.photos, detailed,
+                f, s.date, online, vm.photos, detailed, gallery,
                 onEdit = { editing = f }, onDelete = { vm.deleteFood(f.id) },
                 onServings = { servingsFor = f }, onSaveAsMeal = { savingAsMeal = f },
             )
@@ -161,11 +165,11 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         )
     }
     scannedDraft?.let { draft ->
-        MealDialog("Add from barcode", draft, detailed = detailed, labelHost = vm, onDismiss = { scannedDraft = null }) { meal ->
+        MealDialog("Add from barcode", draft, detailed = detailed, labelHost = vm, onDismiss = { scannedDraft = null }, onSave = { meal ->
             vm.saveMeal(meal).also { r ->
                 if (r == LibraryRepository.Result.Ok) servingsOf = vm.mealByBarcode(draft.barcode!!)
             }
-        }
+        })
     }
     servingsOf?.let { m ->
         ServingsDialog(
@@ -174,7 +178,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
             cookedWeightG = m.cookedWeightG,
             onDismiss = { servingsOf = null },
             onPick = { logMeal(m.id, it); servingsOf = null },
-            onPickGrams = { g -> vm.logMealByGrams(m.id, g, photo); text = ""; photo = null; servingsOf = null },
+            onPickGrams = { g -> vm.logMealByGrams(m.id, g, photos); text = ""; photos = emptyList(); servingsOf = null },
         )
     }
     servingsFor?.let { f ->
@@ -194,11 +198,12 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
             pheMg = f.pheMg, thrMg = f.thrMg, trpMg = f.trpMg, valMg = f.valMg, cysMg = f.cysMg, tyrMg = f.tyrMg,
             ingredientsJson = f.ingredientsJson, aminoMatched = f.aminoMatched, aminoTotal = f.aminoTotal,
         )
-        MealDialog("Save as meal", seed, detailed = detailed, labelHost = vm, onDismiss = { savingAsMeal = null }) { vm.saveEntryAsMeal(f.id, it) }
+        MealDialog("Save as meal", seed, detailed = detailed, labelHost = vm, onDismiss = { savingAsMeal = null }, onSave = { vm.saveEntryAsMeal(f.id, it) })
     }
     editing?.let { f ->
-        FoodEditDialog(f, vm, onDismiss = { editing = null }) { newText, newTime, newPhoto ->
-            vm.editFood(f.id, newText, newTime, newPhoto)
+        val gallery by vm.entryPhotos(f.id).collectAsStateWithLifecycle(emptyList())
+        FoodEditDialog(f, vm, initialPhotos = gallery.ifEmpty { listOfNotNull(f.photo) }, onDismiss = { editing = null }) { newText, newTime, newPhotos ->
+            vm.editFood(f.id, newText, newTime, newPhotos)
             editing = null
         }
     }
@@ -236,6 +241,7 @@ private fun MacroBars(t: NutritionTotals, targets: Targets) {
 @Composable
 private fun FoodRow(
     f: FoodEntryEntity, date: LocalDate, online: Boolean, photos: FoodPhotos, detailed: Boolean,
+    gallery: List<String>,
     onEdit: () -> Unit, onDelete: () -> Unit, onServings: () -> Unit, onSaveAsMeal: () -> Unit,
 ) {
     val loggedOn = Instant.ofEpochMilli(f.loggedAt).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -288,10 +294,15 @@ private fun FoodRow(
             }
             if (loggedOn != date) Chip("Backfilled ${loggedOn.short()}", Tone.Accent)
         }
-        f.photo?.let { name ->
-            var viewing by remember { mutableStateOf(false) }
-            PhotoThumb(photos, name, 48.dp) { viewing = true }
-            if (viewing) PhotoViewDialog(photos, name) { viewing = false }
+        val thumbs = gallery.ifEmpty { listOfNotNull(f.photo) }
+        if (thumbs.isNotEmpty()) {
+            var viewing by remember { mutableStateOf<String?>(null) }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                thumbs.take(3).forEach { name ->
+                    PhotoThumb(photos, name, 48.dp) { viewing = name }
+                }
+            }
+            viewing?.let { name -> PhotoViewDialog(photos, name) { viewing = null } }
         }
         TextButton(onClick = onDelete, contentPadding = PaddingValues(4.dp)) { Text("×") }
     }
@@ -416,48 +427,48 @@ private fun ServingsDialog(
 }
 
 /**
- * Fix a wrong estimate by describing the food better; the new text is re-estimated. The photo can be
+ * Fix a wrong estimate by describing the food better; the new text is re-estimated. Photos can be
  * added, replaced or removed here too. Photos attached in the dialog but not saved are deleted.
  */
 @Composable
-private fun FoodEditDialog(f: FoodEntryEntity, vm: DayViewModel, onDismiss: () -> Unit, onSave: (String, String, String?) -> Unit) {
+private fun FoodEditDialog(
+    f: FoodEntryEntity,
+    vm: DayViewModel,
+    initialPhotos: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (String, String, List<String>) -> Unit,
+) {
     var text by remember { mutableStateOf(f.text) }
     var time by remember { mutableStateOf(f.time) }
     var picking by remember { mutableStateOf(false) }
-    var photo by rememberSaveable { mutableStateOf(f.photo) }
-    // New files from this dialog; the entry's own photo is only deleted by the repository on save.
+    var photos by rememberSaveable { mutableStateOf(initialPhotos) }
+    // New files from this dialog; existing gallery files are only deleted by the repository on save.
     var drafts by rememberSaveable { mutableStateOf(listOf<String>()) }
-    val attacher = rememberPhotoAttacher(vm) { new -> drafts = drafts + new; photo = new }
-    fun close(saved: String?) {
-        drafts.filter { it != saved }.forEach(vm::discardPhoto)
+    val attacher = rememberPhotoAttacher(vm) { new ->
+        drafts = drafts + new
+        photos = (photos + new).distinct().take(5)
+    }
+    fun close(saved: List<String>) {
+        drafts.filter { it !in saved }.forEach(vm::discardPhoto)
     }
     AlertDialog(
-        onDismissRequest = { close(null); onDismiss() },
+        onDismissRequest = { close(emptyList()); onDismiss() },
         title = { Text("Edit entry") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth(), label = { Text("What you ate") })
-                Hint("Add detail to fix the estimate, e.g. \"double chicken, no rice\". Changing the text or photo re-estimates it.")
+                Hint("Add detail to fix the estimate, e.g. \"double chicken, no rice\". Changing the text or photos re-estimates it.")
                 OutlinedButton(onClick = { picking = true }) { Text("Time $time", fontFamily = FontFamily.Monospace) }
-                if (photo == null && !attacher.busy) {
-                    Box {
-                        var open by remember { mutableStateOf(false) }
-                        OutlinedButton(onClick = { open = true }) { Text("Add photo") }
-                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                            DropdownMenuItem(text = { Text("Take photo") }, onClick = { open = false; attacher.takePhoto() })
-                            DropdownMenuItem(text = { Text("Choose photo") }, onClick = { open = false; attacher.choosePhoto() })
-                        }
-                    }
-                    attacher.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn) }
-                } else {
-                    AttachedPhoto(vm.photos, photo, attacher, onRemove = { photo = null })
-                }
+                PhotoGalleryEditor(vm.photos, photos, attacher, onChange = { next ->
+                    // Don't discard existing files here — only draft files that never get saved.
+                    photos = next
+                })
             }
         },
         confirmButton = {
-            TextButton(onClick = { close(photo); onSave(text, time, photo) }, enabled = text.isNotBlank() && !attacher.busy) { Text("Save") }
+            TextButton(onClick = { close(photos); onSave(text, time, photos) }, enabled = text.isNotBlank() && !attacher.busy) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = { close(null); onDismiss() }) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = { close(emptyList()); onDismiss() }) { Text("Cancel") } },
     )
     if (picking) TimePickerDialog(time, onDismiss = { picking = false }) { time = it; picking = false }
 }

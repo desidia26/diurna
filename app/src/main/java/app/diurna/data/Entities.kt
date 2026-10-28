@@ -374,8 +374,8 @@ data class FoodEntryEntity(
     /** Meal entries' numbers are the meal's × servings, copied at log time. */
     @ColumnInfo(defaultValue = "1.0") val servings: Double = 1.0,
     /**
-     * Optional photo of the food, a file name in [FoodPhotos]' folder. It goes alongside the text,
-     * which stays the main description; the estimate uses both.
+     * Primary photo (first in the entry's [FoodPhotoEntity] gallery), a file name in [FoodPhotos].
+     * Kept denormalized so AI estimate paths stay a single column; the gallery holds all photos.
      */
     val photo: String? = null,
     /** Package barcode when logged from a scan or a saved meal that has one. Kept even if OFF failed. */
@@ -481,6 +481,34 @@ data class CatalogExercise(
 }
 
 /** Local cache of FDC Foundation/SR Legacy amino profiles keyed by normalized ingredient query. */
+
+/**
+ * One JPEG attached to a food entry or saved meal/recipe. Files live in [FoodPhotos]; this row
+ * stores only the name. [food_entry.photo] remains the primary (position 0) for AI estimates.
+ */
+@Entity(
+    tableName = "food_photo",
+    indices = [
+        Index(value = ["owner_type", "owner_id"]),
+        Index("file_name"),
+    ],
+)
+data class FoodPhotoEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** [OWNER_ENTRY] or [OWNER_MEAL]. */
+    @ColumnInfo(name = "owner_type") val ownerType: String,
+    @ColumnInfo(name = "owner_id") val ownerId: Long,
+    @ColumnInfo(name = "file_name") val fileName: String,
+    val position: Int = 0,
+) {
+    companion object {
+        const val OWNER_ENTRY = "entry"
+        const val OWNER_MEAL = "meal"
+        /** Soft cap so galleries and AI payloads stay small. */
+        const val MAX_PER_OWNER = 5
+    }
+}
+
 @Entity(tableName = "fdc_food_cache")
 data class FdcFoodCacheEntity(
     @PrimaryKey @ColumnInfo(name = "query_key") val queryKey: String,

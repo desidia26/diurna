@@ -62,6 +62,13 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoIm
     // Suspend so dialogs can show a problem (e.g. a duplicate name) instead of closing.
     suspend fun saveMeal(meal: MealEntity): Result =
         c.library.saveMeal(meal.copy(kind = if (meal.kind.isBlank()) MealEntity.KIND_SIMPLE else meal.kind))
+    suspend fun saveMealWithPhotos(meal: MealEntity, photos: List<String>): Result =
+        c.library.saveMealWithPhotos(
+            meal.copy(kind = if (meal.kind.isBlank()) MealEntity.KIND_SIMPLE else meal.kind),
+            photos,
+        )
+    fun mealPhotos(mealId: Long) = c.library.observeMealPhotos(mealId).map { rows -> rows.map { it.fileName } }
+    val foodPhotos get() = c.foodPhotos
     suspend fun saveRecipe(meal: MealEntity, lines: List<RecipeIngredientEntity>): Result =
         c.library.saveRecipe(meal, lines)
     suspend fun loadIngredients(mealId: Long): List<RecipeIngredientEntity> =

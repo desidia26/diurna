@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -180,6 +181,7 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
         }
     }
     editing?.let { m ->
+        val mealGallery by vm.mealPhotos(m.id).collectAsStateWithLifecycle(emptyList())
         MealDialog(
             when {
                 m.isRestaurant && m.id == 0L -> "Add restaurant dish"
@@ -187,7 +189,13 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
                 m.id == 0L -> "Add meal"
                 else -> "Edit meal"
             },
-            m, detailed = detailed, labelHost = vm, onDismiss = { editing = null }, onSave = vm::saveMeal,
+            m,
+            detailed = detailed,
+            labelHost = vm,
+            initialPhotos = if (m.id == 0L) emptyList() else mealGallery,
+            onDismiss = { editing = null },
+            onSave = vm::saveMeal,
+            onSaveWithPhotos = vm::saveMealWithPhotos,
         )
     }
     editingRecipe?.let { m ->
@@ -225,6 +233,8 @@ fun MealDialog(
     initial: MealEntity,
     detailed: Boolean = false,
     labelHost: PhotoImportHost? = null,
+    initialPhotos: List<String> = emptyList(),
+    onSaveWithPhotos: (suspend (MealEntity, List<String>) -> Result)? = null,
     onDismiss: () -> Unit,
     onSave: suspend (MealEntity) -> Result,
 ) {
@@ -272,6 +282,8 @@ fun MealDialog(
     var fromPhoto by remember { mutableStateOf(false) }
     var readingPhoto by remember { mutableStateOf(false) }
     var photoMenu by remember { mutableStateOf(false) }
+    var gallery by rememberSaveable { mutableStateOf(initialPhotos) }
+    var galleryDrafts by rememberSaveable { mutableStateOf(listOf<String>()) }
     val libraryVm = labelHost as? LibraryViewModel
     val dayVm = labelHost as? DayViewModel
     val canLabel = !isRestaurant && (libraryVm != null || dayVm != null)
@@ -347,6 +359,12 @@ fun MealDialog(
             }
         }
     } else null
+    val galleryAttacher = if (onSaveWithPhotos != null && labelHost != null) {
+        rememberPhotoAttacher(labelHost) { newPhoto ->
+            galleryDrafts = galleryDrafts + newPhoto
+            gallery = (gallery + newPhoto).distinct().take(5)
+        }
+    } else null
     val valid = name.isNotBlank() && kcal.toIntOrNull() != null &&
         (!isRestaurant || restaurantName.isNotBlank())
     fun opt(s: String): Int? = s.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
@@ -401,6 +419,15 @@ fun MealDialog(
                     if (fromPhoto && problem == null) {
                         Hint(if (isRestaurant) "Check the estimate, then Save." else "Check the numbers from the label, then Save.")
                     }
+                }
+                if (galleryAttacher != null && libraryVm != null) {
+                    Hint("Photos of this meal (optional).")
+                    PhotoGalleryEditor(
+                        libraryVm.foodPhotos,
+                        gallery,
+                        galleryAttacher,
+                        onChange = { next -> gallery = next },
+                    )
                 }
                 OutlinedTextField(kcal, { kcal = it }, Modifier.fillMaxWidth(), label = { Text("Calories") }, suffix = { Text("kcal") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -500,7 +527,15 @@ fun MealDialog(
                     tyrMg = if (detailed) opt(tyr) else initial.tyrMg,
                 )
                 scope.launch {
-                    when (val r = onSave(meal)) {
+                    val r = if (onSaveWithPhotos != null) {
+                        onSaveWithPhotos(meal, gallery)
+                    } else {
+                        onSave(meal)
+                    }
+                    if (libraryVm != null) {
+                        galleryDrafts.filter { name -> name !in gallery }.forEach(libraryVm::discardPhoto)
+                    }
+                    when (r) {
                         Result.Ok -> onDismiss()
                         is Result.Problem -> problem = r.message
                     }

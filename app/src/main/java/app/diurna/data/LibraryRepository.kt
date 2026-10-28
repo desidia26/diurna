@@ -14,6 +14,7 @@ import kotlin.math.roundToInt
 class LibraryRepository(
     private val db: AppDatabase,
     private val products: ProductSource = OpenFoodFacts(),
+    private val photoStore: FoodPhotoStore? = null,
     private val now: () -> LocalDateTime = LocalDateTime::now,
 ) {
     private val meals = db.mealDao()
@@ -47,6 +48,31 @@ class LibraryRepository(
             if (meal.id == 0L) meals.insert(v.meal) else meals.update(v.meal)
             Result.Ok
         }
+    }
+
+    /**
+     * Saves the meal then replaces its photo gallery. Pass [photos] even when empty to clear.
+     * Past logged entries keep their own photos.
+     */
+    suspend fun saveMealWithPhotos(meal: MealEntity, photos: List<String>): Result {
+        when (val v = validate(meal)) {
+            is Validated.Bad -> return v.problem
+            is Validated.Good -> {
+                val id = if (meal.id == 0L) meals.insert(v.meal) else {
+                    meals.update(v.meal)
+                    meal.id
+                }
+                photoStore?.replaceAll(FoodPhotoEntity.OWNER_MEAL, id, photos)
+                return Result.Ok
+            }
+        }
+    }
+
+    fun observeMealPhotos(mealId: Long): Flow<List<FoodPhotoEntity>> =
+        photoStore?.observeMeal(mealId) ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+    suspend fun setMealPhotos(mealId: Long, photos: List<String>) {
+        photoStore?.replaceAll(FoodPhotoEntity.OWNER_MEAL, mealId, photos)
     }
 
     /**
@@ -150,7 +176,10 @@ class LibraryRepository(
         )
     }
 
-    suspend fun deleteMeal(id: Long) = meals.delete(id)
+    suspend fun deleteMeal(id: Long) {
+        photoStore?.deleteOwner(FoodPhotoEntity.OWNER_MEAL, id)
+        meals.delete(id)
+    }
 
     // ---- Barcodes ----
 
@@ -203,34 +232,53 @@ class LibraryRepository(
 
     suspend fun getMeal(id: Long): MealEntity? = meals.get(id)
 
-    /** Logs a saved meal with exact numbers: no AI call. */
-    suspend fun logMeal(date: LocalDate, mealId: Long, servings: Double = 1.0, photo: String? = null) = db.withTransaction {
-        val meal = meals.get(mealId) ?: return@withTransaction
-        val t = now()
-        db.dayDao().insertIgnore(DayEntity(date.key()))
-        val id = food.insert(
-            FoodEntryEntity(
-                date = date.key(),
-                time = if (date == t.toLocalDate()) t.hhmm() else "12:00",
-                text = meal.name,
-                loggedAt = System.currentTimeMillis(),
-                photo = photo,
-                barcode = meal.barcode,
-                offSnapshotJson = meal.offSnapshotJson,
+    /** Logs a saved meal with exact numbers: no AI call. [photo] / [photos] become the entry gallery. */
+    suspend fun logMeal(
+        date: LocalDate,
+        mealId: Long,
+        servings: Double = 1.0,
+        photo: String? = null,
+        photos: List<String> = listOfNotNull(photo),
+    ) {
+        val entryId = db.withTransaction {
+            val meal = meals.get(mealId) ?: return@withTransaction null
+            val t = now()
+            db.dayDao().insertIgnore(DayEntity(date.key()))
+            val primary = photos.firstOrNull() ?: photo
+            val id = food.insert(
+                FoodEntryEntity(
+                    date = date.key(),
+                    time = if (date == t.toLocalDate()) t.hhmm() else "12:00",
+                    text = meal.name,
+                    loggedAt = System.currentTimeMillis(),
+                    photo = primary,
+                    barcode = meal.barcode,
+                    offSnapshotJson = meal.offSnapshotJson,
+                )
             )
-        )
-        applyMeal(id, meal, servings)
+            applyMeal(id, meal, servings)
+            id
+        } ?: return
+        if (photos.isNotEmpty()) {
+            photoStore?.replaceAll(FoodPhotoEntity.OWNER_ENTRY, entryId, photos)
+        }
     }
 
     /**
      * Logs a recipe by cooked grams eaten when [MealEntity.cookedWeightG] is set.
      * servings = gramsEaten / cookedWeightG.
      */
-    suspend fun logMealByGrams(date: LocalDate, mealId: Long, gramsEaten: Double, photo: String? = null): Result {
+    suspend fun logMealByGrams(
+        date: LocalDate,
+        mealId: Long,
+        gramsEaten: Double,
+        photo: String? = null,
+        photos: List<String> = listOfNotNull(photo),
+    ): Result {
         val meal = meals.get(mealId) ?: return Result.Problem("Meal not found.")
         val cooked = meal.cookedWeightG ?: return Result.Problem("This recipe has no cooked weight.")
         if (gramsEaten <= 0 || cooked <= 0) return Result.Problem("Grams must be positive.")
-        logMeal(date, mealId, servings = gramsEaten / cooked, photo = photo)
+        logMeal(date, mealId, servings = gramsEaten / cooked, photos = photos)
         return Result.Ok
     }
 
