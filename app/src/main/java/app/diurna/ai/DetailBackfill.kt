@@ -2,6 +2,9 @@ package app.diurna.ai
 
 import app.diurna.data.FoodEntryEntity
 import app.diurna.data.MealEntity
+import app.diurna.data.OffSnapshot
+import org.json.JSONException
+import org.json.JSONObject
 import app.diurna.domain.AminoAcids
 import java.time.LocalDate
 import kotlin.math.roundToInt
@@ -130,6 +133,47 @@ object DetailBackfill {
     }
 
     fun mealHasDetail(meal: MealEntity): Boolean = fromMeal(meal, 1.0).let { it.hasAnySubMacro || it.hasAnyAmino }
+
+    /**
+     * Sub-macros from an OFF per-100g snapshot scaled by [grams]. Aminos are never in OFF snapshots.
+     * Null when the snapshot is unusable.
+     */
+    fun fromOffSnapshot(snap: OffSnapshot, grams: Double): Detail? {
+        if (!snap.lookupOk || snap.per100Json == null || grams <= 0 || snap.basisGrams <= 0) return null
+        val n = try { JSONObject(snap.per100Json) } catch (_: JSONException) { return null }
+        val scale = grams / snap.basisGrams
+        fun g(key: String): Int? {
+            if (!n.has(key)) return null
+            val v = n.optDouble(key).takeIf { it.isFinite() && it >= 0 } ?: return null
+            return (v * scale).roundToInt().coerceAtLeast(0)
+        }
+        fun mg(key: String): Int? = g(key)
+        return Detail(
+            fiberG = g("fiber_g"),
+            solubleFiberG = g("soluble_fiber_g"),
+            insolubleFiberG = g("insoluble_fiber_g"),
+            sugarsG = g("sugars_g"),
+            addedSugarsG = g("added_sugars_g"),
+            starchG = g("starch_g"),
+            satFatG = g("sat_fat_g"),
+            monoFatG = g("mono_fat_g"),
+            polyFatG = g("poly_fat_g"),
+            transFatG = g("trans_fat_g"),
+            cholesterolMg = mg("cholesterol_mg"),
+            omega3G = g("omega3_g"),
+            omega6G = g("omega6_g"),
+            omega9G = g("omega9_g"),
+        )
+    }
+
+    /** True when a barcode entry can try OFF for null detail (fill-nulls only). */
+    fun needsOffAttempt(entry: FoodEntryEntity): Boolean {
+        if (entry.barcode.isNullOrBlank()) return false
+        if (entry.estimatedAt == null) return false
+        val d = fromEntry(entry)
+        return missingSubMacro(d)
+    }
+
 
     /** Keep current when non-null; take incoming only for nulls. Then clamp to stored parents. */
     fun mergeNullsOnly(current: Detail, incoming: Detail, storedCarbs: Int?, storedFat: Int?): Detail {

@@ -71,8 +71,15 @@ fun BarcodeScanDialog(
                                         when (val r = scan(code, format == Barcode.FORMAT_UPC_E)) {
                                             is ScanResult.Known -> onKnown(r.meal)
                                             is ScanResult.Found -> onFound(r.draft)
-                                            ScanResult.NotFound -> problem = "Not found."
-                                            is ScanResult.Failed -> problem = r.message
+                                            is ScanResult.NotFound -> {
+                                                if (r.draft.barcode != null) onFound(r.draft)
+                                                else problem = "Not found."
+                                            }
+                                            is ScanResult.Failed -> {
+                                                // Still open a draft so the barcode is saved; user enters values.
+                                                if (r.draft.barcode != null) onFound(r.draft)
+                                                else problem = r.message
+                                            }
                                         }
                                         looking = false
                                     }

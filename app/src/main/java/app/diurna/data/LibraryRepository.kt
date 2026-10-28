@@ -157,26 +157,46 @@ class LibraryRepository(
     sealed interface ScanResult {
         /** Already in the library: log it. */
         data class Known(val meal: MealEntity) : ScanResult
-        /** Found online: an unsaved meal, barcode set, for a check before saving. */
+        /** Found online: an unsaved meal, barcode + OFF snapshot set, for a check before saving. */
         data class Found(val draft: MealEntity) : ScanResult
-        data object NotFound : ScanResult
-        data class Failed(val message: String) : ScanResult
+        /**
+         * Barcode known but OFF had no usable product. Draft has [MealEntity.barcode] and a failed
+         * snapshot so the user can enter values manually; the barcode is still persisted on save/log.
+         */
+        data class NotFound(val draft: MealEntity) : ScanResult
+        /** Network/HTTP failure. Draft still carries the barcode for manual entry + later retry. */
+        data class Failed(val message: String, val draft: MealEntity) : ScanResult
     }
 
     /** The library first (works offline), then Open Food Facts. */
     suspend fun scan(raw: String, upcE: Boolean = false): ScanResult {
-        val code = normalizeBarcode(raw, upcE) ?: return ScanResult.NotFound
+        val code = normalizeBarcode(raw, upcE) ?: return ScanResult.NotFound(
+            MealEntity(name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, barcode = null),
+        )
         meals.byBarcode(code)?.let { return ScanResult.Known(it) }
+        val blank = MealEntity(
+            name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0,
+            barcode = code, kind = MealEntity.KIND_SIMPLE,
+            offSnapshotJson = OffSnapshot.failed().encode(),
+        )
         val json = try {
             products.fetch(code)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            return ScanResult.Failed("Couldn't reach Open Food Facts. Check your connection.")
+            return ScanResult.Failed("Couldn't reach Open Food Facts. Check your connection.", blank)
         }
-        // Unparseable, implausible or calorie-less answers all count as not found.
-        val draft = json?.let { parseOffProduct(it) } ?: return ScanResult.NotFound
-        return ScanResult.Found(draft.copy(barcode = code, kind = MealEntity.KIND_SIMPLE))
+        if (json == null) return ScanResult.NotFound(blank)
+        val at = System.currentTimeMillis()
+        val snap = parseOffSnapshot(json, at) ?: OffSnapshot.failed(at)
+        val draft = parseOffProduct(json)?.copy(
+            barcode = code,
+            kind = MealEntity.KIND_SIMPLE,
+            offSnapshotJson = snap.encode(),
+        ) ?: return ScanResult.NotFound(
+            blank.copy(offSnapshotJson = snap.encode()),
+        )
+        return ScanResult.Found(draft)
     }
 
     suspend fun mealByBarcode(code: String): MealEntity? = meals.byBarcode(code)
@@ -195,6 +215,8 @@ class LibraryRepository(
                 text = meal.name,
                 loggedAt = System.currentTimeMillis(),
                 photo = photo,
+                barcode = meal.barcode,
+                offSnapshotJson = meal.offSnapshotJson,
             )
         )
         applyMeal(id, meal, servings)
@@ -248,8 +270,13 @@ class LibraryRepository(
         when (val v = validate(meal.copy(id = 0, kind = MealEntity.KIND_SIMPLE))) {
             is Validated.Bad -> v.problem
             is Validated.Good -> {
-                val id = meals.insert(v.meal)
-                applyMeal(entryId, v.meal.copy(id = id), 1.0)
+                val entry = food.get(entryId)
+                val toSave = v.meal.copy(
+                    barcode = v.meal.barcode ?: entry?.barcode,
+                    offSnapshotJson = v.meal.offSnapshotJson ?: entry?.offSnapshotJson,
+                )
+                val id = meals.insert(toSave)
+                applyMeal(entryId, toSave.copy(id = id), 1.0)
                 Result.Ok
             }
         }
@@ -269,6 +296,10 @@ class LibraryRepository(
             meal.ingredientsJson, meal.aminoMatched, meal.aminoTotal,
             System.currentTimeMillis(),
         )
+        // Keep barcode/snapshot on the logged entry (setMeal does not touch them).
+        if (meal.barcode != null || meal.offSnapshotJson != null) {
+            food.setBarcodeSnapshot(entryId, meal.barcode, meal.offSnapshotJson)
+        }
     }
 
     // ---- Exercises ----
