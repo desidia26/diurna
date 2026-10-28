@@ -51,10 +51,12 @@
             </intent-filter>
         </activity>
 
-        <!-- scripts/backup-db only; not exported so other apps cannot trigger a backup. -->
+        <!-- scripts/backup-db only. adb shell can't start an unexported activity, so it's exported
+             but needs DUMP, which the shell has and other apps can't get. -->
         <activity
             android:name=".BackupTriggerActivity"
-            android:exported="false"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.NoDisplay" />
 

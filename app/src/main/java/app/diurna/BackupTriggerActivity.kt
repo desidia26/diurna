@@ -6,9 +6,8 @@ import app.diurna.data.Backups
 import kotlinx.coroutines.launch
 
 /**
- * scripts/backup-db asks for a fresh backup by starting this activity over adb.
- * It is not exported, so other apps on the phone cannot trigger a backup; the adb
- * shell is allowed to start non-exported components.
+ * scripts/backup-db asks for a fresh backup by starting this activity over adb. Starting it
+ * needs the DUMP permission (see the manifest), so the adb shell can and other apps can't.
  */
 class BackupTriggerActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
