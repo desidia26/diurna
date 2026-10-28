@@ -12,6 +12,9 @@ object PhotoSizing {
     const val MAX_EDGE = 1568
     const val MAX_BYTES = 3_500_000
 
+    /** Stored photos are named by a random UUID; anything else is not one of ours. */
+    val FILE_NAME = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.jpg")
+
     /** JPEG qualities to try in turn until the file fits [MAX_BYTES]; a 1568 px photo nearly always fits the first. */
     val QUALITIES = listOf(85, 70, 55)
 

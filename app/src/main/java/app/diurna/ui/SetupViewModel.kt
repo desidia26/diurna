@@ -9,7 +9,12 @@ import app.diurna.ai.DetailBackfillWorker
 import app.diurna.ai.SelectedFoodEstimator
 import app.diurna.ai.ClaudeFoodEstimator
 import app.diurna.ai.GrokFoodEstimator
+import app.diurna.data.DataTransfer
+import app.diurna.data.ImportApply
+import app.diurna.data.ImportFailed
 import app.diurna.data.SettingsStore
+import app.diurna.domain.ExportArchive
+import android.net.Uri
 import app.diurna.wallpaper.LockStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -64,6 +69,46 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
     // Backups
     val lastBackup = c.backups.last
     fun backupNow() = io { c.backups.backupNow() }
+
+    // Export and import
+    /** The result of the last export or a failed import, in plain words; null when there's nothing to say. */
+    val transferMessage = MutableStateFlow<String?>(null)
+    /** An import that has been checked and waits for the person to confirm replacing everything. */
+    val stagedImport = MutableStateFlow<DataTransfer.Staged?>(null)
+    /** True right after an import was applied, until dismissed: API keys need entering again. */
+    val justImported = MutableStateFlow(ImportApply.takeImported(c.appContext))
+    fun dismissImported() { justImported.value = false }
+
+    fun export(uri: Uri) = io {
+        transferMessage.value = runCatching {
+            c.appContext.contentResolver.openOutputStream(uri)?.use { c.transfer.export(it) } ?: error("no file")
+        }.fold({ "Exported" }, { "Export failed. Try again, or pick another place to save it." })
+    }
+
+    fun stageImport(uri: Uri) = io {
+        transferMessage.value = null
+        try {
+            stagedImport.value = c.appContext.contentResolver.openInputStream(uri)?.use { c.transfer.stage(it) }
+                ?: throw ImportFailed(ExportArchive.Problem.Damaged)
+        } catch (e: ImportFailed) {
+            transferMessage.value = when (e.problem) {
+                ExportArchive.Problem.NotAnExport -> "That file isn't a Diurna export."
+                ExportArchive.Problem.Newer -> "That export is from a newer version of Diurna. Update the app first."
+                ExportArchive.Problem.Damaged -> "That export is damaged and can't be read."
+            }
+        }
+    }
+
+    fun cancelImport() {
+        c.transfer.discard()
+        stagedImport.value = null
+    }
+
+    /** Backs up what's here, then restarts into the imported data. */
+    fun commitImport() = io {
+        c.transfer.commit()
+        DataTransfer.restart(c.appContext)
+    }
 
     // Food estimates
     val aiProvider = c.aiProvider.selected

@@ -61,6 +61,10 @@ object Changelog {
             13, "2026-10-28", "Import a recipe from a link",
             "Import URL on the Meals page reads a recipe from a web page and opens the recipe editor with its name, servings and ingredients filled in. Nutrition is left for you to look up per ingredient, and nothing is saved until you tap Save.",
         ),
+        Entry(
+            14, "2026-10-28", "Export and import everything",
+            "Setup → Backups can now export all your data (history, meals, settings and photos) to one file you save anywhere, and import it on another phone or a fresh install. Your API keys aren't included, so add them again after importing.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }

@@ -49,14 +49,13 @@ class Backups(
                 val now = LocalDateTime.now()
                 val stamp = now.format(STAMP)
                 val dbFile = File(dir, "daybook-$stamp.db")
-                // VACUUM INTO writes a complete, consistent copy, including recent writes still in the
-                // WAL. SQLite creates it owner-only, which adb can't read in shared storage, so it's
+                // SQLite creates the copy owner-only, which adb can't read in shared storage, so it's
                 // written to private scratch space and then copied over, picking up normal permissions.
-                val scratch = File(context.cacheDir, "backup-$stamp.db").apply { delete() }
-                db.openHelper.writableDatabase.execSQL("VACUUM INTO '${scratch.absolutePath}'")
+                val scratch = File(context.cacheDir, "backup-$stamp.db")
+                snapshot(scratch)
                 scratch.copyTo(dbFile, overwrite = true)
                 scratch.delete()
-                File(context.filesDir, "datastore/settings.preferences_pb").takeIf { it.exists() }
+                settingsFile.takeIf { it.exists() }
                     ?.copyTo(File(dir, "settings-$stamp.preferences_pb"), overwrite = true)
                 prune()
                 mirrorPhotos()
@@ -66,6 +65,24 @@ class Backups(
             }.onFailure { Log.w(TAG, "backup failed", it) }.getOrNull()
         }
     }
+
+    /**
+     * A complete, consistent copy of the database at [to], including recent writes still in the
+     * WAL. Callers hold [exclusive] so a copy never overlaps another.
+     */
+    fun snapshot(to: File) {
+        to.delete()
+        db.openHelper.writableDatabase.execSQL("VACUUM INTO '${to.absolutePath}'")
+    }
+
+    /** Runs [block] while no backup is being written, e.g. for an export. */
+    suspend fun <T> exclusive(block: suspend () -> T): T = mutex.withLock { block() }
+
+    /** The database's schema version, recorded in exports. */
+    val schema: Int get() = db.openHelper.readableDatabase.version
+
+    /** The settings file, which backups and exports copy next to the database. */
+    val settingsFile: File get() = File(context.filesDir, "datastore/settings.preferences_pb")
 
     private fun latest(): File? =
         dir.listFiles { f -> f.name.startsWith("daybook-") && f.name.endsWith(".db") }?.maxByOrNull { it.name }
