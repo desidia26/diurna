@@ -16,9 +16,10 @@ class EvalRunner(
         val tag: String? = null,
         val grokModel: String? = null,
         val claudeModel: String? = null,
-        val githubModel: String? = null,
-        /** When true, github-models skips cardio (vision) cases to save quota. */
-        val githubFoodOnly: Boolean = true,
+        val ollamaModel: String? = null,
+        val ollamaBaseUrl: String? = null,
+        /** When true, ollama skips cardio/vision cases (default for CPU smoke). */
+        val ollamaTextOnly: Boolean = true,
     )
 
     suspend fun run(config: Config): EvalReport {
@@ -28,7 +29,10 @@ class EvalRunner(
 
         for (pid in config.providers) {
             val clients = try {
-                EvalProviders.resolve(pid, config.grokModel, config.claudeModel, config.githubModel)
+                EvalProviders.resolve(
+                    pid, config.grokModel, config.claudeModel,
+                    config.ollamaModel, config.ollamaBaseUrl,
+                )
             } catch (e: ProviderSkip) {
                 models[pid.id] = null
                 set.cases.forEach { c ->
@@ -51,11 +55,10 @@ class EvalRunner(
                 }
                 val score = runCase(pid, clients, case, config)
                 scores += score
-                // Don't keep hitting a retired/unavailable endpoint (and don't burn the rate limiter).
                 val reason = score.skipReason
                 if (score.skipped && reason != null && (
-                        "retired" in reason || "non-JSON" in reason || "HTTP 401" in reason ||
-                            "HTTP 403" in reason || "HTTP 404" in reason || "Models unavailable" in reason
+                        "not reachable" in reason || "HTTP 404" in reason ||
+                            "HTTP 401" in reason || "HTTP 403" in reason
                         )
                 ) {
                     providerDead = reason
@@ -82,14 +85,20 @@ class EvalRunner(
         return try {
             when (case.prompt) {
                 "food" -> {
-                    val est = clients.food.estimate(case.input.text.orEmpty(), photo)
-                    EvalScoring.scoreFood(case, est).copy(provider = pid.id)
-                }
-                "cardio" -> {
-                    if (pid == EvalProviderId.GITHUB_MODELS && config.githubFoodOnly) {
+                    if (pid == EvalProviderId.OLLAMA && config.ollamaTextOnly && photo != null) {
                         return CaseScore(
                             case.id, pid.id, case.prompt, passed = true, skipped = true,
-                            skipReason = "github-models smoke skips cardio/vision by default",
+                            skipReason = "ollama smoke skips vision cases by default",
+                        )
+                    }
+                    val est = clients.food.estimate(case.input.text.orEmpty(), photo)
+                    EvalScoring.scoreFood(case, est, clients.scoringMode).copy(provider = pid.id)
+                }
+                "cardio" -> {
+                    if (pid == EvalProviderId.OLLAMA && config.ollamaTextOnly) {
+                        return CaseScore(
+                            case.id, pid.id, case.prompt, passed = true, skipped = true,
+                            skipReason = "ollama smoke skips cardio/vision by default",
                         )
                     }
                     val reader = clients.cardio
@@ -101,7 +110,7 @@ class EvalRunner(
                         return CaseScore(case.id, pid.id, case.prompt, passed = false, error = "cardio case needs image")
                     }
                     val reading = reader.read(photo)
-                    EvalScoring.scoreCardio(case, reading).copy(provider = pid.id)
+                    EvalScoring.scoreCardio(case, reading, clients.scoringMode).copy(provider = pid.id)
                 }
                 else -> CaseScore(case.id, pid.id, case.prompt, passed = false, error = "unknown prompt ${case.prompt}")
             }

@@ -8,16 +8,19 @@ import java.io.File
  * and parsers — never a copied prompt string.
  *
  * Args / system properties (Gradle -P maps into -D):
- * - provider=grok|claude|github-models|all
+ * - provider=grok|claude|ollama|all
  * - set=default|full|smoke
  * - tag= optional case tag filter (e.g. smoke)
- * - grokModel= / claudeModel= / githubModel=
+ * - grokModel= / claudeModel= / ollamaModel= / ollamaBaseUrl=
+ * - ollamaTextOnly=true|false (default true)
  * - outDir=ai-evals/out
  */
 fun main(args: Array<String>) = runBlocking {
     val props = args.toList().plus(
-        listOf("provider", "set", "tag", "grokModel", "claudeModel", "githubModel", "outDir", "root")
-            .mapNotNull { k -> System.getProperty(k)?.let { "$k=$it" } },
+        listOf(
+            "provider", "set", "tag", "grokModel", "claudeModel",
+            "ollamaModel", "ollamaBaseUrl", "ollamaTextOnly", "outDir", "root",
+        ).mapNotNull { k -> System.getProperty(k)?.let { "$k=$it" } },
     ).mapNotNull { s ->
         val i = s.indexOf('=')
         if (i <= 0) null else s.substring(0, i) to s.substring(i + 1)
@@ -28,14 +31,15 @@ fun main(args: Array<String>) = runBlocking {
     val setName = props["set"] ?: "default"
     val tag = props["tag"]
     val outDir = File(root, props["outDir"] ?: "ai-evals/out")
+    val ollamaTextOnly = props["ollamaTextOnly"]?.equals("false", ignoreCase = true) != true
 
     println("AI evals: root=$root provider=$providerRaw set=$setName tag=${tag ?: "—"}")
-    // Never print env values; only presence.
     fun present(name: String) = !System.getenv(name).isNullOrBlank()
     println(
         "Keys: XAI_API_KEY=${if (present("XAI_API_KEY")) "set" else "absent"}, " +
             "ANTHROPIC_API_KEY=${if (present("ANTHROPIC_API_KEY")) "set" else "absent"}, " +
-            "GITHUB_TOKEN=${if (present("GITHUB_TOKEN") || present("GH_TOKEN")) "set" else "absent"}",
+            "OLLAMA_BASE_URL=${System.getenv("OLLAMA_BASE_URL") ?: "default"}, " +
+            "ollamaTextOnly=$ollamaTextOnly",
     )
 
     val report = EvalRunner(root).run(
@@ -45,7 +49,9 @@ fun main(args: Array<String>) = runBlocking {
             tag = tag,
             grokModel = props["grokModel"],
             claudeModel = props["claudeModel"],
-            githubModel = props["githubModel"],
+            ollamaModel = props["ollamaModel"],
+            ollamaBaseUrl = props["ollamaBaseUrl"],
+            ollamaTextOnly = ollamaTextOnly,
         ),
     )
 

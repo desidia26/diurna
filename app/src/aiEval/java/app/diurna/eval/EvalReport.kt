@@ -45,7 +45,7 @@ object EvalReportWriter {
         }.sortedBy { it.provider }
         val anyRan = summaries.any { it.ran > 0 }
         val overall = if (!anyRan) {
-            true // nothing to grade; missing keys / retired Models is a skip, not a fail
+            true // nothing to grade; missing keys / unreachable Ollama is a skip, not a fail
         } else {
             summaries.filter { it.ran > 0 }.all { (it.passRate ?: 0.0) >= threshold }
         }
@@ -58,7 +58,7 @@ object EvalReportWriter {
         appendLine("Pass threshold: **${"%.0f".format(report.threshold * 100)}%** of cases per provider that ran.")
         appendLine()
         if (!report.anyProviderRan) {
-            appendLine("> No provider ran (missing keys, or GitHub Models unavailable). Harness OK; live accuracy not scored.")
+            appendLine("> No provider ran (missing keys, or Ollama unreachable). Harness OK; live accuracy not scored.")
             appendLine()
         }
         appendLine("| Provider | Model | Passed | Failed | Skipped | Pass rate |")
@@ -78,6 +78,15 @@ object EvalReportWriter {
             failures.forEach { s ->
                 appendLine("- `${s.provider}` / `${s.caseId}`: " +
                     (s.error ?: s.failedChecks.joinToString { "${it.name}: ${it.detail}" }))
+            }
+        }
+        val info = report.scores.filter { it.infoMisses.isNotEmpty() }
+        if (info.isNotEmpty()) {
+            appendLine()
+            appendLine("### Informational (parse-health; does not fail the build)")
+            info.forEach { s ->
+                appendLine("- `${s.provider}` / `${s.caseId}`: " +
+                    s.infoMisses.joinToString { "${it.name}: ${it.detail}" })
             }
         }
         appendLine()
@@ -118,6 +127,7 @@ object EvalReportWriter {
                         put("name", c.name)
                         put("passed", c.passed)
                         put("detail", c.detail)
+                        put("required", c.required)
                     }
                 }
             }

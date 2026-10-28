@@ -9,8 +9,8 @@ Personal Android app (Kotlin, Jetpack Compose, Room) for one person's phone: a p
 - `scripts/release`: tests, release build, backup, install as an update, data check, alarm check, tag
 - `scripts/backup-db`, `scripts/logs`, `scripts/screenshot`, `scripts/alarm-check`, `scripts/demo-data` (emulator only: replaces app data with made-up history)
 - `./gradlew assembleDebug` / `testDebugUnitTest` for a build or unit tests without a device
-- `./gradlew aiEval -Pprovider=grok|claude|github-models|all` — live AI prompt evals (see [docs/ai-evals.md](docs/ai-evals.md))
-- CI (`.github/workflows/tests.yml`) runs unit and emulator device tests on every PR and push to `main`; `.github/workflows/ai-evals.yml` runs prompt evals on path-filtered changes
+- `./gradlew aiEval -Pprovider=grok|claude|ollama|all` — live AI prompt evals (see [docs/ai-evals.md](docs/ai-evals.md))
+- CI (`.github/workflows/tests.yml`) runs unit and emulator device tests on every PR and push to `main`; `.github/workflows/ai-evals.yml` runs Ollama smoke always plus Grok/Claude when keys exist (parallel jobs) on path-filtered changes
 
 Check a build by its exit code, not by filtered output.
 

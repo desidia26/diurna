@@ -14,27 +14,29 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Eval-only HTTPS client for GitHub Models' OpenAI-compatible endpoint. Mirrors
- * [app.diurna.ai.HttpXaiTransport] (no redirects, deadline, size cap) but adds the GitHub
- * Accept / API-version headers the Models docs asked for. Not used by the app at runtime.
+ * Eval-only OpenAI-compatible chat client (HTTP or HTTPS). Mirrors
+ * [app.diurna.ai.HttpXaiTransport] with a configurable endpoint and a longer deadline so
+ * CPU-local models (Ollama) can finish. Not used by the app at runtime.
  */
-class GitHubModelsTransport(
-    private val endpoint: String = GitHubModelsChat.ENDPOINT,
+class OpenAiCompatTransport(
+    private val endpoint: String,
+    private val deadlineMs: Long = DEADLINE_MS,
+    private val connectTimeoutMs: Int = 15_000,
+    private val readTimeoutMs: Int = 300_000,
 ) : XaiTransport {
     override suspend fun post(apiKey: String, json: String): XaiReply = withContext(Dispatchers.IO) {
         val conn = URL(endpoint).openConnection() as HttpURLConnection
         coroutineScope {
-            val deadline = launch { delay(DEADLINE_MS); conn.disconnect() }
+            val deadline = launch { delay(deadlineMs); conn.disconnect() }
             try {
                 conn.instanceFollowRedirects = false
                 conn.requestMethod = "POST"
                 conn.doOutput = true
-                conn.connectTimeout = 15_000
-                conn.readTimeout = 60_000
+                conn.connectTimeout = connectTimeoutMs
+                conn.readTimeout = readTimeoutMs
                 conn.setRequestProperty("Authorization", "Bearer $apiKey")
                 conn.setRequestProperty("Content-Type", "application/json")
-                conn.setRequestProperty("Accept", "application/vnd.github+json")
-                conn.setRequestProperty("X-GitHub-Api-Version", "2026-03-10")
+                conn.setRequestProperty("Accept", "application/json")
                 conn.setRequestProperty("User-Agent", "diurna-ai-evals")
                 conn.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
                 val status = conn.responseCode
@@ -60,7 +62,7 @@ class GitHubModelsTransport(
     }
 
     companion object {
-        const val DEADLINE_MS = 90_000L
+        const val DEADLINE_MS = 360_000L
         const val MAX_BYTES = 256 * 1024
     }
 }

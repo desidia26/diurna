@@ -85,4 +85,27 @@ class EvalScoringTest {
         val c = EvalCase("c", "cardio", input = CaseInput(image = "x.jpg"), expect = CaseExpect(outcome = "reject"))
         assertTrue(EvalScoring.scoreCardioFailure(c, "No distance or time found (not a workout screen)").passed)
     }
+
+    @Test fun parseHealthIgnoresBadBands() {
+        val s = EvalScoring.scoreFood(
+            foodCase("estimate", mid = 600, tol = 10.0),
+            FoodEstimate(50, 80, 1, 2, 1, "tiny"),
+            ScoringMode.PARSE_HEALTH,
+        )
+        assertTrue(s.passed)
+        assertTrue(s.infoMisses.any { it.name == "kcal_band" })
+        assertTrue(s.failedChecks.isEmpty())
+    }
+
+    @Test fun parseHealthNotFoodIsInformational() {
+        val c = EvalCase("t", "food", input = CaseInput("walk"), expect = CaseExpect(outcome = "not_food_or_zeros"))
+        val s = EvalScoring.scoreFood(
+            c,
+            FoodEstimate(800, 1200, 10, 20, 30, "a snack"),
+            ScoringMode.PARSE_HEALTH,
+        )
+        assertTrue(s.passed)
+        assertTrue(s.infoMisses.any { it.name == "not_food_or_zeros" })
+        assertTrue(s.checks.any { it.name == "parsed" && it.passed })
+    }
 }

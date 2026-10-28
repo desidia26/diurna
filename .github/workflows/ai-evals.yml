@@ -1,20 +1,19 @@
-# AI prompt evals. Default PR/push path: GitHub Models smoke (no repo secrets).
-# Real Grok/Claude runs need XAI_API_KEY / ANTHROPIC_API_KEY (admin-only secrets) via
-# workflow_dispatch, or when those secrets are present on a path-filtered run.
-# Never pull_request_target. Not a required check.
+# AI prompt evals. Every path-filtered / dispatch run: Ollama always, plus Grok and
+# Claude when their secrets exist (missing key = clear skip, not fail). Parallel jobs
+# per provider; one combined summary. Never pull_request_target. Not a required check.
 name: AI evals
 
 on:
   workflow_dispatch:
     inputs:
       provider:
-        description: "grok | claude | github-models | all"
+        description: "grok | claude | ollama | all"
         required: true
         default: "all"
         type: choice
-        options: [grok, claude, github-models, all]
+        options: [grok, claude, ollama, all]
       set:
-        description: "Case set"
+        description: "Case set for Grok/Claude (Ollama always uses smoke)"
         required: true
         default: "default"
         type: choice
@@ -29,8 +28,8 @@ on:
         required: false
         default: ""
         type: string
-      githubModel:
-        description: "GitHub Models id (blank = xai/grok-3-mini)"
+      ollamaModel:
+        description: "Ollama model (blank = qwen2.5:1.5b-instruct)"
         required: false
         default: ""
         type: string
@@ -58,17 +57,85 @@ concurrency:
   group: ai-evals-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# models: read lets GITHUB_TOKEN call GitHub Models when that service is available.
-# contents: read is enough for checkout. No broader permissions.
 permissions:
   contents: read
-  models: read
+
+env:
+  OLLAMA_VERSION: "0.40.12"
+  OLLAMA_AMD64_SHA256: "f8adcb7e08d272283a4bd3abc18cf581afe37e64b2aee04fda4f407f215485ba"
+  OLLAMA_SMOKE_MODEL: "qwen2.5:1.5b-instruct"
+  OLLAMA_SMOKE_LAYER_SHA256: "183715c435899236895da3869489cc30ac241476b4971a20285b1a462818a5b4"
 
 jobs:
-  eval:
-    name: Prompt evals
+  # Decide which provider jobs to run. Secrets are NOT passed downstream — each
+  # provider job reads only its own secret.
+  plan:
+    name: Plan providers
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 5
+    outputs:
+      run_ollama: ${{ steps.pick.outputs.run_ollama }}
+      run_grok: ${{ steps.pick.outputs.run_grok }}
+      run_claude: ${{ steps.pick.outputs.run_claude }}
+      grok_set: ${{ steps.pick.outputs.grok_set }}
+      claude_set: ${{ steps.pick.outputs.claude_set }}
+      ollama_model: ${{ steps.pick.outputs.ollama_model }}
+      grok_model: ${{ steps.pick.outputs.grok_model }}
+      claude_model: ${{ steps.pick.outputs.claude_model }}
+    steps:
+      - id: pick
+        env:
+          # Presence check only; values never written to outputs or logs.
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          HAS_XAI=0; HAS_ANT=0
+          if [ -n "${XAI_API_KEY:-}" ]; then HAS_XAI=1; fi
+          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then HAS_ANT=1; fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            WANT="${{ inputs.provider }}"
+            SET="${{ inputs.set }}"
+            GROK_MODEL="${{ inputs.grokModel }}"
+            CLAUDE_MODEL="${{ inputs.claudeModel }}"
+            OLLAMA_MODEL="${{ inputs.ollamaModel }}"
+          else
+            # Path-filtered PR/push: always attempt every available provider.
+            WANT="all"
+            SET="default"
+            GROK_MODEL=""
+            CLAUDE_MODEL=""
+            OLLAMA_MODEL=""
+          fi
+
+          RUN_O=0; RUN_G=0; RUN_C=0
+          case "$WANT" in
+            all) RUN_O=1; RUN_G=1; RUN_C=1 ;;
+            ollama) RUN_O=1 ;;
+            grok) RUN_G=1 ;;
+            claude) RUN_C=1 ;;
+          esac
+
+          # Ollama always when selected. Grok/Claude jobs still run when selected so a
+          # missing key produces a clear skip artifact (not a silent omission).
+          echo "run_ollama=$RUN_O" >> "$GITHUB_OUTPUT"
+          echo "run_grok=$RUN_G" >> "$GITHUB_OUTPUT"
+          echo "run_claude=$RUN_C" >> "$GITHUB_OUTPUT"
+          # Grok/Claude default set includes food-photo + cardio-photo cases.
+          echo "grok_set=$SET" >> "$GITHUB_OUTPUT"
+          echo "claude_set=$SET" >> "$GITHUB_OUTPUT"
+          echo "ollama_model=$OLLAMA_MODEL" >> "$GITHUB_OUTPUT"
+          echo "grok_model=$GROK_MODEL" >> "$GITHUB_OUTPUT"
+          echo "claude_model=$CLAUDE_MODEL" >> "$GITHUB_OUTPUT"
+          echo "plan: want=$WANT set=$SET ollama=$RUN_O grok=$RUN_G(key=$HAS_XAI) claude=$RUN_C(key=$HAS_ANT)"
+
+  ollama:
+    name: Ollama smoke
+    needs: plan
+    if: needs.plan.outputs.run_ollama == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -79,69 +146,232 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
-      - name: Choose provider and case set
-        id: pick
+      - name: Install Ollama (checksum-verified)
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "provider=${{ inputs.provider }}" >> "$GITHUB_OUTPUT"
-            echo "set=${{ inputs.set }}" >> "$GITHUB_OUTPUT"
-            echo "grokModel=${{ inputs.grokModel }}" >> "$GITHUB_OUTPUT"
-            echo "claudeModel=${{ inputs.claudeModel }}" >> "$GITHUB_OUTPUT"
-            echo "githubModel=${{ inputs.githubModel }}" >> "$GITHUB_OUTPUT"
-          else
-            # Path-filtered PR/push: smoke on GitHub Models (no secrets). If real keys
-            # exist, also run the default set against those providers.
-            HAS_XAI=0
-            HAS_ANT=0
-            if [ -n "${XAI_API_KEY:-}" ]; then HAS_XAI=1; fi
-            if [ -n "${ANTHROPIC_API_KEY:-}" ]; then HAS_ANT=1; fi
-            if [ "$HAS_XAI$HAS_ANT" = "11" ]; then
-              echo "provider=all" >> "$GITHUB_OUTPUT"
-              echo "set=default" >> "$GITHUB_OUTPUT"
-            elif [ "$HAS_XAI" = "1" ]; then
-              echo "provider=grok" >> "$GITHUB_OUTPUT"
-              echo "set=default" >> "$GITHUB_OUTPUT"
-            elif [ "$HAS_ANT" = "1" ]; then
-              echo "provider=claude" >> "$GITHUB_OUTPUT"
-              echo "set=default" >> "$GITHUB_OUTPUT"
-            else
-              echo "provider=github-models" >> "$GITHUB_OUTPUT"
-              echo "set=smoke" >> "$GITHUB_OUTPUT"
-            fi
-            echo "grokModel=" >> "$GITHUB_OUTPUT"
-            echo "claudeModel=" >> "$GITHUB_OUTPUT"
-            echo "githubModel=" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          # Presence check only; values are not printed.
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+          ASSET="ollama-linux-amd64.tar.zst"
+          URL="https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/${ASSET}"
+          curl -fsSL -o "/tmp/${ASSET}" "$URL"
+          echo "${OLLAMA_AMD64_SHA256}  /tmp/${ASSET}" | sha256sum -c -
+          sudo rm -rf /usr/lib/ollama
+          sudo tar --zstd -xf "/tmp/${ASSET}" -C /usr
+          ollama -v
 
-      - name: Run AI evals
-        # Secrets only on this step. GITHUB_TOKEN is the job token (models: read).
-        env:
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Cache Ollama models
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.ollama/models
+          key: ollama-${{ env.OLLAMA_SMOKE_MODEL }}-${{ env.OLLAMA_SMOKE_LAYER_SHA256 }}-text
+          restore-keys: |
+            ollama-${{ env.OLLAMA_SMOKE_MODEL }}-${{ env.OLLAMA_SMOKE_LAYER_SHA256 }}-
+
+      - name: Start Ollama and pull smoke model
         run: |
           set -euo pipefail
-          ARGS="-Pprovider=${{ steps.pick.outputs.provider }} -Pset=${{ steps.pick.outputs.set }}"
-          if [ -n "${{ steps.pick.outputs.grokModel }}" ]; then
-            ARGS="$ARGS -PgrokModel=${{ steps.pick.outputs.grokModel }}"
-          fi
-          if [ -n "${{ steps.pick.outputs.claudeModel }}" ]; then
-            ARGS="$ARGS -PclaudeModel=${{ steps.pick.outputs.claudeModel }}"
-          fi
-          if [ -n "${{ steps.pick.outputs.githubModel }}" ]; then
-            ARGS="$ARGS -PgithubModel=${{ steps.pick.outputs.githubModel }}"
-          fi
+          ollama serve > /tmp/ollama-serve.log 2>&1 &
+          echo $! > /tmp/ollama-serve.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+              echo "ollama up after ${i}s"
+              break
+            fi
+            sleep 1
+            if [ "$i" -eq 60 ]; then
+              echo "ollama failed to start:" >&2
+              cat /tmp/ollama-serve.log >&2 || true
+              exit 1
+            fi
+          done
+          MODEL="${{ needs.plan.outputs.ollama_model }}"
+          if [ -z "$MODEL" ]; then MODEL="$OLLAMA_SMOKE_MODEL"; fi
+          echo "Pulling $MODEL"
+          ollama pull "$MODEL"
+          ollama list
+          # Warm the model so the first Gradle case does not hit a cold-load timeout.
+          echo "Warming $MODEL"
+          curl -fsS http://127.0.0.1:11434/api/generate -d "{\"model\":\"$MODEL\",\"prompt\":\"hi\",\"stream\":false,\"options\":{\"num_predict\":1}}" >/dev/null
+          echo "warm done"
+
+      - name: Run Ollama evals (text-only smoke)
+        # No cloud API secrets in this job.
+        env:
+          OLLAMA_BASE_URL: http://127.0.0.1:11434/v1
+        run: |
+          set -euo pipefail
+          START=$(date +%s)
+          MODEL="${{ needs.plan.outputs.ollama_model }}"
+          if [ -z "$MODEL" ]; then MODEL="$OLLAMA_SMOKE_MODEL"; fi
+          ARGS="-Pprovider=ollama -Pset=smoke -PollamaTextOnly=true -PollamaModel=$MODEL"
+          echo "Running: ./gradlew aiEval $ARGS"
           # shellcheck disable=SC2086
           ./gradlew aiEval $ARGS
+          END=$(date +%s)
+          echo "AI_EVAL_WALL_SECONDS=$((END - START))" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "provider=ollama" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p ai-evals/out
+          echo "$((END - START))" > ai-evals/out/wall_seconds.txt
+
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ai-eval-ollama
+          path: ai-evals/out/
+          if-no-files-found: warn
+
+  grok:
+    name: Grok evals
+    needs: plan
+    if: needs.plan.outputs.run_grok == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Run Grok evals (text + photo + cardio)
+        # XAI_API_KEY scoped to this step only. Missing key → harness skips clearly.
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          START=$(date +%s)
+          ARGS="-Pprovider=grok -Pset=${{ needs.plan.outputs.grok_set }}"
+          if [ -n "${{ needs.plan.outputs.grok_model }}" ]; then
+            ARGS="$ARGS -PgrokModel=${{ needs.plan.outputs.grok_model }}"
+          fi
+          if [ -z "${XAI_API_KEY:-}" ]; then
+            echo "XAI_API_KEY absent — grok will skip (not fail)."
+          fi
+          echo "Running: ./gradlew aiEval $ARGS"
+          # shellcheck disable=SC2086
+          ./gradlew aiEval $ARGS
+          END=$(date +%s)
+          echo "AI_EVAL_WALL_SECONDS=$((END - START))" | tee -a "$GITHUB_STEP_SUMMARY"
+          mkdir -p ai-evals/out
+          echo "$((END - START))" > ai-evals/out/wall_seconds.txt
+
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ai-eval-grok
+          path: ai-evals/out/
+          if-no-files-found: warn
+
+  claude:
+    name: Claude evals
+    needs: plan
+    if: needs.plan.outputs.run_claude == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Run Claude evals (text + photo + cardio)
+        # ANTHROPIC_API_KEY scoped to this step only. Missing key → harness skips clearly.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          START=$(date +%s)
+          ARGS="-Pprovider=claude -Pset=${{ needs.plan.outputs.claude_set }}"
+          if [ -n "${{ needs.plan.outputs.claude_model }}" ]; then
+            ARGS="$ARGS -PclaudeModel=${{ needs.plan.outputs.claude_model }}"
+          fi
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "ANTHROPIC_API_KEY absent — claude will skip (not fail)."
+          fi
+          echo "Running: ./gradlew aiEval $ARGS"
+          # shellcheck disable=SC2086
+          ./gradlew aiEval $ARGS
+          END=$(date +%s)
+          echo "AI_EVAL_WALL_SECONDS=$((END - START))" | tee -a "$GITHUB_STEP_SUMMARY"
+          mkdir -p ai-evals/out
+          echo "$((END - START))" > ai-evals/out/wall_seconds.txt
+
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ai-eval-claude
+          path: ai-evals/out/
+          if-no-files-found: warn
+
+  summary:
+    name: Combined summary
+    needs: [plan, ollama, grok, claude]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download provider artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: ai-eval-*
+          path: collected
+          merge-multiple: false
+
+      - name: Write combined summary
+        run: |
+          set -euo pipefail
+          {
+            echo "## AI eval combined summary"
+            echo ""
+            echo "| Provider | Status | Wall (s) | Notes |"
+            echo "|----------|--------|----------|-------|"
+            for prov in ollama grok claude; do
+              dir="collected/ai-eval-$prov"
+              if [ ! -d "$dir" ]; then
+                # Job was skipped by plan (provider not selected on dispatch).
+                echo "| $prov | not run | — | not selected |"
+                continue
+              fi
+              wall="—"
+              if [ -f "$dir/wall_seconds.txt" ]; then wall=$(cat "$dir/wall_seconds.txt"); fi
+              if [ -f "$dir/summary.md" ]; then
+                # Pull first status-ish line if present
+                head -n 20 "$dir/summary.md" >> "$GITHUB_STEP_SUMMARY" || true
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                # Heuristic: look for FAILED / passed in summary
+                if grep -qiE 'overall.*(fail|❌)' "$dir/summary.md"; then
+                  status="fail"
+                elif grep -qiE 'skipped:.*(API_KEY|not set)' "$dir/summary.md"; then
+                  status="skipped (no key)"
+                else
+                  status="ok / see below"
+                fi
+              else
+                status="no report"
+              fi
+              echo "| $prov | $status | $wall | artifact ai-eval-$prov |"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          mkdir -p combined
+          for prov in ollama grok claude; do
+            dir="collected/ai-eval-$prov"
+            if [ -d "$dir" ]; then
+              mkdir -p "combined/$prov"
+              cp -a "$dir/." "combined/$prov/" || true
+            fi
+          done
 
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ai-eval-results
-          path: ai-evals/out/
+          path: combined/
           if-no-files-found: warn

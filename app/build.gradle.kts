@@ -124,7 +124,7 @@ dependencies {
 
 
 // Live AI prompt evals. Reuses estimators/parsers from main; runs on the unit-test classpath.
-//   ./gradlew aiEval -Pprovider=grok|claude|github-models|all -Pset=default|full|smoke
+//   ./gradlew aiEval -Pprovider=grok|claude|ollama|all -Pset=default|full|smoke
 afterEvaluate {
     tasks.named<Test>("testDebugUnitTest") {
         // Case JSON lives at repo-root ai-evals/; the harness resolves from here.
@@ -133,7 +133,7 @@ afterEvaluate {
 
     tasks.register<JavaExec>("aiEval") {
         group = "verification"
-        description = "Run AI prompt evals against Grok, Claude, and/or GitHub Models"
+        description = "Run AI prompt evals against Grok, Claude, and/or Ollama"
         // AGP wires these only after evaluate; compile + process puts AiEvalMain on the test classpath.
         dependsOn(
             "compileDebugUnitTestKotlin",
@@ -149,7 +149,9 @@ afterEvaluate {
         val tagProp = providers.gradleProperty("tag")
         val grokModelProp = providers.gradleProperty("grokModel")
         val claudeModelProp = providers.gradleProperty("claudeModel")
-        val githubModelProp = providers.gradleProperty("githubModel")
+        val ollamaModelProp = providers.gradleProperty("ollamaModel")
+        val ollamaBaseUrlProp = providers.gradleProperty("ollamaBaseUrl")
+        val ollamaTextOnlyProp = providers.gradleProperty("ollamaTextOnly")
         val outDirProp = providers.gradleProperty("outDir").orElse("ai-evals/out")
         doFirst {
             systemProperty("provider", providerProp.get())
@@ -158,8 +160,10 @@ afterEvaluate {
             if (tagProp.isPresent) systemProperty("tag", tagProp.get())
             if (grokModelProp.isPresent) systemProperty("grokModel", grokModelProp.get())
             if (claudeModelProp.isPresent) systemProperty("claudeModel", claudeModelProp.get())
-            if (githubModelProp.isPresent) systemProperty("githubModel", githubModelProp.get())
-            listOf("XAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "GH_TOKEN").forEach { name ->
+            if (ollamaModelProp.isPresent) systemProperty("ollamaModel", ollamaModelProp.get())
+            if (ollamaBaseUrlProp.isPresent) systemProperty("ollamaBaseUrl", ollamaBaseUrlProp.get())
+            if (ollamaTextOnlyProp.isPresent) systemProperty("ollamaTextOnly", ollamaTextOnlyProp.get())
+            listOf("XAI_API_KEY", "ANTHROPIC_API_KEY", "OLLAMA_BASE_URL", "OLLAMA_MODEL", "OLLAMA_API_KEY").forEach { name ->
                 val v = System.getenv(name)
                 if (!v.isNullOrBlank()) environment(name, v)
             }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Tiny smoke set for GitHub Models (no secrets). Text-only food cases. Not an accuracy eval of app providers.",
+  "description": "Tiny smoke set for Ollama CI (no secrets). Text-only food cases. Scores parse health; accuracy bands are informational for ollama.",
   "passThreshold": 0.5,
   "cases": [
     {
@@ -11,10 +11,10 @@
       "expect": {
         "outcome": "estimate",
         "kcalMid": 95,
-        "kcalTolPct": 80,
-        "proteinG": { "min": 0, "max": 5 },
-        "carbsG": { "min": 10, "max": 40 },
-        "fatG": { "min": 0, "max": 5 },
+        "kcalTolPct": 100,
+        "proteinG": { "min": 0, "max": 10 },
+        "carbsG": { "min": 5, "max": 50 },
+        "fatG": { "min": 0, "max": 10 },
         "macrosConsistentWithKcal": true
       }
     },
@@ -35,10 +35,10 @@
       "expect": {
         "outcome": "estimate",
         "kcalMid": 180,
-        "kcalTolPct": 70,
-        "proteinG": { "min": 8, "max": 25 },
-        "carbsG": { "min": 0, "max": 10 },
-        "fatG": { "min": 8, "max": 25 },
+        "kcalTolPct": 100,
+        "proteinG": { "min": 5, "max": 40 },
+        "carbsG": { "min": 0, "max": 20 },
+        "fatG": { "min": 5, "max": 40 },
         "macrosConsistentWithKcal": true
       }
     }
