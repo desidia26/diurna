@@ -216,7 +216,7 @@ Ingredients for USDA FoodData Central lookup (do NOT invent amino-acid milligram
         return FoodEstimate(
             kcalLow = minOf(a, b), kcalHigh = maxOf(a, b),
             proteinG = protein, carbsG = carbs, fatG = fat,
-            note = node.get("note")?.asText().orEmpty().trim(),
+            note = sanitizeNote(node.get("note")?.asText().orEmpty()),
             fiberG = detail.fiberG,
             solubleFiberG = detail.solubleFiberG,
             insolubleFiberG = detail.insolubleFiberG,
@@ -355,4 +355,10 @@ Ingredients for USDA FoodData Central lookup (do NOT invent amino-acid milligram
             omega9G = fatPart(omega9G),
         )
     }
+    /** Keeps the note short and free of control characters; the model is asked for under 80. */
+    fun sanitizeNote(raw: String, maxLen: Int = NOTE_MAX): String =
+        raw.filterNot { it.isISOControl() }.trim().take(maxLen)
+
+    const val NOTE_MAX = 120
+
 }

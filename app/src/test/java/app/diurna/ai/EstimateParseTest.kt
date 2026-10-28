@@ -1,5 +1,6 @@
 package app.diurna.ai
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -177,5 +178,26 @@ class EstimateParseTest {
         val sys = EstimatePrompt.system(true, true)
         assertTrue(sys.contains("FoodData Central"))
         assertTrue(sys.contains("do NOT invent amino"))
+    }
+
+    @Test fun stripsControlCharactersAndCapsTheNote() {
+        assertEquals("hithere", EstimatePrompt.sanitizeNote("hi\u0000there\n"))
+        assertEquals(EstimatePrompt.NOTE_MAX, EstimatePrompt.sanitizeNote("a".repeat(200)).length)
+
+        val rawNote = "hi\u0000there\n" + "a".repeat(200)
+        val json = ObjectMapper().writeValueAsString(
+            mapOf(
+                "kcal_low" to 1,
+                "kcal_high" to 2,
+                "protein_g" to 0,
+                "carbs_g" to 0,
+                "fat_g" to 0,
+                "note" to rawNote,
+            ),
+        )
+        val e = EstimatePrompt.parse(json)
+        assertEquals("hithere" + "a".repeat(EstimatePrompt.NOTE_MAX - 7), e.note)
+        assertEquals(EstimatePrompt.NOTE_MAX, e.note.length)
+        assertTrue(e.note.none { it.isISOControl() })
     }
 }

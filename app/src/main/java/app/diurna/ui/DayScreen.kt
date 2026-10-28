@@ -81,7 +81,10 @@ import java.time.Instant
 import java.time.ZoneId
 
 @Composable
-fun DayScreen(vm: DayViewModel, contentPadding: PaddingValues) {
+fun DayScreen(
+    vm: DayViewModel, contentPadding: PaddingValues,
+    tracked: Set<Long>, onViewMetrics: (exerciseId: Long, cardio: Boolean) -> Unit,
+) {
     val ui by vm.day.collectAsStateWithLifecycle()
     val armed by vm.armed.collectAsStateWithLifecycle()
     val s = ui ?: return
@@ -104,7 +107,7 @@ fun DayScreen(vm: DayViewModel, contentPadding: PaddingValues) {
             }
         }
         item { MorningCard(s, vm) }
-        item { WorkoutCard(s, vm) }
+        item { WorkoutCard(s, vm, tracked, onViewMetrics) }
         item { FoodCard(s, vm) }
         if (s.date <= s.today) item { CheckInCard(s, vm) }
     }
@@ -226,7 +229,7 @@ private fun TemplatePicker(label: String, s: DayUi, onPick: (Long) -> Unit, onBl
 }
 
 @Composable
-private fun WorkoutCard(s: DayUi, vm: DayViewModel) {
+private fun WorkoutCard(s: DayUi, vm: DayViewModel, tracked: Set<Long>, onViewMetrics: (exerciseId: Long, cardio: Boolean) -> Unit) {
     val planned = s.plannedTemplate
     val w = s.workout
     if (w == null) {
@@ -291,6 +294,7 @@ private fun WorkoutCard(s: DayUi, vm: DayViewModel) {
                 collapsed = exerciseFoldKey(ex) in folded,
                 focusOf = ::focusOf,
                 nextSet = { id -> order.getOrNull(order.indexOf(id) + 1) },
+                onViewMetrics = if (ex.logged.exercise.id in tracked) onViewMetrics else null,
             )
         }
         val names by vm.exerciseNames.collectAsStateWithLifecycle()
@@ -320,6 +324,7 @@ private fun ExerciseBlock(
     ex: ExerciseUi, vm: DayViewModel, isFirst: Boolean, isLast: Boolean, collapsed: Boolean,
     focusOf: (setId: Long, reps: Boolean) -> FocusRequester,
     nextSet: (setId: Long) -> Long?,
+    onViewMetrics: ((exerciseId: Long, cardio: Boolean) -> Unit)?,
 ) {
     val logged = ex.logged
     val last = ex.last
@@ -365,6 +370,10 @@ private fun ExerciseBlock(
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("Move up") }, enabled = !isFirst, onClick = { menu = false; vm.moveExercise(logged.logged.id, up = true) })
                     DropdownMenuItem(text = { Text("Move down") }, enabled = !isLast, onClick = { menu = false; vm.moveExercise(logged.logged.id, up = false) })
+                    // Only offered once Metrics has a session to show; otherwise it would open nothing.
+                    onViewMetrics?.let { open ->
+                        DropdownMenuItem(text = { Text("View metrics") }, onClick = { menu = false; open(logged.exercise.id, isCardio) })
+                    }
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text("Remove") }, onClick = {
                         menu = false
