@@ -10,6 +10,7 @@ import app.diurna.ai.NutritionLabelReading
 import app.diurna.data.LibraryRepository.Result
 import app.diurna.data.MealEntity
 import app.diurna.data.RecipeIngredientEntity
+import app.diurna.data.recipe.RecipeImportResult
 import app.diurna.data.fdc.FdcNutritionProfile
 import app.diurna.data.fdc.FdcSearchHit
 import app.diurna.domain.Cardio
@@ -150,4 +151,10 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoIm
             RestaurantEstimateResult.Problem("Couldn't estimate (${e.javaClass.simpleName})")
         }
     }
+
+    /**
+     * Fetches a recipe page over hardened HTTPS and parses schema.org Recipe JSON-LD / microdata.
+     * Does not call any AI provider and never attaches API keys.
+     */
+    suspend fun importRecipeFromUrl(url: String): RecipeImportResult = c.recipeImporter.importFromUrl(url)
 }
