@@ -66,12 +66,13 @@ class AppContainer(context: Context) {
     val fdcClient = FdcClient(apiKey = { usdaKey.get() })
     val aminoResolver = AminoResolver(fdcClient, db.fdcFoodCacheDao())
     val network = NetworkMonitor(context)
+    val foodEstimator = SelectedFoodEstimator({ aiProvider.get() }, mapOf(
+        AiProvider.ANTHROPIC to ClaudeFoodEstimator({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
+        AiProvider.XAI to GrokFoodEstimator({ apiKeys.getValue(AiProvider.XAI).get() }),
+    ))
     val estimates = EstimateRunner(
         db,
-        SelectedFoodEstimator({ aiProvider.get() }, mapOf(
-            AiProvider.ANTHROPIC to ClaudeFoodEstimator({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
-            AiProvider.XAI to GrokFoodEstimator({ apiKeys.getValue(AiProvider.XAI).get() }),
-        )),
+        foodEstimator,
         photo = foodPhotos::read,
         detailed = { settings.detailedNutrition.first() },
         fdcKeyPresent = { usdaKey.get()?.isNotBlank() == true },

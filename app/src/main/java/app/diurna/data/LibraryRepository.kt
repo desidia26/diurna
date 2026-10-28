@@ -128,6 +128,15 @@ class LibraryRepository(
             MealEntity.KIND_RECIPE, MealEntity.KIND_RESTAURANT -> meal.kind
             else -> MealEntity.KIND_SIMPLE
         }
+        val restaurantName = meal.restaurantName?.trim()?.ifEmpty { null }
+        val nutritionSource = when {
+            kind != MealEntity.KIND_RESTAURANT -> null
+            meal.nutritionSource == MealEntity.SOURCE_PUBLISHED -> MealEntity.SOURCE_PUBLISHED
+            else -> MealEntity.SOURCE_ESTIMATE
+        }
+        if (kind == MealEntity.KIND_RESTAURANT && restaurantName == null) {
+            return Validated.Bad(Result.Problem("Add the restaurant name."))
+        }
         return Validated.Good(
             meal.copy(
                 name = name,
@@ -135,6 +144,8 @@ class LibraryRepository(
                 kind = kind,
                 servingsYield = meal.servingsYield?.takeIf { it > 0 },
                 cookedWeightG = meal.cookedWeightG?.takeIf { it > 0 },
+                restaurantName = restaurantName,
+                nutritionSource = nutritionSource,
             ),
         )
     }
