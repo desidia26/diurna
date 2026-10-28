@@ -32,12 +32,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.painterResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.diurna.ui.DayScreen
 import app.diurna.ui.DayViewModel
 import app.diurna.ui.LibraryViewModel
 import app.diurna.ui.RoutineViewModel
 import app.diurna.ui.SetupViewModel
 import app.diurna.ui.WeekViewModel
+import app.diurna.ui.WhatsNewDialog
+import app.diurna.ui.WhatsNewViewModel
 import app.diurna.ui.MetricsScreen
 import app.diurna.ui.MetricsViewModel
 import app.diurna.ui.containerViewModel
@@ -96,6 +99,9 @@ class MainActivity : ComponentActivity() {
         val c = container
         backupIfAsked(intent)
         if (savedInstanceState == null) openCheckInIfAsked(intent)
+        // Only an open from the launcher shows what's new, not the check-in notification or a script.
+        val launcherOpen = savedInstanceState == null && intent?.action == Intent.ACTION_MAIN
+        val freshInstall = packageManager.getPackageInfo(packageName, 0).let { it.firstInstallTime == it.lastUpdateTime }
         setContent {
             DiurnaTheme {
                 val dayVm = containerViewModel(c) { DayViewModel(it) }
@@ -104,8 +110,14 @@ class MainActivity : ComponentActivity() {
                 val routineVm = containerViewModel(c) { RoutineViewModel(it) }
                 val setupVm = containerViewModel(c) { SetupViewModel(it) }
                 val libraryVm = containerViewModel(c) { LibraryViewModel(it) }
+                val whatsNewVm = containerViewModel(c) { WhatsNewViewModel(it, freshInstall) }
+                var showWhatsNew by rememberSaveable { mutableStateOf(launcherOpen) }
+                if (showWhatsNew) WhatsNewDialog(whatsNewVm) { showWhatsNew = false }
                 var tab by rememberSaveable { mutableStateOf(Tab.Day) }
                 LaunchedEffect(showDayRequests) { if (showDayRequests > 0) tab = Tab.Day }
+                // An exercise opened from Day's menu goes back to Day, not to the Metrics list.
+                var backToDay by rememberSaveable { mutableStateOf(false) }
+                val tracked by metricsVm.tracked.collectAsStateWithLifecycle()
                 Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
                     bottomBar = {
@@ -113,7 +125,7 @@ class MainActivity : ComponentActivity() {
                             Tab.entries.forEach { t ->
                                 NavigationBarItem(
                                     selected = tab == t,
-                                    onClick = { tab = t },
+                                    onClick = { tab = t; backToDay = false },
                                     icon = { Icon(painterResource(t.icon), contentDescription = null) },
                                     label = { Text(t.label) },
                                 )
@@ -128,9 +140,16 @@ class MainActivity : ComponentActivity() {
                     Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
                         val inner = PaddingValues()
                         when (tab) {
-                            Tab.Day -> DayScreen(dayVm, inner)
+                            Tab.Day -> DayScreen(dayVm, inner, tracked) { id, cardio ->
+                                if (cardio) metricsVm.openCardio(id) else metricsVm.openExercise(id)
+                                backToDay = true
+                                tab = Tab.Metrics
+                            }
                             Tab.Week -> WeekScreen(weekVm, inner) { weekVm.goTo(it); tab = Tab.Day }
-                            Tab.Metrics -> MetricsScreen(metricsVm, inner)
+                            Tab.Metrics -> MetricsScreen(metricsVm, inner) {
+                                metricsVm.closeExercise()
+                                if (backToDay) { backToDay = false; tab = Tab.Day }
+                            }
                             Tab.Routine -> RoutineScreen(routineVm, inner)
                             Tab.Setup -> SetupScreen(setupVm, libraryVm, inner)
                         }

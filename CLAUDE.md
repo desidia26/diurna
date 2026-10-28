@@ -31,4 +31,4 @@ Check a build by its exit code, not by filtered output.
 - Match the surrounding code's comment density and naming. Comments explain why, not what.
 - UI is dark only: grey, black, purple, white.
 - New features start with a discussion of the data shape before code, unless asked to just build.
-- When something ships, add it to BACKLOG.md's Done table, and keep README's "How it works" table current.
+- When something ships, add it to BACKLOG.md's Done table, and keep README's "How it works" table current. Anything the user would notice also gets a `domain/Changelog.kt` entry (next id, plain words), shown once as What's new after the update.
