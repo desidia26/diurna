@@ -104,6 +104,12 @@ dependencies {
     implementation(libs.anthropic.java)
     // Raises the SDK's Jackson (it parses every AI reply) to a release with the security fixes.
     implementation(platform(libs.jackson.bom))
+    // Same for the SDK's Apache HttpClient 5 bits (unused for transport; OkHttp is), which have published advisories.
+    constraints {
+        implementation(libs.httpclient5)
+        implementation(libs.httpcore5)
+        implementation(libs.httpcore5.h2)
+    }
     implementation(libs.androidx.work.runtime.ktx)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
