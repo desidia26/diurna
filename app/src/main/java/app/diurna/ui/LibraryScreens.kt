@@ -48,6 +48,9 @@ import app.diurna.data.CatalogExercise
 import app.diurna.data.LibraryRepository.Result
 import app.diurna.data.MealEntity
 import app.diurna.data.RecipeIngredientEntity
+import app.diurna.data.recipe.ImportedRecipe
+import app.diurna.data.recipe.RecipeImportResult
+import app.diurna.data.recipe.toIngredientEntities
 import app.diurna.ui.theme.LocalStatusColors
 import kotlinx.coroutines.launch
 
@@ -105,6 +108,7 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
     var editing by remember { mutableStateOf<MealEntity?>(null) }
     var editingRecipe by remember { mutableStateOf<MealEntity?>(null) }
     var recipeLines by remember { mutableStateOf<List<RecipeIngredientEntity>>(emptyList()) }
+    var importUrlOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<MealEntity?>(null) }
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { PageHeader("Meals", onBack) }
@@ -128,6 +132,7 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
                     editingRecipe = MealEntity(name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_RECIPE, servingsYield = 1.0)
                     recipeLines = emptyList()
                 }) { Text("Add recipe") }
+                Button(onClick = { importUrlOpen = true }) { Text("Import URL") }
                 Button(onClick = {
                     editing = MealEntity(
                         name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0,
@@ -211,6 +216,17 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
             scanBarcode = vm::scanBarcode,
             onDismiss = { editingRecipe = null },
             onSave = vm::saveRecipe,
+        )
+    }
+    if (importUrlOpen) {
+        ImportRecipeUrlDialog(
+            onDismiss = { importUrlOpen = false },
+            onImport = { url -> vm.importRecipeFromUrl(url) },
+            onImported = { imported ->
+                importUrlOpen = false
+                recipeLines = imported.toIngredientEntities()
+                editingRecipe = imported.toMealDraft()
+            },
         )
     }
     confirmDelete?.let { m ->
@@ -670,5 +686,62 @@ private fun RenameDialog(e: CatalogExercise, editKind: Boolean, onDismiss: () ->
             }) { Text(if (editKind) "Save" else "Rename") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+
+/**
+ * Paste a recipe page URL. Fetches over hardened HTTPS and opens the recipe editor with
+ * parsed ingredients (nutrition left for the user to fill). No AI call; no API keys sent.
+ */
+@Composable
+private fun ImportRecipeUrlDialog(
+    onDismiss: () -> Unit,
+    onImport: suspend (String) -> RecipeImportResult,
+    onImported: (ImportedRecipe) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var url by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Import recipe from URL") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Hint("Paste a link to a recipe page that uses schema.org Recipe markup (most major recipe sites). Ingredients open in the editor for you to confirm — nothing is saved until you tap Save.")
+                OutlinedTextField(
+                    url,
+                    { url = it; problem = null },
+                    Modifier.fillMaxWidth(),
+                    label = { Text("https://…") },
+                    singleLine = true,
+                    enabled = !busy,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                )
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy && url.isNotBlank(),
+                onClick = {
+                    busy = true
+                    problem = null
+                    scope.launch {
+                        when (val r = onImport(url.trim())) {
+                            is RecipeImportResult.Ok -> onImported(r.recipe)
+                            is RecipeImportResult.Problem -> {
+                                problem = r.message
+                                busy = false
+                            }
+                        }
+                    }
+                },
+            ) { Text(if (busy) "Fetching…" else "Import") }
+        },
+        dismissButton = {
+            TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") }
+        },
     )
 }

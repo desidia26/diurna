@@ -37,6 +37,7 @@ import app.diurna.data.RoutineRepository
 import app.diurna.data.SettingsStore
 import app.diurna.data.fdc.AminoResolver
 import app.diurna.data.fdc.FdcClient
+import app.diurna.data.recipe.RecipeImporter
 import app.diurna.data.StepCounter
 import app.diurna.data.StepSource
 import app.diurna.steps.AndroidStepSensor
@@ -85,6 +86,8 @@ class AppContainer(context: Context) {
         AiProvider.ANTHROPIC to ClaudeCardioReader({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
         AiProvider.XAI to GrokCardioReader({ apiKeys.getValue(AiProvider.XAI).get() }),
     ))
+    /** HTTPS schema.org Recipe import; never sees API keys. */
+    val recipeImporter = RecipeImporter()
     /** Reads Nutrition Facts labels into the meal editor; person confirms before saving. */
     val labelReader: LabelReader = SelectedLabelReader({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeLabelReader({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
