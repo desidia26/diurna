@@ -52,6 +52,21 @@ data class MealEntity(
     val note: String? = null,
     /** Package barcode for meals added by scanning, normalized by [normalizeBarcode]. */
     val barcode: String? = null,
+    // Detailed nutrition (nullable = unknown). Opt-in in Setup; null is distinct from 0.
+    @ColumnInfo(name = "fiber_g") val fiberG: Int? = null,
+    @ColumnInfo(name = "soluble_fiber_g") val solubleFiberG: Int? = null,
+    @ColumnInfo(name = "insoluble_fiber_g") val insolubleFiberG: Int? = null,
+    @ColumnInfo(name = "sugars_g") val sugarsG: Int? = null,
+    @ColumnInfo(name = "added_sugars_g") val addedSugarsG: Int? = null,
+    @ColumnInfo(name = "starch_g") val starchG: Int? = null,
+    @ColumnInfo(name = "sat_fat_g") val satFatG: Int? = null,
+    @ColumnInfo(name = "mono_fat_g") val monoFatG: Int? = null,
+    @ColumnInfo(name = "poly_fat_g") val polyFatG: Int? = null,
+    @ColumnInfo(name = "trans_fat_g") val transFatG: Int? = null,
+    @ColumnInfo(name = "cholesterol_mg") val cholesterolMg: Int? = null,
+    @ColumnInfo(name = "omega3_g") val omega3G: Int? = null,
+    @ColumnInfo(name = "omega6_g") val omega6G: Int? = null,
+    @ColumnInfo(name = "omega9_g") val omega9G: Int? = null,
 )
 
 @Entity(tableName = "workout_template", indices = [Index(value = ["name"], unique = true)])
@@ -198,6 +213,20 @@ data class FoodEntryEntity(
     @ColumnInfo(name = "protein_g") val proteinG: Int? = null,
     @ColumnInfo(name = "carbs_g") val carbsG: Int? = null,
     @ColumnInfo(name = "fat_g") val fatG: Int? = null,
+    @ColumnInfo(name = "fiber_g") val fiberG: Int? = null,
+    @ColumnInfo(name = "soluble_fiber_g") val solubleFiberG: Int? = null,
+    @ColumnInfo(name = "insoluble_fiber_g") val insolubleFiberG: Int? = null,
+    @ColumnInfo(name = "sugars_g") val sugarsG: Int? = null,
+    @ColumnInfo(name = "added_sugars_g") val addedSugarsG: Int? = null,
+    @ColumnInfo(name = "starch_g") val starchG: Int? = null,
+    @ColumnInfo(name = "sat_fat_g") val satFatG: Int? = null,
+    @ColumnInfo(name = "mono_fat_g") val monoFatG: Int? = null,
+    @ColumnInfo(name = "poly_fat_g") val polyFatG: Int? = null,
+    @ColumnInfo(name = "trans_fat_g") val transFatG: Int? = null,
+    @ColumnInfo(name = "cholesterol_mg") val cholesterolMg: Int? = null,
+    @ColumnInfo(name = "omega3_g") val omega3G: Int? = null,
+    @ColumnInfo(name = "omega6_g") val omega6G: Int? = null,
+    @ColumnInfo(name = "omega9_g") val omega9G: Int? = null,
     /** What the estimate assumed, e.g. "1 cup rice, no guac". */
     @ColumnInfo(name = "estimate_note") val estimateNote: String? = null,
     @ColumnInfo(name = "estimate_model") val estimateModel: String? = null,
@@ -264,8 +293,16 @@ data class DateName(
 
 data class DateKcal(val date: String, val kcal: Int)
 
-/** Per-day macro grams from estimated food entries (null grams summed as 0 in the query). */
-data class DateMacros(val date: String, val proteinG: Int, val carbsG: Int, val fatG: Int)
+/** Per-day macro grams from estimated food entries (P/C/F nulls summed as 0; fiber nulls stay null via SUM). */
+data class DateMacros(
+    val date: String,
+    val proteinG: Int,
+    val carbsG: Int,
+    val fatG: Int,
+    val fiberG: Int? = null,
+    val solubleFiberG: Int? = null,
+    val insolubleFiberG: Int? = null,
+)
 
 data class CatalogExercise(
     val id: Long, val name: String, val hidden: Boolean, val logged: Int, val inRoutine: Int,

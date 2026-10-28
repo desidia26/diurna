@@ -112,7 +112,15 @@ class LibraryRepository(
         } else {
             val k = servings / entry.servings
             fun s(x: Int?) = ((x ?: 0) * k).roundToInt()
-            food.setMeal(entryId, null, servings, entry.text, s(entry.kcalLow), s(entry.proteinG), s(entry.carbsG), s(entry.fatG), System.currentTimeMillis())
+            fun o(x: Int?) = x?.let { (it * k).roundToInt() }
+            food.setMeal(
+                entryId, null, servings, entry.text, s(entry.kcalLow), s(entry.proteinG), s(entry.carbsG), s(entry.fatG),
+                o(entry.fiberG), o(entry.solubleFiberG), o(entry.insolubleFiberG),
+                o(entry.sugarsG), o(entry.addedSugarsG), o(entry.starchG),
+                o(entry.satFatG), o(entry.monoFatG), o(entry.polyFatG), o(entry.transFatG),
+                o(entry.cholesterolMg), o(entry.omega3G), o(entry.omega6G), o(entry.omega9G),
+                System.currentTimeMillis(),
+            )
         }
     }
 
@@ -133,7 +141,15 @@ class LibraryRepository(
 
     private suspend fun applyMeal(entryId: Long, meal: MealEntity, servings: Double, text: String = meal.name) {
         fun s(x: Int) = (x * servings).roundToInt()
-        food.setMeal(entryId, meal.id, servings, text, s(meal.kcal), s(meal.proteinG), s(meal.carbsG), s(meal.fatG), System.currentTimeMillis())
+        fun o(x: Int?) = x?.let { (it * servings).roundToInt() }
+        food.setMeal(
+            entryId, meal.id, servings, text, s(meal.kcal), s(meal.proteinG), s(meal.carbsG), s(meal.fatG),
+            o(meal.fiberG), o(meal.solubleFiberG), o(meal.insolubleFiberG),
+            o(meal.sugarsG), o(meal.addedSugarsG), o(meal.starchG),
+            o(meal.satFatG), o(meal.monoFatG), o(meal.polyFatG), o(meal.transFatG),
+            o(meal.cholesterolMg), o(meal.omega3G), o(meal.omega6G), o(meal.omega9G),
+            System.currentTimeMillis(),
+        )
     }
 
     // ---- Exercises ----

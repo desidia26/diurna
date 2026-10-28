@@ -152,24 +152,33 @@ object Metrics {
     /** Absolute stacked kcal, or each bar scaled to 100%. Remembered like [Range]. */
     enum class MacroChartMode(val label: String) { KCAL("kcal"), PERCENT("%") }
 
-    /** One day's (or week's average) calories from each macro. Null fields aren't used; use [total]. */
+    /**
+     * One day's (or week's average) calories from each macro. [carbsKcal] is available-carb energy
+     * after the fiber adjustment; [fiberKcal] is 0 when fiber is unknown (plain 4/4/9).
+     */
     data class MacroStack(
         val date: LocalDate,
         val proteinKcal: Double,
         val carbsKcal: Double,
         val fatKcal: Double,
+        val fiberKcal: Double = 0.0,
     ) {
-        val total: Double get() = proteinKcal + carbsKcal + fatKcal
+        val total: Double get() = proteinKcal + carbsKcal + fiberKcal + fatKcal
     }
 
-    /** Grams → kcal. A missing gram count is 0. */
-    fun macroKcal(date: LocalDate, proteinG: Int?, carbsG: Int?, fatG: Int?): MacroStack =
-        MacroStack(
-            date = date,
-            proteinKcal = (proteinG ?: 0) * 4.0,
-            carbsKcal = (carbsG ?: 0) * 4.0,
-            fatKcal = (fatG ?: 0) * 9.0,
-        )
+    /** Grams → kcal via [MacroEnergy]. Missing P/C/F count as 0; unknown fiber means no adjustment. */
+    fun macroKcal(
+        date: LocalDate,
+        proteinG: Int?,
+        carbsG: Int?,
+        fatG: Int?,
+        fiberG: Int? = null,
+        solubleFiberG: Int? = null,
+        insolubleFiberG: Int? = null,
+    ): MacroStack {
+        val e = MacroEnergy.kcal(proteinG, carbsG, fatG, fiberG, solubleFiberG, insolubleFiberG)
+        return MacroStack(date, e.proteinKcal, e.carbsKcal, e.fatKcal, e.fiberKcal)
+    }
 
     /**
      * One stack per day in [from]..[to]. Days with no entry in [byDate] are null (a chart gap).
@@ -192,6 +201,7 @@ object Metrics {
                 proteinKcal = days.map { it.proteinKcal }.average(),
                 carbsKcal = days.map { it.carbsKcal }.average(),
                 fatKcal = days.map { it.fatKcal }.average(),
+                fiberKcal = days.map { it.fiberKcal }.average(),
             )
         }.toList()
     }
@@ -208,6 +218,7 @@ object Metrics {
             proteinKcal = 100.0 * stack.proteinKcal / t,
             carbsKcal = 100.0 * stack.carbsKcal / t,
             fatKcal = 100.0 * stack.fatKcal / t,
+            fiberKcal = 100.0 * stack.fiberKcal / t,
         )
     }
 
@@ -224,6 +235,7 @@ object Metrics {
             proteinKcal = known.map { it.proteinKcal }.average(),
             carbsKcal = known.map { it.carbsKcal }.average(),
             fatKcal = known.map { it.fatKcal }.average(),
+            fiberKcal = known.map { it.fiberKcal }.average(),
         )
     }
 }

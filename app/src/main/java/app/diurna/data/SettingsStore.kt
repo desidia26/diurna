@@ -70,6 +70,16 @@ class SettingsStore(private val context: Context) : StepStateStore {
         context.dataStore.edit { it[cardioKey] = enabled }
     }
 
+    // ---- Detailed nutrition ----
+    // Off by default: basic P/C/F users see no change. When on, meal form and Day food rows show fiber, sugars, lipids.
+    private val detailedNutritionKey = booleanPreferencesKey("detailed_nutrition")
+    val detailedNutrition: Flow<Boolean> =
+        context.dataStore.data.map { it[detailedNutritionKey] ?: false }.distinctUntilChanged()
+
+    suspend fun setDetailedNutrition(enabled: Boolean) {
+        context.dataStore.edit { it[detailedNutritionKey] = enabled }
+    }
+
     // ---- What's new ----
     // The newest Changelog entry already shown. Null until the first launch that has a changelog.
     private val changelogSeenKey = intPreferencesKey("changelog_seen")

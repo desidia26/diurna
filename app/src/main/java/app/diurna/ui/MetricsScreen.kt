@@ -180,17 +180,25 @@ private fun MacroCardView(
             )
             val pct = Metrics.macroPercent(avg)
             if (pct != null) {
+                val fiberBit = if (avg.fiberKcal > 0) " · Fiber ${pct.fiberKcal.roundToInt()}%" else ""
                 Hint(
-                    "P ${pct.proteinKcal.roundToInt()}% · C ${pct.carbsKcal.roundToInt()}% · F ${pct.fatKcal.roundToInt()}%",
+                    "P ${pct.proteinKcal.roundToInt()}% · C ${pct.carbsKcal.roundToInt()}%$fiberBit · F ${pct.fatKcal.roundToInt()}%",
                 )
             }
         }
         val c = MaterialTheme.colorScheme
         val fatColor = LocalStatusColors.current.warn
-        val colors = listOf(c.primary, c.secondary, fatColor)
+        // Fourth fiber segment only when any bar has fiber kcal, so basic P/C/F users see the same 3-segment chart.
+        val showFiber = card.stacks.any { (it?.fiberKcal ?: 0.0) > 0.0 }
+        val fiberColor = c.tertiary
+        val colors = if (showFiber) listOf(c.primary, c.secondary, fiberColor, fatColor)
+        else listOf(c.primary, c.secondary, fatColor)
         val shown = if (card.mode == Metrics.MacroChartMode.PERCENT) card.percentStacks else card.stacks
         val bars = shown.map { s ->
-            s?.let { StackBar(listOf(it.proteinKcal, it.carbsKcal, it.fatKcal)) }
+            s?.let {
+                if (showFiber) StackBar(listOf(it.proteinKcal, it.carbsKcal, it.fiberKcal, it.fatKcal))
+                else StackBar(listOf(it.proteinKcal, it.carbsKcal, it.fatKcal))
+            }
         }
         val isPct = card.mode == Metrics.MacroChartMode.PERCENT
         val ref = card.targetKcal?.toDouble()?.takeIf { !isPct }
@@ -211,6 +219,7 @@ private fun MacroCardView(
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Legend("Protein", c.primary)
             Legend("Carbs", c.secondary)
+            if (showFiber) Legend("Fiber", fiberColor)
             Legend("Fat", fatColor)
             if (ref != null) Hint("Dashed = target")
             else if (!card.daily) Hint("Week averages")

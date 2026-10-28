@@ -17,6 +17,10 @@ object Changelog {
             2, "2026-10-28", "Macros on Metrics",
             "A Macros card shows your calories over time, split into protein, carbs and fat. Switch between calories and percentages; in calories, a dashed line marks your target.",
         ),
+        Entry(
+            3, "2026-10-28", "Detailed nutrition",
+            "Turn on Detailed nutrition in Setup → Library to add fiber, sugars, starch and the kinds of fat to saved meals. Barcode scans fill them in when the label has them, and Day's food entries can expand to show them. Once fiber is logged, the Macros card shows it separately.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }

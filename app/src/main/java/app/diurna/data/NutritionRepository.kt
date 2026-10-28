@@ -39,11 +39,36 @@ class NutritionRepository(
 
 fun List<FoodEntryEntity>.totals(): NutritionTotals {
     val done = filter { it.estimatedAt != null }
+    /** Sum known values; null when every entry left the field unknown (distinct from a real 0). */
+    fun sumOpt(pick: (FoodEntryEntity) -> Int?): Int? {
+        var any = false
+        var sum = 0
+        for (e in done) {
+            val v = pick(e) ?: continue
+            any = true
+            sum += v
+        }
+        return if (any) sum else null
+    }
     return NutritionTotals(
         kcal = done.sumOf { it.kcalMid ?: 0 },
         proteinG = done.sumOf { it.proteinG ?: 0 },
         carbsG = done.sumOf { it.carbsG ?: 0 },
         fatG = done.sumOf { it.fatG ?: 0 },
+        fiberG = sumOpt { it.fiberG },
+        solubleFiberG = sumOpt { it.solubleFiberG },
+        insolubleFiberG = sumOpt { it.insolubleFiberG },
+        sugarsG = sumOpt { it.sugarsG },
+        addedSugarsG = sumOpt { it.addedSugarsG },
+        starchG = sumOpt { it.starchG },
+        satFatG = sumOpt { it.satFatG },
+        monoFatG = sumOpt { it.monoFatG },
+        polyFatG = sumOpt { it.polyFatG },
+        transFatG = sumOpt { it.transFatG },
+        cholesterolMg = sumOpt { it.cholesterolMg },
+        omega3G = sumOpt { it.omega3G },
+        omega6G = sumOpt { it.omega6G },
+        omega9G = sumOpt { it.omega9G },
         estimated = done.size,
         pending = count { it.estimatedAt == null && it.estimateError == null },
         failed = count { it.estimateError != null },
