@@ -59,6 +59,9 @@ data class DayUi(
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
+    /** Chosen AI for food estimates and cardio photo reads; shown in the Log-from-photo disclosure. */
+    val aiProvider = c.aiProvider.selected
+
     private val date get() = c.selectedDate.value.value
 
     val day: StateFlow<DayUi?> = c.selectedDate.value.flatMapLatest { d ->

@@ -123,7 +123,7 @@ class Backups(
         private const val KEEP = 14
         private val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
 
-        /** Extra on MainActivity's launch intent that asks for a backup (used by scripts/backup-db). */
+        /** Extra on BackupTriggerActivity's intent that asks for a backup (used by scripts/backup-db). */
         const val EXTRA_BACKUP = "backup"
     }
 }
