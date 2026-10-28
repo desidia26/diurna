@@ -28,3 +28,6 @@ local.properties
 
 # Local run logs (release timings)
 /logs/
+
+# Local AI eval reports (JSON/markdown); never commit live replies that might leak prompts+PII
+/ai-evals/out/

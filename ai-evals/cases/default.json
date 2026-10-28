@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "description": "Small default set for CI and local smoke runs. Keep cheap.",
+  "passThreshold": 0.7,
+  "cases": [
+    {
+      "id": "food-burrito-bowl",
+      "prompt": "food",
+      "tags": ["typical"],
+      "input": { "text": "chipotle burrito bowl with chicken, brown rice, black beans, salsa, no guac, no cheese" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 620,
+        "kcalTolPct": 45,
+        "proteinG": { "min": 35, "max": 70 },
+        "carbsG": { "min": 55, "max": 110 },
+        "fatG": { "min": 8, "max": 30 },
+        "macrosConsistentWithKcal": true,
+        "noteMaxLen": 120
+      }
+    },
+    {
+      "id": "food-apple",
+      "prompt": "food",
+      "tags": ["typical"],
+      "input": { "text": "one medium apple" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 95,
+        "kcalTolPct": 50,
+        "proteinG": { "min": 0, "max": 2 },
+        "carbsG": { "min": 15, "max": 30 },
+        "fatG": { "min": 0, "max": 1 },
+        "macrosConsistentWithKcal": true
+      }
+    },
+    {
+      "id": "food-eggs-toast",
+      "prompt": "food",
+      "tags": ["typical"],
+      "input": { "text": "2 scrambled eggs with butter and 1 slice of toast with jam" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 380,
+        "kcalTolPct": 45,
+        "proteinG": { "min": 12, "max": 28 },
+        "carbsG": { "min": 15, "max": 45 },
+        "fatG": { "min": 14, "max": 35 },
+        "macrosConsistentWithKcal": true
+      }
+    },
+    {
+      "id": "food-not-food-run",
+      "prompt": "food",
+      "tags": ["edge"],
+      "input": { "text": "I ran a 5k this morning, felt good" },
+      "expect": {
+        "outcome": "not_food"
+      }
+    },
+    {
+      "id": "food-empty",
+      "prompt": "food",
+      "tags": ["edge"],
+      "input": { "text": "" },
+      "expect": {
+        "outcome": "not_food_or_zeros"
+      }
+    },
+    {
+      "id": "food-nonsense",
+      "prompt": "food",
+      "tags": ["edge"],
+      "input": { "text": "asdf qwerty zxcv 12345 !!!" },
+      "expect": {
+        "outcome": "not_food_or_zeros"
+      }
+    },
+    {
+      "id": "food-photo-plate",
+      "prompt": "food",
+      "tags": ["vision", "typical"],
+      "input": {
+        "text": "lunch on a plate",
+        "image": "images/food-synthetic-plate.jpg"
+      },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 450,
+        "kcalTolPct": 80,
+        "proteinG": { "min": 5, "max": 60 },
+        "carbsG": { "min": 10, "max": 80 },
+        "fatG": { "min": 5, "max": 50 },
+        "macrosConsistentWithKcal": true
+      }
+    },
+    {
+      "id": "food-photo-not-food",
+      "prompt": "food",
+      "tags": ["vision", "edge"],
+      "input": {
+        "text": "what I ate",
+        "image": "images/edge-abstract-shapes.jpg"
+      },
+      "expect": {
+        "outcome": "not_food_or_zeros"
+      }
+    },
+    {
+      "id": "cardio-rower",
+      "prompt": "cardio",
+      "tags": ["vision", "typical"],
+      "input": { "image": "images/cardio-rower-synthetic.jpg" },
+      "expect": {
+        "outcome": "reading",
+        "distanceM": { "min": 1900, "max": 2100 },
+        "durationS": { "min": 440, "max": 470 },
+        "kcal": { "min": 120, "max": 170 },
+        "avgHr": { "min": 130, "max": 160 }
+      }
+    },
+    {
+      "id": "cardio-treadmill",
+      "prompt": "cardio",
+      "tags": ["vision", "typical"],
+      "input": { "image": "images/cardio-treadmill-synthetic.jpg" },
+      "expect": {
+        "outcome": "reading",
+        "distanceM": { "min": 4800, "max": 5200 },
+        "durationS": { "min": 1900, "max": 2000 },
+        "kcal": { "min": 250, "max": 380 }
+      }
+    },
+    {
+      "id": "cardio-not-workout",
+      "prompt": "cardio",
+      "tags": ["vision", "edge"],
+      "input": { "image": "images/edge-abstract-shapes.jpg" },
+      "expect": {
+        "outcome": "reject"
+      }
+    }
+  ]
+}
