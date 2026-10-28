@@ -258,19 +258,23 @@ class MigrationTest {
             )
         }
         val db = helper.runMigrationsAndValidate(dbName + "-11", 11, true)
-        db.query("SELECT his_mg, lys_mg, ingredients_json, fiber_g FROM meal WHERE id = 1").use {
+        db.query("SELECT his_mg, lys_mg, ingredients_json, amino_matched, amino_total, fiber_g FROM meal WHERE id = 1").use {
             assertTrue(it.moveToFirst())
             assertTrue("his starts null", it.isNull(0))
             assertTrue("lys starts null", it.isNull(1))
             assertTrue("ingredients starts null", it.isNull(2))
-            assertEquals(6, it.getInt(3))
+            assertTrue("amino_matched starts null", it.isNull(3))
+            assertTrue("amino_total starts null", it.isNull(4))
+            assertEquals(6, it.getInt(5))
         }
-        db.query("SELECT his_mg, trp_mg, ingredients_json, protein_g FROM food_entry WHERE id = 1").use {
+        db.query("SELECT his_mg, trp_mg, ingredients_json, amino_matched, amino_total, protein_g FROM food_entry WHERE id = 1").use {
             assertTrue(it.moveToFirst())
             assertTrue(it.isNull(0))
             assertTrue(it.isNull(1))
             assertTrue(it.isNull(2))
-            assertEquals(28, it.getInt(3))
+            assertTrue(it.isNull(3))
+            assertTrue(it.isNull(4))
+            assertEquals(28, it.getInt(5))
         }
         db.query("SELECT COUNT(*) FROM fdc_food_cache").use {
             assertTrue(it.moveToFirst())

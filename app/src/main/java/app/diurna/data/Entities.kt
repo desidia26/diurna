@@ -81,7 +81,14 @@ data class MealEntity(
     @ColumnInfo(name = "tyr_mg") val tyrMg: Int? = null,
     /** JSON list of ingredients used for FDC amino lookup (name, grams, optional match). */
     @ColumnInfo(name = "ingredients_json") val ingredientsJson: String? = null,
-)
+    /** FDC match counts; null when no lookup. Partial when matched < total. */
+    @ColumnInfo(name = "amino_matched") val aminoMatched: Int? = null,
+    @ColumnInfo(name = "amino_total") val aminoTotal: Int? = null,
+) {
+    /** True when some but not all ingredients matched for aminos. */
+    val aminoPartial: Boolean get() =
+        aminoMatched != null && aminoTotal != null && aminoMatched < aminoTotal && aminoMatched > 0
+}
 
 @Entity(tableName = "workout_template", indices = [Index(value = ["name"], unique = true)])
 data class WorkoutTemplateEntity(
@@ -253,6 +260,8 @@ data class FoodEntryEntity(
     @ColumnInfo(name = "cys_mg") val cysMg: Int? = null,
     @ColumnInfo(name = "tyr_mg") val tyrMg: Int? = null,
     @ColumnInfo(name = "ingredients_json") val ingredientsJson: String? = null,
+    @ColumnInfo(name = "amino_matched") val aminoMatched: Int? = null,
+    @ColumnInfo(name = "amino_total") val aminoTotal: Int? = null,
     /** What the estimate assumed, e.g. "1 cup rice, no guac". */
     @ColumnInfo(name = "estimate_note") val estimateNote: String? = null,
     @ColumnInfo(name = "estimate_model") val estimateModel: String? = null,
@@ -273,6 +282,8 @@ data class FoodEntryEntity(
     val photo: String? = null,
 ) {
     val isMeal: Boolean get() = source == SOURCE_MEAL
+    val aminoPartial: Boolean get() =
+        aminoMatched != null && aminoTotal != null && aminoMatched < aminoTotal && aminoMatched > 0
 
     companion object {
         const val SOURCE_AI = "ai"
@@ -350,6 +361,8 @@ data class DateMacros(
     val valMg: Int? = null,
     val cysMg: Int? = null,
     val tyrMg: Int? = null,
+    /** True when any entry that day had a partial FDC amino match. */
+    val aminoPartial: Boolean = false,
 )
 
 data class CatalogExercise(

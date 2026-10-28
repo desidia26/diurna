@@ -46,6 +46,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.diurna.R
 import app.diurna.domain.Cardio
 import app.diurna.domain.Metrics
+import androidx.compose.runtime.remember
+import app.diurna.domain.AminoAcids
 import app.diurna.ui.theme.LocalStatusColors
 import java.time.LocalDate
 import kotlin.math.abs
@@ -390,48 +392,115 @@ private fun LipidDetailCardView(card: LipidDetailCard) {
 private fun AminoDetailCardView(card: AminoDetailCard) {
     val s = card.summary
     val avg = s.average
-    SectionCard("Amino acids", chip = { Hint(s.coverageLabel) }) {
-        val rows = listOf(
-            "His" to avg.hisMg, "Ile" to avg.ileMg, "Leu" to avg.leuMg, "Lys" to avg.lysMg,
-            "Met" to avg.metMg, "Phe" to avg.pheMg, "Thr" to avg.thrMg, "Trp" to avg.trpMg,
-            "Val" to avg.valMg, "Cys" to avg.cysMg, "Tyr" to avg.tyrMg,
-        ).filter { it.second != null }
-        if (rows.isEmpty()) {
+    val refs = card.refs
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    SectionCard("Amino acids", chip = {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Hint(s.coverageLabel)
+            if (s.daysWithPartial > 0) {
+                Hint("partial")
+            }
+        }
+    }) {
+        val primary = AminoAcids.PRIMARY_BARS.mapNotNull { (label, pick) ->
+            pick(avg)?.let { label to it }
+        }
+        if (primary.isEmpty()) {
             Hint("No amino data in this range.")
             return@SectionCard
         }
-        val maxMg = rows.maxOf { it.second!!.toDouble() }.coerceAtLeast(1.0)
+        val refMax = refs?.let { r ->
+            primary.mapNotNull { (label, _) -> r.forPrimaryLabel(label) }.maxOrNull() ?: 0
+        } ?: 0
+        val maxMg = maxOf(primary.maxOf { it.second }, refMax).toDouble().coerceAtLeast(1.0)
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            rows.forEach { (label, mg) ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(label, Modifier.width(36.dp), fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.labelMedium)
-                    val frac = (mg!!.toDouble() / maxMg).toFloat().coerceIn(0f, 1f)
+            primary.forEach { (label, mg) ->
+                AminoBarRow(label, mg, refs?.forPrimaryLabel(label), maxMg, wideLabel = label.contains('+'))
+            }
+            if (expanded) {
+                val detail = AminoAcids.PAIR_DETAIL.mapNotNull { (label, pick) ->
+                    pick(avg)?.let { label to it }
+                }
+                if (detail.isNotEmpty()) {
+                    Hint("Pair members")
+                    detail.forEach { (label, mg) ->
+                        AminoBarRow(label, mg, refs?.forDetailLabel(label), maxMg, wideLabel = false)
+                    }
+                }
+            }
+            TextButton(
+                onClick = { expanded = !expanded },
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                Text(if (expanded) "Hide Met/Cys/Phe/Tyr" else "Show Met, Cys, Phe, Tyr")
+            }
+            when {
+                refs != null && card.weightLb != null ->
+                    Hint(
+                        "Dashed marks: WHO/FAO/UNU 2007 adult average requirements " +
+                            "(TRS 935 Table 23) at %.0f lb — reference lines, not targets.".format(card.weightLb),
+                    )
+                else ->
+                    Hint("Log a body weight to show WHO adult amino requirement reference lines.")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AminoBarRow(
+    label: String,
+    mg: Int,
+    refMg: Int?,
+    maxMg: Double,
+    wideLabel: Boolean,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            Modifier.width(if (wideLabel) 64.dp else 36.dp),
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        val frac = (mg.toDouble() / maxMg).toFloat().coerceIn(0f, 1f)
+        Box(
+            Modifier
+                .weight(1f)
+                .height(10.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(frac)
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+            if (refMg != null && refMg > 0) {
+                val refFrac = (refMg.toDouble() / maxMg).toFloat().coerceIn(0f, 1f)
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxHeight()
+                        .fillMaxWidth(refFrac),
+                ) {
                     Box(
                         Modifier
-                            .weight(1f)
-                            .height(10.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(frac)
-                                .background(MaterialTheme.colorScheme.primary),
-                        )
-                    }
-                    Text(
-                        "%,d mg".format(mg),
-                        Modifier.width(72.dp),
-                        textAlign = TextAlign.End,
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.labelMedium,
+                            .align(Alignment.CenterEnd)
+                            .width(2.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)),
                     )
                 }
             }
-            Hint("Average daily mg over days with amino data. No targets yet.")
         }
+        Text(
+            "%,d mg".format(mg),
+            Modifier.width(72.dp),
+            textAlign = TextAlign.End,
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 

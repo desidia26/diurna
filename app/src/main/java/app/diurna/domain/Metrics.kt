@@ -275,6 +275,8 @@ object Metrics {
         val valMg: Int? = null,
         val cysMg: Int? = null,
         val tyrMg: Int? = null,
+        /** True when any entry that day had a partial FDC amino match. */
+        val aminoPartial: Boolean = false,
     ) {
         /** Any carb sub-field known (fiber / sugars / starch). */
         val hasCarbDetail: Boolean
@@ -501,16 +503,24 @@ object Metrics {
         )
     }
 
-    /** Average daily amino mg over days that reported any amino; no targets/reference lines. */
+    /**
+     * Average daily amino mg over days that reported any amino.
+     * [daysWithPartial] counts days that include at least one partial FDC match.
+     * WHO adult-requirement reference lines are drawn in the UI (not stored here).
+     */
     data class AminoSummary(
         val average: AminoAcids,
         val daysWithAminos: Int,
         val daysWithFood: Int,
+        val daysWithPartial: Int = 0,
     ) {
-        val coverageLabel: String get() = when {
-            daysWithFood == 0 -> "No food days"
-            daysWithAminos == daysWithFood -> if (daysWithFood == 1) "1 day" else "$daysWithFood days"
-            else -> "Amino data on $daysWithAminos of $daysWithFood days"
+        val coverageLabel: String get() {
+            val base = when {
+                daysWithFood == 0 -> "No food days"
+                daysWithAminos == daysWithFood -> if (daysWithFood == 1) "1 day" else "$daysWithFood days"
+                else -> "Amino data on $daysWithAminos of $daysWithFood days"
+            }
+            return if (daysWithPartial > 0) "$base ($daysWithPartial partial)" else base
         }
     }
 
@@ -519,6 +529,7 @@ object Metrics {
         val with = byDate.values.filter { it.hasAminos }
         if (with.isEmpty()) return null
         val avg = AminoAcids.average(with.map { it.aminos() }) ?: return null
-        return AminoSummary(avg, with.size, byDate.size)
+        val partial = with.count { it.aminoPartial }
+        return AminoSummary(avg, with.size, byDate.size, partial)
     }
 }

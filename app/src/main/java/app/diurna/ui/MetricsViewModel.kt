@@ -4,6 +4,7 @@ import app.diurna.AppContainer
 import app.diurna.data.MetricsRepository
 import app.diurna.domain.Cardio
 import app.diurna.domain.Metrics
+import app.diurna.domain.WhoAminoRefs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,6 +78,9 @@ data class LipidDetailCard(
 
 data class AminoDetailCard(
     val summary: Metrics.AminoSummary,
+    /** WHO TRS 935 adult requirement refs scaled by latest logged weight; null → hide lines. */
+    val refs: WhoAminoRefs.Scaled? = null,
+    val weightLb: Double? = null,
 )
 
 data class TrainingCard(
@@ -365,8 +369,13 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
     private fun lipidDetailCard(s: MetricsRepository.Snapshot): LipidDetailCard? =
         Metrics.lipidSummary(s.macroGrams)?.let(::LipidDetailCard)
 
-    private fun aminoDetailCard(s: MetricsRepository.Snapshot): AminoDetailCard? =
-        Metrics.aminoSummary(s.macroGrams)?.let(::AminoDetailCard)
+    private fun aminoDetailCard(s: MetricsRepository.Snapshot): AminoDetailCard? {
+        val summary = Metrics.aminoSummary(s.macroGrams) ?: return null
+        val weightLb = s.days.mapNotNull { d ->
+            d.bodyWeight?.let { LocalDate.parse(d.date) to it }
+        }.maxByOrNull { it.first }?.second
+        return AminoDetailCard(summary, WhoAminoRefs.scaleLb(weightLb), weightLb)
+    }
 
     private fun cardioCard(s: MetricsRepository.Snapshot): CardioCard {
         val ranged = s.cardio.filter { it.date in s.from..s.to }

@@ -36,6 +36,7 @@ data class AminoAcids(
     )
 
     companion object {
+        /** All individual fields (entry detail / expanded pair members). */
         val LABELS = listOf(
             "His" to AminoAcids::hisMg,
             "Ile" to AminoAcids::ileMg,
@@ -47,6 +48,29 @@ data class AminoAcids(
             "Trp" to AminoAcids::trpMg,
             "Val" to AminoAcids::valMg,
             "Cys" to AminoAcids::cysMg,
+            "Tyr" to AminoAcids::tyrMg,
+        )
+
+        /**
+         * Primary Metrics bars: other EAAs individually; sulfur and aromatic as WHO pairs.
+         * Met/Cys/Phe/Tyr appear separately in the expanded detail under the pairs.
+         */
+        val PRIMARY_BARS: List<Pair<String, (AminoAcids) -> Int?>> = listOf(
+            "His" to AminoAcids::hisMg,
+            "Ile" to AminoAcids::ileMg,
+            "Leu" to AminoAcids::leuMg,
+            "Lys" to AminoAcids::lysMg,
+            "Met+Cys" to AminoAcids::metCysMg,
+            "Phe+Tyr" to AminoAcids::pheTyrMg,
+            "Thr" to AminoAcids::thrMg,
+            "Trp" to AminoAcids::trpMg,
+            "Val" to AminoAcids::valMg,
+        )
+
+        val PAIR_DETAIL: List<Pair<String, (AminoAcids) -> Int?>> = listOf(
+            "Met" to AminoAcids::metMg,
+            "Cys" to AminoAcids::cysMg,
+            "Phe" to AminoAcids::pheMg,
             "Tyr" to AminoAcids::tyrMg,
         )
 

@@ -17,23 +17,32 @@ class AminoResolver(
     data class Result(
         val aminos: AminoAcids?,
         val ingredients: List<FoodIngredient>,
-    )
+        /** Ingredients that contributed an FDC amino profile. */
+        val matchedCount: Int,
+        /** Ingredients offered for lookup. */
+        val totalCount: Int,
+    ) {
+        /** Some but not all ingredients matched — keep the partial sum and flag it. */
+        val partial: Boolean get() = matchedCount > 0 && matchedCount < totalCount
+    }
 
     suspend fun resolve(ingredients: List<FoodIngredient>): Result {
-        if (ingredients.isEmpty()) return Result(null, ingredients)
-        val matched = ArrayList<FoodIngredient>(ingredients.size)
+        if (ingredients.isEmpty()) return Result(null, ingredients, 0, 0)
+        val out = ArrayList<FoodIngredient>(ingredients.size)
         val parts = ArrayList<AminoAcids>()
+        var matchedCount = 0
         for (ing in ingredients) {
             val hit = lookup(ing.name)
             if (hit == null) {
-                matched += ing
+                out += ing
                 continue
             }
-            matched += ing.copy(fdcId = hit.fdcId, matchedDescription = hit.description)
+            matchedCount++
+            out += ing.copy(fdcId = hit.fdcId, matchedDescription = hit.description)
             parts += hit.forGrams(ing.grams)
         }
         val summed = if (parts.isEmpty()) null else AminoAcids.sum(parts)
-        return Result(summed?.takeIf { it.hasAny }, matched)
+        return Result(summed?.takeIf { it.hasAny }, out, matchedCount, ingredients.size)
     }
 
     private suspend fun lookup(name: String): AminoProfile? {

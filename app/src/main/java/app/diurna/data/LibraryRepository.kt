@@ -121,7 +121,7 @@ class LibraryRepository(
                 o(entry.cholesterolMg), o(entry.omega3G), o(entry.omega6G), o(entry.omega9G),
                 o(entry.hisMg), o(entry.ileMg), o(entry.leuMg), o(entry.lysMg), o(entry.metMg),
                 o(entry.pheMg), o(entry.thrMg), o(entry.trpMg), o(entry.valMg), o(entry.cysMg), o(entry.tyrMg),
-                entry.ingredientsJson,
+                entry.ingredientsJson, entry.aminoMatched, entry.aminoTotal,
                 System.currentTimeMillis(),
             )
         }
@@ -153,7 +153,7 @@ class LibraryRepository(
             o(meal.cholesterolMg), o(meal.omega3G), o(meal.omega6G), o(meal.omega9G),
             o(meal.hisMg), o(meal.ileMg), o(meal.leuMg), o(meal.lysMg), o(meal.metMg),
             o(meal.pheMg), o(meal.thrMg), o(meal.trpMg), o(meal.valMg), o(meal.cysMg), o(meal.tyrMg),
-            meal.ingredientsJson,
+            meal.ingredientsJson, meal.aminoMatched, meal.aminoTotal,
             System.currentTimeMillis(),
         )
     }

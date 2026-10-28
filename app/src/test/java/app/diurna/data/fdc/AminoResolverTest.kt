@@ -38,6 +38,8 @@ class AminoResolverTest {
         assertEquals(624, r1.aminos!!.lysMg)
         assertEquals(80, r1.aminos!!.trpMg)
         assertEquals(10, r1.ingredients[0].fdcId)
+        assertEquals(1, r1.matchedCount)
+        assertEquals(1, r1.totalCount)
         assertEquals(1, searches)
 
         val r2 = resolver.resolve(listOf(FoodIngredient("Lentils, Cooked", 50.0)))
@@ -73,5 +75,33 @@ class AminoResolverTest {
         assertEquals(99, decoded[0].fdcId)
         assertEquals("Tofu, raw, firm", decoded[0].matchedDescription)
         assertNull(decoded[1].fdcId)
+    }
+
+    @Test fun partialWhenSomeMiss() = runBlocking {
+        val cache = MemCache()
+        val transport = FdcTransport { path, _ ->
+            when {
+                path.contains("/food/10") || path.endsWith("/10") ->
+                    """{"fdcId":10,"description":"Lentils","foodNutrients":[
+                      {"nutrient":{"id":1214},"amount":0.5}
+                    ]}"""
+                path.contains("search") && "lentils" in path ->
+                    """{"foods":[{"fdcId":10,"description":"Lentils"}]}"""
+                path.contains("search") -> """{"foods":[]}"""
+                else -> null
+            }
+        }
+        val resolver = AminoResolver(FdcClient({ "k" }, transport), cache)
+        val r = resolver.resolve(
+            listOf(
+                FoodIngredient("lentils", 100.0),
+                FoodIngredient("mystery dust", 10.0),
+            ),
+        )
+        assertEquals(1, r.matchedCount)
+        assertEquals(2, r.totalCount)
+        assertTrue(r.partial)
+        assertEquals(500, r.aminos!!.lysMg)
+        assertNull(r.ingredients[1].fdcId)
     }
 }

@@ -184,6 +184,9 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
             sugarsG = f.sugarsG, addedSugarsG = f.addedSugarsG, starchG = f.starchG,
             satFatG = f.satFatG, monoFatG = f.monoFatG, polyFatG = f.polyFatG, transFatG = f.transFatG,
             cholesterolMg = f.cholesterolMg, omega3G = f.omega3G, omega6G = f.omega6G, omega9G = f.omega9G,
+            hisMg = f.hisMg, ileMg = f.ileMg, leuMg = f.leuMg, lysMg = f.lysMg, metMg = f.metMg,
+            pheMg = f.pheMg, thrMg = f.thrMg, trpMg = f.trpMg, valMg = f.valMg, cysMg = f.cysMg, tyrMg = f.tyrMg,
+            ingredientsJson = f.ingredientsJson, aminoMatched = f.aminoMatched, aminoTotal = f.aminoTotal,
         )
         MealDialog("Save as meal", seed, detailed = detailed, onDismiss = { savingAsMeal = null }) { vm.saveEntryAsMeal(f.id, it) }
     }
@@ -326,9 +329,23 @@ private fun NutritionDetail(f: FoodEntryEntity) {
         if (aminos.isNotEmpty()) {
             Text("Aminos $aminos", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
         }
+        val matched = f.aminoMatched
+        val total = f.aminoTotal
+        if (matched != null && total != null && total > 0) {
+            if (matched < total) {
+                val missed = f.ingredientsJson?.let { app.diurna.data.fdc.IngredientsJson.decode(it) }
+                    ?.filter { it.fdcId == null }
+                    ?.joinToString(", ") { it.name }
+                    .orEmpty()
+                val missBit = if (missed.isNotEmpty()) " — missed: $missed" else ""
+                Hint("Amino acids partial: matched $matched of $total ingredients$missBit")
+            } else {
+                Hint("Amino acids: matched $matched of $total ingredients")
+            }
+        }
         f.ingredientsJson?.let { raw ->
             val list = app.diurna.data.fdc.IngredientsJson.decode(raw)
-            if (!list.isNullOrEmpty()) {
+            if (!list.isNullOrEmpty() && (matched == null || total == null)) {
                 Hint(
                     "Ingredients: " + list.joinToString("; ") { ing ->
                         val match = ing.matchedDescription?.let { " → $it" } ?: ""

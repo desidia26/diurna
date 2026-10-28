@@ -58,10 +58,14 @@ class EstimateRunner(
                     )
                     var aminos: AminoAcids? = null
                     var ingredientsJson: String? = null
+                    var aminoMatched: Int? = null
+                    var aminoTotal: Int? = null
                     if (wantIngredients && !e.ingredients.isNullOrEmpty()) {
                         val resolved = aminoResolver!!.resolve(e.ingredients)
                         aminos = resolved.aminos
                         ingredientsJson = IngredientsJson.encode(resolved.ingredients)
+                        aminoMatched = resolved.matchedCount
+                        aminoTotal = resolved.totalCount
                     }
                     // Guarded on the text and photo: if either was edited mid-call this no-ops, and
                     // the edit has already queued the entry for the next pass.
@@ -73,7 +77,7 @@ class EstimateRunner(
                         e.cholesterolMg, e.omega3G, e.omega6G, e.omega9G,
                         aminos?.hisMg, aminos?.ileMg, aminos?.leuMg, aminos?.lysMg, aminos?.metMg,
                         aminos?.pheMg, aminos?.thrMg, aminos?.trpMg, aminos?.valMg, aminos?.cysMg, aminos?.tyrMg,
-                        ingredientsJson,
+                        ingredientsJson, aminoMatched, aminoTotal,
                         e.note, e.model ?: estimator.model, System.currentTimeMillis(),
                     )
                 } catch (e: CancellationException) {

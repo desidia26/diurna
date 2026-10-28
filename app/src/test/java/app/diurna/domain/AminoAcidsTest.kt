@@ -31,4 +31,19 @@ class AminoAcidsTest {
         assertEquals(10, avg.hisMg)
         assertNull(avg.ileMg)
     }
+
+    @Test fun primaryBarsUsePairsNotIndividuals() {
+        val a = AminoAcids(metMg = 40, cysMg = 10, pheMg = 50, tyrMg = 20, lysMg = 100)
+        val primary = AminoAcids.PRIMARY_BARS.associate { it.first to it.second(a) }
+        assertEquals(50, primary["Met+Cys"])
+        assertEquals(70, primary["Phe+Tyr"])
+        assertEquals(100, primary["Lys"])
+        assertNull(primary["Met"])
+        assertNull(primary["Phe"])
+        val detail = AminoAcids.PAIR_DETAIL.associate { it.first to it.second(a) }
+        assertEquals(40, detail["Met"])
+        assertEquals(10, detail["Cys"])
+        assertEquals(50, detail["Phe"])
+        assertEquals(20, detail["Tyr"])
+    }
 }

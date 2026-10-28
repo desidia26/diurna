@@ -542,7 +542,7 @@
       },
       {
         "tableName": "food_entry",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `date` TEXT NOT NULL, `time` TEXT NOT NULL, `text` TEXT NOT NULL, `logged_at` INTEGER NOT NULL, `kcal_low` INTEGER, `kcal_high` INTEGER, `protein_g` INTEGER, `carbs_g` INTEGER, `fat_g` INTEGER, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `ingredients_json` TEXT, `estimate_note` TEXT, `estimate_model` TEXT, `estimated_at` INTEGER, `estimate_error` TEXT, `source` TEXT NOT NULL DEFAULT 'ai', `meal_id` INTEGER, `servings` REAL NOT NULL DEFAULT 1.0, `photo` TEXT, FOREIGN KEY(`date`) REFERENCES `day`(`date`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`meal_id`) REFERENCES `meal`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `date` TEXT NOT NULL, `time` TEXT NOT NULL, `text` TEXT NOT NULL, `logged_at` INTEGER NOT NULL, `kcal_low` INTEGER, `kcal_high` INTEGER, `protein_g` INTEGER, `carbs_g` INTEGER, `fat_g` INTEGER, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `ingredients_json` TEXT, `amino_matched` INTEGER, `amino_total` INTEGER, `estimate_note` TEXT, `estimate_model` TEXT, `estimated_at` INTEGER, `estimate_error` TEXT, `source` TEXT NOT NULL DEFAULT 'ai', `meal_id` INTEGER, `servings` REAL NOT NULL DEFAULT 1.0, `photo` TEXT, FOREIGN KEY(`date`) REFERENCES `day`(`date`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`meal_id`) REFERENCES `meal`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
         "fields": [
           {
             "fieldPath": "id",
@@ -730,6 +730,18 @@
             "affinity": "TEXT"
           },
           {
+            "fieldPath": "aminoMatched",
+            "columnName": "amino_matched",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "aminoTotal",
+            "columnName": "amino_total",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
             "fieldPath": "estimateNote",
             "columnName": "estimate_note",
             "affinity": "TEXT"
@@ -827,7 +839,7 @@
       },
       {
         "tableName": "meal",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `kcal` INTEGER NOT NULL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `note` TEXT, `barcode` TEXT, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `ingredients_json` TEXT)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `kcal` INTEGER NOT NULL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `note` TEXT, `barcode` TEXT, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `ingredients_json` TEXT, `amino_matched` INTEGER, `amino_total` INTEGER)",
         "fields": [
           {
             "fieldPath": "id",
@@ -1004,6 +1016,18 @@
             "fieldPath": "ingredientsJson",
             "columnName": "ingredients_json",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "aminoMatched",
+            "columnName": "amino_matched",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "aminoTotal",
+            "columnName": "amino_total",
+            "affinity": "INTEGER",
+            "notNull": false
           }
         ],
         "primaryKey": {
