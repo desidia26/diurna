@@ -70,6 +70,10 @@ android {
     sourceSets {
         // Exported Room schemas double as fixtures for migration tests.
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        // AI prompt eval harness (JVM): shares the unit-test classpath, not shipped in the APK.
+        getByName("test") {
+            java.srcDir("src/aiEval/java")
+        }
     }
 }
 
@@ -116,4 +120,49 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+}
+
+
+// Live AI prompt evals. Reuses estimators/parsers from main; runs on the unit-test classpath.
+//   ./gradlew aiEval -Pprovider=grok|claude|github-models|all -Pset=default|full|smoke
+afterEvaluate {
+    tasks.named<Test>("testDebugUnitTest") {
+        // Case JSON lives at repo-root ai-evals/; the harness resolves from here.
+        workingDir = rootProject.projectDir
+    }
+
+    tasks.register<JavaExec>("aiEval") {
+        group = "verification"
+        description = "Run AI prompt evals against Grok, Claude, and/or GitHub Models"
+        // AGP wires these only after evaluate; compile + process puts AiEvalMain on the test classpath.
+        dependsOn(
+            "compileDebugUnitTestKotlin",
+            "processDebugUnitTestJavaRes",
+            "bundleDebugClassesToRuntimeJar",
+        )
+        classpath = tasks.named<Test>("testDebugUnitTest").get().classpath
+        mainClass.set("app.diurna.eval.AiEvalMainKt")
+        workingDir = rootProject.projectDir
+        systemProperty("root", rootProject.projectDir.absolutePath)
+        val providerProp = providers.gradleProperty("provider").orElse("all")
+        val setProp = providers.gradleProperty("set").orElse("default")
+        val tagProp = providers.gradleProperty("tag")
+        val grokModelProp = providers.gradleProperty("grokModel")
+        val claudeModelProp = providers.gradleProperty("claudeModel")
+        val githubModelProp = providers.gradleProperty("githubModel")
+        val outDirProp = providers.gradleProperty("outDir").orElse("ai-evals/out")
+        doFirst {
+            systemProperty("provider", providerProp.get())
+            systemProperty("set", setProp.get())
+            systemProperty("outDir", outDirProp.get())
+            if (tagProp.isPresent) systemProperty("tag", tagProp.get())
+            if (grokModelProp.isPresent) systemProperty("grokModel", grokModelProp.get())
+            if (claudeModelProp.isPresent) systemProperty("claudeModel", claudeModelProp.get())
+            if (githubModelProp.isPresent) systemProperty("githubModel", githubModelProp.get())
+            listOf("XAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "GH_TOKEN").forEach { name ->
+                val v = System.getenv(name)
+                if (!v.isNullOrBlank()) environment(name, v)
+            }
+        }
+    }
 }

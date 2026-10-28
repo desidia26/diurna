@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "description": "Tiny smoke set for GitHub Models (no secrets). Text-only food cases. Not an accuracy eval of app providers.",
+  "passThreshold": 0.5,
+  "cases": [
+    {
+      "id": "smoke-apple",
+      "prompt": "food",
+      "tags": ["smoke"],
+      "input": { "text": "one medium apple" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 95,
+        "kcalTolPct": 80,
+        "proteinG": { "min": 0, "max": 5 },
+        "carbsG": { "min": 10, "max": 40 },
+        "fatG": { "min": 0, "max": 5 },
+        "macrosConsistentWithKcal": true
+      }
+    },
+    {
+      "id": "smoke-not-food",
+      "prompt": "food",
+      "tags": ["smoke"],
+      "input": { "text": "I went for a long walk, no snacks" },
+      "expect": {
+        "outcome": "not_food_or_zeros"
+      }
+    },
+    {
+      "id": "smoke-eggs",
+      "prompt": "food",
+      "tags": ["smoke"],
+      "input": { "text": "two scrambled eggs" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 180,
+        "kcalTolPct": 70,
+        "proteinG": { "min": 8, "max": 25 },
+        "carbsG": { "min": 0, "max": 10 },
+        "fatG": { "min": 8, "max": 25 },
+        "macrosConsistentWithKcal": true
+      }
+    }
+  ]
+}

@@ -62,6 +62,7 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 
 | # | Item | Shipped |
 |---|---|---|
+| AI prompt eval suite (Grok/Claude/GitHub Models smoke) + CI | ai-evals |
 | — | Keyboard covers text fields at the bottom of the screen | 2026-10-12 |
 | — | Test alarm button gives no feedback | 2026-10-12 |
 | — | "Log a workout anyway" did nothing with no saved workouts; added "Blank workout" | 2026-10-12 |
