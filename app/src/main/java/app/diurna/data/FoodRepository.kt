@@ -9,6 +9,7 @@ import java.time.LocalDateTime
 class FoodRepository(
     private val db: AppDatabase,
     val photos: FoodPhotos,
+    val photoStore: FoodPhotoStore,
     private val now: () -> LocalDateTime = LocalDateTime::now,
 ) {
     private val food = db.foodDao()
@@ -18,54 +19,70 @@ class FoodRepository(
 
     fun observe(date: LocalDate): Flow<List<FoodEntryEntity>> = food.observe(date.key())
 
-    /** Today's entries get the current time; backfilled ones default to noon. [photo] is already in [photos]. */
-    suspend fun add(date: LocalDate, text: String, photo: String? = null) {
+    fun observePhotos(entryId: Long): Flow<List<FoodPhotoEntity>> = photoStore.observeEntry(entryId)
+
+    /** Today's entries get the current time; backfilled ones default to noon. Photos are already in [photos]. */
+    suspend fun add(date: LocalDate, text: String, photo: String? = null) =
+        add(date, text, listOfNotNull(photo))
+
+    suspend fun add(date: LocalDate, text: String, photoNames: List<String>) {
         val t = now()
         db.dayDao().insertIgnore(DayEntity(date.key()))
-        food.insert(
+        val primary = photoNames.firstOrNull()
+        val id = food.insert(
             FoodEntryEntity(
                 date = date.key(),
                 time = if (date == t.toLocalDate()) t.hhmm() else "12:00",
                 text = text.trim(),
                 loggedAt = System.currentTimeMillis(),
-                photo = photo,
+                photo = primary,
             )
         )
+        if (photoNames.isNotEmpty()) {
+            photoStore.replaceAll(FoodPhotoEntity.OWNER_ENTRY, id, photoNames)
+        }
         onPendingEstimates()
     }
 
     /**
-     * Changing the text or the photo re-estimates it; that's how a wrong estimate gets corrected.
-     * A replaced or removed photo's file is deleted once the entry no longer points at it.
+     * Changing the text or the primary photo re-estimates it; that's how a wrong estimate gets corrected.
+     * Secondary gallery photos can change without re-estimating. Orphaned files are deleted.
      */
     suspend fun edit(id: Long, text: String, time: String) {
         val old = food.get(id) ?: return
-        edit(old, text, time, old.photo)
+        val gallery = photoStore.forEntry(id).map { it.fileName }
+            .ifEmpty { listOfNotNull(old.photo) }
+        edit(old, text, time, gallery)
     }
 
     suspend fun edit(id: Long, text: String, time: String, photo: String?) {
-        edit(food.get(id) ?: return, text, time, photo)
+        edit(food.get(id) ?: return, text, time, listOfNotNull(photo))
     }
 
-    private suspend fun edit(old: FoodEntryEntity, text: String, time: String, photo: String?) {
+    suspend fun edit(id: Long, text: String, time: String, photoNames: List<String>) {
+        edit(food.get(id) ?: return, text, time, photoNames)
+    }
+
+    private suspend fun edit(old: FoodEntryEntity, text: String, time: String, photoNames: List<String>) {
         val id = old.id
         val newText = text.trim()
         if (newText.isEmpty()) return
+        val capped = photoNames.distinct().take(FoodPhotoEntity.MAX_PER_OWNER)
+        val primary = capped.firstOrNull()
+        val primaryChanged = primary != old.photo
         when {
-            newText != old.text -> food.edit(id, newText, time, photo)
-            photo != old.photo && old.isMeal -> {
-                // A saved meal's numbers are exact; the photo is just for the record.
-                food.setPhoto(id, photo)
+            newText != old.text -> food.edit(id, newText, time, primary)
+            primaryChanged && old.isMeal -> {
+                // A saved meal's numbers are exact; photos are just for the record.
                 if (time != old.time) food.setTime(id, time)
             }
-            photo != old.photo -> food.edit(id, newText, time, photo)
+            primaryChanged -> food.edit(id, newText, time, primary)
             else -> {
-                if (time != old.time) food.setTime(id, time) // same food, so the estimate still holds
-                return
+                if (time != old.time) food.setTime(id, time)
             }
         }
-        if (old.photo != photo) withContext(Dispatchers.IO) { photos.delete(old.photo) }
-        if (newText != old.text || !old.isMeal) onPendingEstimates()
+        photoStore.replaceAll(FoodPhotoEntity.OWNER_ENTRY, id, capped)
+        if (newText != old.text || (primaryChanged && !old.isMeal)) onPendingEstimates()
     }
 
     /** Clears recorded failures (e.g. after adding a key) so those entries are tried again. */
@@ -75,14 +92,13 @@ class FoodRepository(
     }
 
     suspend fun delete(id: Long) {
-        val photo = food.get(id)?.photo
+        photoStore.deleteOwner(FoodPhotoEntity.OWNER_ENTRY, id)
         food.delete(id)
-        withContext(Dispatchers.IO) { photos.delete(photo) }
     }
 
-    /** Removes photo files no entry uses any more (see [FoodPhotos.sweep]). */
+    /** Removes photo files no entry or meal gallery uses any more (see [FoodPhotos.sweep]). */
     suspend fun sweepPhotos(): Int {
-        val inUse = food.photosInUse().toSet()
+        val inUse = photoStore.allInUse()
         return withContext(Dispatchers.IO) { photos.sweep(inUse) }
     }
 }

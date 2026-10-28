@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,6 +22,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Switch
 import app.diurna.domain.Cardio
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -30,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,6 +47,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.diurna.data.CatalogExercise
 import app.diurna.data.LibraryRepository.Result
 import app.diurna.data.MealEntity
+import app.diurna.data.RecipeIngredientEntity
+import app.diurna.data.recipe.ImportedRecipe
+import app.diurna.data.recipe.RecipeImportResult
+import app.diurna.data.recipe.toIngredientEntities
 import app.diurna.ui.theme.LocalStatusColors
 import kotlinx.coroutines.launch
 
@@ -92,22 +100,85 @@ fun PageHeader(title: String, onBack: () -> Unit) {
 @Composable
 fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
     val meals by vm.meals.collectAsStateWithLifecycle()
+    val allMeals by vm.allMeals.collectAsStateWithLifecycle()
     val detailed by vm.detailedNutrition.collectAsStateWithLifecycle()
+    val filter by vm.mealKindFilter.collectAsStateWithLifecycle()
+    val hasFdcKey by vm.hasFdcKey.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf<MealEntity?>(null) }
+    var editingRecipe by remember { mutableStateOf<MealEntity?>(null) }
+    var recipeLines by remember { mutableStateOf<List<RecipeIngredientEntity>>(emptyList()) }
+    var importUrlOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<MealEntity?>(null) }
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { PageHeader("Meals", onBack) }
         item {
-            Hint("Your regular foods with exact numbers, e.g. from the label. Pick one in the Day screen's food box to log it instantly.")
+            Hint("Saved meals, recipes, and restaurant dishes with exact numbers. Pick one in the Day screen's food box to log it instantly.")
         }
-        item { Button(onClick = { editing = MealEntity(name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0) }) { Text("Add meal") } }
-        if (meals.isEmpty()) item { Hint("No saved meals yet. You can also save one from any food entry on the Day screen.") }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = filter == null, onClick = { vm.setMealFilter(null) }, label = { Text("All") })
+                FilterChip(selected = filter == MealEntity.KIND_SIMPLE, onClick = { vm.setMealFilter(MealEntity.KIND_SIMPLE) }, label = { Text("Meals") })
+                FilterChip(selected = filter == MealEntity.KIND_RECIPE, onClick = { vm.setMealFilter(MealEntity.KIND_RECIPE) }, label = { Text("Recipes") })
+                FilterChip(selected = filter == MealEntity.KIND_RESTAURANT, onClick = { vm.setMealFilter(MealEntity.KIND_RESTAURANT) }, label = { Text("Restaurants") })
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { editing = MealEntity(name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_SIMPLE) }) {
+                    Text("Add meal")
+                }
+                Button(onClick = {
+                    editingRecipe = MealEntity(name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_RECIPE, servingsYield = 1.0)
+                    recipeLines = emptyList()
+                }) { Text("Add recipe") }
+                Button(onClick = { importUrlOpen = true }) { Text("Import URL") }
+                Button(onClick = {
+                    editing = MealEntity(
+                        name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0,
+                        kind = MealEntity.KIND_RESTAURANT,
+                        nutritionSource = MealEntity.SOURCE_ESTIMATE,
+                    )
+                }) { Text("Add restaurant") }
+            }
+        }
+        if (meals.isEmpty()) item { Hint("Nothing here yet. Add a meal, recipe, or restaurant dish, or save one from a Day food entry.") }
         items(meals, key = { it.id }) { m ->
-            Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Edit") { editing = m }, verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().clickable(onClickLabel = "Edit") {
+                    if (m.isRecipe) {
+                        scope.launch {
+                            recipeLines = vm.loadIngredients(m.id)
+                            editingRecipe = m
+                        }
+                    } else {
+                        editing = m
+                    }
+                },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
-                    Text(m.name, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(m.name, fontWeight = FontWeight.SemiBold)
+                        if (m.isRecipe) {
+                            Text("Recipe", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                        if (m.isRestaurant) {
+                            Text("Restaurant", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                     Text(m.macroLine(), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                    if (m.isRestaurant) {
+                        val src = when (m.nutritionSource) {
+                            MealEntity.SOURCE_PUBLISHED -> "Published nutrition"
+                            else -> "Estimate"
+                        }
+                        Hint(listOfNotNull(m.restaurantName, src).joinToString(" · "))
+                    }
                     m.note?.let { Hint(it) }
+                    if (m.isRecipe && m.aminoPartial) {
+                        Hint("Aminos partial (${m.aminoMatched}/${m.aminoTotal})")
+                    }
                 }
                 TextButton(onClick = { confirmDelete = m }) { Text("Delete") }
             }
@@ -115,7 +186,48 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
         }
     }
     editing?.let { m ->
-        MealDialog(if (m.id == 0L) "Add meal" else "Edit meal", m, detailed = detailed, onDismiss = { editing = null }, onSave = vm::saveMeal)
+        val mealGallery by vm.mealPhotos(m.id).collectAsStateWithLifecycle(emptyList())
+        MealDialog(
+            when {
+                m.isRestaurant && m.id == 0L -> "Add restaurant dish"
+                m.isRestaurant -> "Edit restaurant dish"
+                m.id == 0L -> "Add meal"
+                else -> "Edit meal"
+            },
+            m,
+            detailed = detailed,
+            labelHost = vm,
+            initialPhotos = if (m.id == 0L) emptyList() else mealGallery,
+            onDismiss = { editing = null },
+            onSave = vm::saveMeal,
+            onSaveWithPhotos = vm::saveMealWithPhotos,
+        )
+    }
+    editingRecipe?.let { m ->
+        RecipeDialog(
+            title = if (m.id == 0L) "Add recipe" else "Edit recipe",
+            initial = m,
+            initialLines = recipeLines,
+            detailed = detailed,
+            hasFdcKey = hasFdcKey,
+            savedMeals = allMeals,
+            searchFdc = vm::searchFdc,
+            loadFdcNutrition = vm::loadFdcNutrition,
+            scanBarcode = vm::scanBarcode,
+            onDismiss = { editingRecipe = null },
+            onSave = vm::saveRecipe,
+        )
+    }
+    if (importUrlOpen) {
+        ImportRecipeUrlDialog(
+            onDismiss = { importUrlOpen = false },
+            onImport = { url -> vm.importRecipeFromUrl(url) },
+            onImported = { imported ->
+                importUrlOpen = false
+                recipeLines = imported.toIngredientEntities()
+                editingRecipe = imported.toMealDraft()
+            },
+        )
     }
     confirmDelete?.let { m ->
         ConfirmDialog(
@@ -125,13 +237,20 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
     }
 }
 
-/** Add/edit a saved meal. Also used by "Save as meal" on a food entry. Stays open to show problems.
- *  [detailed] shows the opt-in fiber / sugars / lipid fields (Setup → Detailed nutrition). */
+/**
+ * Add/edit a saved meal. Also used by "Save as meal" on a food entry. Stays open to show problems.
+ * [detailed] shows fiber / sugars / lipid fields (Setup → Detailed nutrition).
+ * [labelHost] enables "Fill from label photo" (simple meals) or "Estimate from menu photo"
+ * (restaurant meals). AI fills the fields; Save is the confirm step.
+ */
 @Composable
 fun MealDialog(
     title: String,
     initial: MealEntity,
     detailed: Boolean = false,
+    labelHost: PhotoImportHost? = null,
+    initialPhotos: List<String> = emptyList(),
+    onSaveWithPhotos: (suspend (MealEntity, List<String>) -> Result)? = null,
     onDismiss: () -> Unit,
     onSave: suspend (MealEntity) -> Result,
 ) {
@@ -145,6 +264,11 @@ fun MealDialog(
     var c by remember { mutableStateOf(start(initial.carbsG)) }
     var f by remember { mutableStateOf(start(initial.fatG)) }
     var note by remember { mutableStateOf(initial.note ?: "") }
+    val isRestaurant = initial.isRestaurant
+    var restaurantName by remember { mutableStateOf(initial.restaurantName ?: "") }
+    var nutritionSource by remember {
+        mutableStateOf(initial.nutritionSource ?: MealEntity.SOURCE_ESTIMATE)
+    }
     var fiber by remember { mutableStateOf(startOpt(initial.fiberG)) }
     var solFiber by remember { mutableStateOf(startOpt(initial.solubleFiberG)) }
     var insolFiber by remember { mutableStateOf(startOpt(initial.insolubleFiberG)) }
@@ -159,8 +283,106 @@ fun MealDialog(
     var o3 by remember { mutableStateOf(startOpt(initial.omega3G)) }
     var o6 by remember { mutableStateOf(startOpt(initial.omega6G)) }
     var o9 by remember { mutableStateOf(startOpt(initial.omega9G)) }
+    var his by remember { mutableStateOf(startOpt(initial.hisMg)) }
+    var ile by remember { mutableStateOf(startOpt(initial.ileMg)) }
+    var leu by remember { mutableStateOf(startOpt(initial.leuMg)) }
+    var lys by remember { mutableStateOf(startOpt(initial.lysMg)) }
+    var met by remember { mutableStateOf(startOpt(initial.metMg)) }
+    var phe by remember { mutableStateOf(startOpt(initial.pheMg)) }
+    var thr by remember { mutableStateOf(startOpt(initial.thrMg)) }
+    var trp by remember { mutableStateOf(startOpt(initial.trpMg)) }
+    var valA by remember { mutableStateOf(startOpt(initial.valMg)) }
+    var cys by remember { mutableStateOf(startOpt(initial.cysMg)) }
+    var tyr by remember { mutableStateOf(startOpt(initial.tyrMg)) }
     var problem by remember { mutableStateOf<String?>(null) }
-    val valid = name.isNotBlank() && kcal.toIntOrNull() != null
+    var fromPhoto by remember { mutableStateOf(false) }
+    var readingPhoto by remember { mutableStateOf(false) }
+    var photoMenu by remember { mutableStateOf(false) }
+    var gallery by rememberSaveable { mutableStateOf(initialPhotos) }
+    var galleryDrafts by rememberSaveable { mutableStateOf(listOf<String>()) }
+    val libraryVm = labelHost as? LibraryViewModel
+    val dayVm = labelHost as? DayViewModel
+    val canLabel = !isRestaurant && (libraryVm != null || dayVm != null)
+    val canEstimate = isRestaurant && libraryVm != null
+    val attacher = if (labelHost != null && (canLabel || canEstimate)) {
+        rememberPhotoAttacher(labelHost) { photoName ->
+            readingPhoto = true
+            scope.launch {
+                if (canEstimate) {
+                    when (val r = libraryVm!!.estimateRestaurantPhoto(photoName, name, restaurantName, detailed)) {
+                        is RestaurantEstimateResult.Ok -> {
+                            val e = r.estimate
+                            kcal = ((e.kcalLow + e.kcalHigh) / 2).toString()
+                            p = e.proteinG.toString()
+                            c = e.carbsG.toString()
+                            f = e.fatG.toString()
+                            if (e.note.isNotBlank()) note = e.note
+                            if (detailed) {
+                                fiber = e.fiberG?.toString() ?: fiber
+                                sugars = e.sugarsG?.toString() ?: sugars
+                                addedSugars = e.addedSugarsG?.toString() ?: addedSugars
+                                sat = e.satFatG?.toString() ?: sat
+                                mono = e.monoFatG?.toString() ?: mono
+                                poly = e.polyFatG?.toString() ?: poly
+                                trans = e.transFatG?.toString() ?: trans
+                                chol = e.cholesterolMg?.toString() ?: chol
+                                o3 = e.omega3G?.toString() ?: o3
+                                o6 = e.omega6G?.toString() ?: o6
+                                o9 = e.omega9G?.toString() ?: o9
+                            }
+                            nutritionSource = MealEntity.SOURCE_ESTIMATE
+                            fromPhoto = true
+                            problem = null
+                        }
+                        is RestaurantEstimateResult.Problem -> {
+                            fromPhoto = true
+                            problem = r.message
+                        }
+                    }
+                } else {
+                    val read = when {
+                        libraryVm != null -> libraryVm.readLabelPhoto(photoName)
+                        dayVm != null -> dayVm.readLabelPhoto(photoName)
+                        else -> LabelPhotoResult.Problem("No reader")
+                    }
+                    when (read) {
+                        is LabelPhotoResult.Read -> {
+                            val lab = read.reading
+                            if (name.isBlank() && lab.productName.isNotBlank()) name = lab.productName
+                            if (lab.serving.isNotBlank()) note = lab.serving
+                            kcal = lab.kcal.toString()
+                            p = lab.proteinG.toString()
+                            c = lab.carbsG.toString()
+                            f = lab.fatG.toString()
+                            if (detailed) {
+                                fiber = lab.fiberG?.toString() ?: ""
+                                sugars = lab.sugarsG?.toString() ?: ""
+                                addedSugars = lab.addedSugarsG?.toString() ?: ""
+                                sat = lab.satFatG?.toString() ?: ""
+                                trans = lab.transFatG?.toString() ?: ""
+                                chol = lab.cholesterolMg?.toString() ?: ""
+                            }
+                            fromPhoto = true
+                            problem = null
+                        }
+                        is LabelPhotoResult.Problem -> {
+                            fromPhoto = true
+                            problem = read.message
+                        }
+                    }
+                }
+                readingPhoto = false
+            }
+        }
+    } else null
+    val galleryAttacher = if (onSaveWithPhotos != null && labelHost != null) {
+        rememberPhotoAttacher(labelHost) { newPhoto ->
+            galleryDrafts = galleryDrafts + newPhoto
+            gallery = (gallery + newPhoto).distinct().take(5)
+        }
+    } else null
+    val valid = name.isNotBlank() && kcal.toIntOrNull() != null &&
+        (!isRestaurant || restaurantName.isNotBlank())
     fun opt(s: String): Int? = s.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -171,6 +393,58 @@ fun MealDialog(
                     name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Name") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 )
+                if (isRestaurant) {
+                    OutlinedTextField(
+                        restaurantName, { restaurantName = it }, Modifier.fillMaxWidth(),
+                        label = { Text("Restaurant") }, placeholder = { Text("Chipotle") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = nutritionSource == MealEntity.SOURCE_PUBLISHED,
+                            onClick = { nutritionSource = MealEntity.SOURCE_PUBLISHED },
+                            label = { Text("Published") },
+                        )
+                        FilterChip(
+                            selected = nutritionSource == MealEntity.SOURCE_ESTIMATE,
+                            onClick = { nutritionSource = MealEntity.SOURCE_ESTIMATE },
+                            label = { Text("Estimate") },
+                        )
+                    }
+                    Hint("Published = chain nutrition page / labeled values. Estimate = AI or your guess.")
+                }
+                if (attacher != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box {
+                            TextButton(
+                                onClick = { photoMenu = true },
+                                enabled = !readingPhoto && !attacher.busy,
+                            ) {
+                                Text(if (isRestaurant) "Estimate from menu photo" else "Fill from label photo")
+                            }
+                            DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
+                                DropdownMenuItem(text = { Text("Take photo") }, onClick = { photoMenu = false; attacher.takePhoto() })
+                                DropdownMenuItem(text = { Text("Choose photo") }, onClick = { photoMenu = false; attacher.choosePhoto() })
+                            }
+                        }
+                        if (readingPhoto || attacher.busy) {
+                            Hint(if (isRestaurant) "Estimating from photo…" else "Reading the label…")
+                        }
+                    }
+                    attacher.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn) }
+                    if (fromPhoto && problem == null) {
+                        Hint(if (isRestaurant) "Check the estimate, then Save." else "Check the numbers from the label, then Save.")
+                    }
+                }
+                if (galleryAttacher != null && libraryVm != null) {
+                    Hint("Photos of this meal (optional).")
+                    PhotoGalleryEditor(
+                        libraryVm.foodPhotos,
+                        gallery,
+                        galleryAttacher,
+                        onChange = { next -> gallery = next },
+                    )
+                }
                 OutlinedTextField(kcal, { kcal = it }, Modifier.fillMaxWidth(), label = { Text("Calories") }, suffix = { Text("kcal") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(Triple("Protein", p) { v: String -> p = v }, Triple("Carbs", c) { v: String -> c = v }, Triple("Fat", f) { v: String -> f = v }).forEach { (label, value, set) ->
@@ -218,6 +492,18 @@ fun MealDialog(
                             OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                         }
                     }
+                    Hint("Amino acids (mg). Optional; blank = unknown.")
+                    listOf(
+                        listOf(Triple("His", his) { v: String -> his = v }, Triple("Ile", ile) { v: String -> ile = v }, Triple("Leu", leu) { v: String -> leu = v }, Triple("Lys", lys) { v: String -> lys = v }),
+                        listOf(Triple("Met", met) { v: String -> met = v }, Triple("Phe", phe) { v: String -> phe = v }, Triple("Thr", thr) { v: String -> thr = v }, Triple("Trp", trp) { v: String -> trp = v }),
+                        listOf(Triple("Val", valA) { v: String -> valA = v }, Triple("Cys", cys) { v: String -> cys = v }, Triple("Tyr", tyr) { v: String -> tyr = v }),
+                    ).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEach { (label, value, set) ->
+                                OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("mg") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                            }
+                        }
+                    }
                 }
                 problem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
             }
@@ -227,6 +513,9 @@ fun MealDialog(
                 val meal = initial.copy(
                     name = name, kcal = kcal.toIntOrNull() ?: 0, proteinG = p.toIntOrNull() ?: 0,
                     carbsG = c.toIntOrNull() ?: 0, fatG = f.toIntOrNull() ?: 0, note = note.ifBlank { null },
+                    kind = if (isRestaurant) MealEntity.KIND_RESTAURANT else MealEntity.KIND_SIMPLE,
+                    restaurantName = if (isRestaurant) restaurantName.ifBlank { null } else null,
+                    nutritionSource = if (isRestaurant) nutritionSource else null,
                     fiberG = if (detailed) opt(fiber) else initial.fiberG,
                     solubleFiberG = if (detailed) opt(solFiber) else initial.solubleFiberG,
                     insolubleFiberG = if (detailed) opt(insolFiber) else initial.insolubleFiberG,
@@ -241,9 +530,28 @@ fun MealDialog(
                     omega3G = if (detailed) opt(o3) else initial.omega3G,
                     omega6G = if (detailed) opt(o6) else initial.omega6G,
                     omega9G = if (detailed) opt(o9) else initial.omega9G,
+                    hisMg = if (detailed) opt(his) else initial.hisMg,
+                    ileMg = if (detailed) opt(ile) else initial.ileMg,
+                    leuMg = if (detailed) opt(leu) else initial.leuMg,
+                    lysMg = if (detailed) opt(lys) else initial.lysMg,
+                    metMg = if (detailed) opt(met) else initial.metMg,
+                    pheMg = if (detailed) opt(phe) else initial.pheMg,
+                    thrMg = if (detailed) opt(thr) else initial.thrMg,
+                    trpMg = if (detailed) opt(trp) else initial.trpMg,
+                    valMg = if (detailed) opt(valA) else initial.valMg,
+                    cysMg = if (detailed) opt(cys) else initial.cysMg,
+                    tyrMg = if (detailed) opt(tyr) else initial.tyrMg,
                 )
                 scope.launch {
-                    when (val r = onSave(meal)) {
+                    val r = if (onSaveWithPhotos != null) {
+                        onSaveWithPhotos(meal, gallery)
+                    } else {
+                        onSave(meal)
+                    }
+                    if (libraryVm != null) {
+                        galleryDrafts.filter { name -> name !in gallery }.forEach(libraryVm::discardPhoto)
+                    }
+                    when (r) {
                         Result.Ok -> onDismiss()
                         is Result.Problem -> problem = r.message
                     }
@@ -378,5 +686,62 @@ private fun RenameDialog(e: CatalogExercise, editKind: Boolean, onDismiss: () ->
             }) { Text(if (editKind) "Save" else "Rename") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+
+/**
+ * Paste a recipe page URL. Fetches over hardened HTTPS and opens the recipe editor with
+ * parsed ingredients (nutrition left for the user to fill). No AI call; no API keys sent.
+ */
+@Composable
+private fun ImportRecipeUrlDialog(
+    onDismiss: () -> Unit,
+    onImport: suspend (String) -> RecipeImportResult,
+    onImported: (ImportedRecipe) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var url by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Import recipe from URL") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Hint("Paste a link to a recipe page that uses schema.org Recipe markup (most major recipe sites). Ingredients open in the editor for you to confirm — nothing is saved until you tap Save.")
+                OutlinedTextField(
+                    url,
+                    { url = it; problem = null },
+                    Modifier.fillMaxWidth(),
+                    label = { Text("https://…") },
+                    singleLine = true,
+                    enabled = !busy,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                )
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy && url.isNotBlank(),
+                onClick = {
+                    busy = true
+                    problem = null
+                    scope.launch {
+                        when (val r = onImport(url.trim())) {
+                            is RecipeImportResult.Ok -> onImported(r.recipe)
+                            is RecipeImportResult.Problem -> {
+                                problem = r.message
+                                busy = false
+                            }
+                        }
+                    }
+                },
+            ) { Text(if (busy) "Fetching…" else "Import") }
+        },
+        dismissButton = {
+            TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") }
+        },
     )
 }

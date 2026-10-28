@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -41,9 +42,11 @@ class LibraryRepositoryTest {
 
     @Test fun aMealLoggedWithAPhotoKeepsIt() = runTest {
         lib.saveMeal(shake)
-        lib.logMeal(mon, meals().single().id, photo = "shake.jpg")
+        val photo = t.foodPhotos.newName().also { java.io.File(t.photoDir, it).writeBytes(byteArrayOf(1)) }
+        lib.logMeal(mon, meals().single().id, photo = photo)
         val e = food().single()
-        assertEquals("shake.jpg", e.photo)
+        assertEquals(photo, e.photo)
+        assertEquals(listOf(photo), t.foodPhotoStore.forEntry(e.id).map { it.fileName })
         assertTrue("still exact, never queued for AI", e.isMeal && t.db.foodDao().pendingEstimates().isEmpty())
     }
 
@@ -192,24 +195,61 @@ class LibraryRepositoryTest {
     }
 
     @Test fun unknownAndUnreachable() = runTest {
-        assertEquals(LibraryRepository.ScanResult.NotFound, lib.scan("0012345678905"))
-        assertEquals(LibraryRepository.ScanResult.NotFound, lib.scan("not a barcode"))
+        val missing = lib.scan("0012345678905") as LibraryRepository.ScanResult.NotFound
+        assertEquals("0012345678905", missing.draft.barcode)
+        assertNotNull(missing.draft.offSnapshotJson)
+        assertFalse(OffSnapshot.decode(missing.draft.offSnapshotJson)!!.lookupOk)
+        val bad = lib.scan("not a barcode") as LibraryRepository.ScanResult.NotFound
+        assertNull(bad.draft.barcode)
         t.productsReachable = false
-        assertTrue(lib.scan("0012345678905") is LibraryRepository.ScanResult.Failed)
+        val failed = lib.scan("0012345678905") as LibraryRepository.ScanResult.Failed
+        assertEquals("0012345678905", failed.draft.barcode)
+        assertNotNull(failed.draft.offSnapshotJson)
     }
 
     @Test fun loggingScannedMealWithServingsScalesIt() = runTest {
-        lib.saveMeal(shake.copy(barcode = "0012345678905"))
+        lib.saveMeal(shake.copy(barcode = "0012345678905", offSnapshotJson = OffSnapshot.failed(1L).encode()))
         lib.logMeal(mon, lib.mealByBarcode("0012345678905")!!.id, 1.5)
         val e = food().single()
         assertEquals(240, e.kcalLow)
         assertEquals(45, e.proteinG)
         assertEquals(1.5, e.servings, 0.0)
+        assertEquals("0012345678905", e.barcode)
+        assertNotNull(e.offSnapshotJson)
     }
 
     @Test fun garbageAnswerIsNotFound() = runTest {
         t.products["0012345678905"] = "<html>not json</html>"
-        assertEquals(LibraryRepository.ScanResult.NotFound, lib.scan("0012345678905"))
+        val r = lib.scan("0012345678905") as LibraryRepository.ScanResult.NotFound
+        assertEquals("0012345678905", r.draft.barcode)
+    }
+
+    @Test fun failedLookupStillPersistsBarcodeOnLog() = runTest {
+        t.productsReachable = false
+        val failed = lib.scan("0012345678905") as LibraryRepository.ScanResult.Failed
+        val draft = failed.draft.copy(name = "Manual shake", kcal = 160, proteinG = 30, carbsG = 5, fatG = 3)
+        assertEquals(Result.Ok, lib.saveMeal(draft))
+        val meal = meals().single()
+        assertEquals("0012345678905", meal.barcode)
+        assertFalse(OffSnapshot.decode(meal.offSnapshotJson)!!.lookupOk)
+        lib.logMeal(mon, meal.id, 1.0)
+        val e = food().single()
+        assertEquals("0012345678905", e.barcode)
+        assertFalse(OffSnapshot.decode(e.offSnapshotJson)!!.lookupOk)
+        assertEquals(160, e.kcalLow) // user values unchanged
+    }
+
+    @Test fun foundScanStoresOffSnapshotAndLogCopiesIt() = runTest {
+        t.products["0012345678905"] = shakeJson
+        val found = lib.scan("012345678905") as LibraryRepository.ScanResult.Found
+        val snap = OffSnapshot.decode(found.draft.offSnapshotJson)!!
+        assertTrue(snap.lookupOk)
+        assertNotNull(snap.per100Json)
+        assertEquals(Result.Ok, lib.saveMeal(found.draft))
+        lib.logMeal(mon, meals().single().id, 1.0)
+        val e = food().single()
+        assertEquals("0012345678905", e.barcode)
+        assertTrue(OffSnapshot.decode(e.offSnapshotJson)!!.lookupOk)
     }
 
     @Test fun twoMealsCantShareABarcode() = runTest {

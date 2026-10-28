@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "description": "Tiny smoke set for Ollama CI (no secrets). Text-only food cases. Scores parse health; accuracy bands are informational for ollama.",
+  "passThreshold": 0.5,
+  "cases": [
+    {
+      "id": "smoke-apple",
+      "prompt": "food",
+      "tags": ["smoke"],
+      "input": { "text": "one medium apple" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 95,
+        "kcalTolPct": 100,
+        "proteinG": { "min": 0, "max": 10 },
+        "carbsG": { "min": 5, "max": 50 },
+        "fatG": { "min": 0, "max": 10 },
+        "macrosConsistentWithKcal": true
+      }
+    },
+    {
+      "id": "smoke-not-food",
+      "prompt": "food",
+      "tags": ["smoke"],
+      "input": { "text": "I went for a long walk, no snacks" },
+      "expect": {
+        "outcome": "not_food_or_zeros"
+      }
+    },
+    {
+      "id": "smoke-eggs",
+      "prompt": "food",
+      "tags": ["smoke"],
+      "input": { "text": "two scrambled eggs" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 180,
+        "kcalTolPct": 100,
+        "proteinG": { "min": 5, "max": 40 },
+        "carbsG": { "min": 0, "max": 20 },
+        "fatG": { "min": 5, "max": 40 },
+        "macrosConsistentWithKcal": true
+      }
+    }
+  ]
+}

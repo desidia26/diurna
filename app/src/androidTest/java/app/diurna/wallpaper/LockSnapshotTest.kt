@@ -138,7 +138,7 @@ class LockSnapshotTest {
         t.food.add(mon, "protein shake")
         assertEquals("2 food entries · last 12:00", snap().foodLine)
         val bowl = t.food.observe(mon).first().first { it.text == "burrito bowl" }
-        t.db.foodDao().setEstimate(bowl.id, bowl.text, null, 700, 900, 45, 80, 28, "", "fake", 1L)
+        t.db.foodDao().setEstimate(bowl.id, bowl.text, null, 700, 900, 45, 80, 28, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "", "fake", 1L)
         assertEquals("~800 kcal · P 45 · C 80 · F 28 · 1 estimating", buildSnapshot(t.db, t.days, t.now).foodLine)
         assertEquals(
             "800 / 2,260 kcal · P 45/180 · C 80/243 · F 28/63 · 1 estimating",

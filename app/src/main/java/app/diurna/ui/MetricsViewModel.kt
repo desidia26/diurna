@@ -4,6 +4,7 @@ import app.diurna.AppContainer
 import app.diurna.data.MetricsRepository
 import app.diurna.domain.Cardio
 import app.diurna.domain.Metrics
+import app.diurna.domain.WhoAminoRefs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +53,34 @@ data class MacroCard(
     val targetKcal: Int?,
     /** True when bars are days; false when they're week averages. */
     val daily: Boolean,
+)
+
+data class CarbDetailCard(
+    /** One stack per day (4w) or week average; null = gap (no carb detail that period). */
+    val stacks: List<Metrics.CarbStack?>,
+    val average: Metrics.CarbStack?,
+    val coverage: Metrics.DetailCoverage,
+    val daily: Boolean,
+    val splitFiber: Boolean,
+    val showAdded: Boolean,
+)
+
+data class FatDetailCard(
+    val stacks: List<Metrics.FatStack?>,
+    val average: Metrics.FatStack?,
+    val coverage: Metrics.DetailCoverage,
+    val daily: Boolean,
+)
+
+data class LipidDetailCard(
+    val summary: Metrics.LipidSummary,
+)
+
+data class AminoDetailCard(
+    val summary: Metrics.AminoSummary,
+    /** WHO TRS 935 adult requirement refs scaled by latest logged weight; null → hide lines. */
+    val refs: WhoAminoRefs.Scaled? = null,
+    val weightLb: Double? = null,
 )
 
 data class TrainingCard(
@@ -132,6 +161,11 @@ data class MetricsUi(
     val mood: MoodCard,
     /** Null until any food has ever been estimated, so people who don't log food never see it. */
     val macros: MacroCard?,
+    /** Carb/fat/lipid breakdowns; null when Detailed nutrition is off or no sub-macro data in range. */
+    val carbs: CarbDetailCard?,
+    val fats: FatDetailCard?,
+    val lipids: LipidDetailCard?,
+    val aminos: AminoDetailCard?,
     val training: TrainingCard,
     /** Null until any cardio has ever been logged, so people who only lift never see the card. */
     val cardio: CardioCard?,
@@ -170,9 +204,11 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
 
     private val targets = today.flatMapLatest { c.nutrition.observeTargets(it) }
 
-    val ui: StateFlow<MetricsUi?> = combine(snapshot, targets, c.settings.macroChartMode) { snap, t, mode ->
+    val ui: StateFlow<MetricsUi?> = combine(
+        snapshot, targets, c.settings.macroChartMode, c.settings.detailedNutrition,
+    ) { snap, t, mode, detailed ->
         val (range, s) = snap
-        build(range, s, t?.kcal, mode)
+        build(range, s, t?.kcal, mode, detailed)
     }.state(null)
 
     /** Exercises with at least one session, so other screens can offer to open their detail. */
@@ -209,6 +245,7 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
         s: MetricsRepository.Snapshot,
         targetKcal: Int?,
         mode: Metrics.MacroChartMode,
+        detailedNutrition: Boolean,
     ): MetricsUi {
         val dates = Metrics.days(s.from, s.to)
         val byDate = s.days.associateBy { LocalDate.parse(it.date) }
@@ -267,10 +304,15 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
             )
         }
         val macros = macroCard(range, s, targetKcal, mode).takeIf { s.hasEstimatedFood }
+        val showDetail = detailedNutrition && s.macroGrams.values.any { it.hasAnyDetail }
+        val carbs = if (showDetail) carbDetailCard(range, s) else null
+        val fats = if (showDetail) fatDetailCard(range, s) else null
+        val lipids = if (showDetail) lipidDetailCard(s) else null
+        val aminos = if (showDetail) aminoDetailCard(s) else null
 
         return MetricsUi(
             range, s.from, s.to, (range.days ?: Long.MAX_VALUE) <= 84,
-            weight, mood, macros, training,
+            weight, mood, macros, carbs, fats, lipids, aminos, training,
             cardioCard(s).takeIf { s.cardio.isNotEmpty() }, lifts,
         )
     }
@@ -295,6 +337,49 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
             targetKcal = targetKcal,
             daily = daily,
         )
+    }
+
+    private fun carbDetailCard(range: Metrics.Range, s: MetricsRepository.Snapshot): CarbDetailCard? {
+        val coverage = Metrics.carbCoverage(s.macroGrams)
+        if (coverage.withDetail == 0) return null
+        val daily = range == Metrics.Range.W4
+        val stacks = if (daily) Metrics.dailyCarbStacks(s.macroGrams, s.from, s.to)
+        else Metrics.weeklyCarbAverages(s.macroGrams, s.from, s.to)
+        val known = stacks.filterNotNull()
+        return CarbDetailCard(
+            stacks = stacks,
+            average = Metrics.averageCarbStack(known),
+            coverage = coverage,
+            daily = daily,
+            splitFiber = known.any { it.splitFiber },
+            showAdded = known.any { it.showAdded },
+        )
+    }
+
+    private fun fatDetailCard(range: Metrics.Range, s: MetricsRepository.Snapshot): FatDetailCard? {
+        val coverage = Metrics.fatCoverage(s.macroGrams)
+        if (coverage.withDetail == 0) return null
+        val daily = range == Metrics.Range.W4
+        val stacks = if (daily) Metrics.dailyFatStacks(s.macroGrams, s.from, s.to)
+        else Metrics.weeklyFatAverages(s.macroGrams, s.from, s.to)
+        val known = stacks.filterNotNull()
+        return FatDetailCard(
+            stacks = stacks,
+            average = Metrics.averageFatStack(known),
+            coverage = coverage,
+            daily = daily,
+        )
+    }
+
+    private fun lipidDetailCard(s: MetricsRepository.Snapshot): LipidDetailCard? =
+        Metrics.lipidSummary(s.macroGrams)?.let(::LipidDetailCard)
+
+    private fun aminoDetailCard(s: MetricsRepository.Snapshot): AminoDetailCard? {
+        val summary = Metrics.aminoSummary(s.macroGrams) ?: return null
+        val weightLb = s.days.mapNotNull { d ->
+            d.bodyWeight?.let { LocalDate.parse(d.date) to it }
+        }.maxByOrNull { it.first }?.second
+        return AminoDetailCard(summary, WhoAminoRefs.scaleLb(weightLb), weightLb)
     }
 
     private fun cardioCard(s: MetricsRepository.Snapshot): CardioCard {

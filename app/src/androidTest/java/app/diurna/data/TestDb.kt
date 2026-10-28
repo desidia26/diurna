@@ -33,18 +33,24 @@ class TestDb {
     val photoDir = File(
         InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "test-photos-${System.nanoTime()}",
     ).apply { mkdirs() }
-    val food = FoodRepository(db, FoodPhotos(photoDir)) { now }
+    val foodPhotos = FoodPhotos(photoDir)
+    val foodPhotoStore = FoodPhotoStore(db, foodPhotos)
+    val food = FoodRepository(db, foodPhotos, foodPhotoStore) { now }
     /** Fake Open Food Facts: JSON by normalized barcode. Never touches the network. */
     val products = mutableMapOf<String, String>()
     var productsReachable = true
     val productFetches = mutableListOf<String>()
-    val library = LibraryRepository(db, object : ProductSource {
-        override suspend fun fetch(code: String): String? {
-            productFetches += code
-            if (!productsReachable) throw java.io.IOException("offline")
-            return products[code]
-        }
-    }) { now }
+    val library = LibraryRepository(
+        db,
+        object : ProductSource {
+            override suspend fun fetch(code: String): String? {
+                productFetches += code
+                if (!productsReachable) throw java.io.IOException("offline")
+                return products[code]
+            }
+        },
+        photoStore = foodPhotoStore,
+    ) { now }
 
     suspend fun template(name: String, vararg exercises: String): Long {
         routine.addTemplate(name)

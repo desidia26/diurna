@@ -245,4 +245,184 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v10ToV11AddsAminoColumnsAndFdcCache() {
+        helper.createDatabase(dbName + "-11", 10).use { db ->
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, fiber_g) VALUES (1, 'Tofu bowl', 400, 28, 30, 18, 6)"
+            )
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-28', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, protein_g, carbs_g, fat_g, fiber_g, source, servings) " +
+                    "VALUES (1, '2026-10-28', '12:00', 'Tofu bowl', 1, 400, 400, 28, 30, 18, 6, 'meal', 1.0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-11", 11, true)
+        db.query("SELECT his_mg, lys_mg, ingredients_json, amino_matched, amino_total, fiber_g FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertTrue("his starts null", it.isNull(0))
+            assertTrue("lys starts null", it.isNull(1))
+            assertTrue("ingredients starts null", it.isNull(2))
+            assertTrue("amino_matched starts null", it.isNull(3))
+            assertTrue("amino_total starts null", it.isNull(4))
+            assertEquals(6, it.getInt(5))
+        }
+        db.query("SELECT his_mg, trp_mg, ingredients_json, amino_matched, amino_total, protein_g FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertTrue(it.isNull(0))
+            assertTrue(it.isNull(1))
+            assertTrue(it.isNull(2))
+            assertTrue(it.isNull(3))
+            assertTrue(it.isNull(4))
+            assertEquals(28, it.getInt(5))
+        }
+        db.query("SELECT COUNT(*) FROM fdc_food_cache").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(0, it.getInt(0))
+        }
+        db.close()
+    }
+
+    @Test fun v11ToV12AddsRecipeFieldsAndExistingMealsStaySimple() {
+        helper.createDatabase(dbName + "-12", 11).use { db ->
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, fiber_g, lys_mg) " +
+                    "VALUES (1, 'Oats', 150, 5, 27, 3, 4, 200)"
+            )
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-28', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, protein_g, carbs_g, fat_g, source, meal_id, servings) " +
+                    "VALUES (1, '2026-10-28', '08:00', 'Oats', 1, 150, 150, 5, 27, 3, 'meal', 1, 1.0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-12", 12, true)
+        db.query("SELECT kind, servings_yield, cooked_weight_g, kcal, protein_g, lys_mg FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("existing meals become simple", "simple", it.getString(0))
+            assertTrue("servings_yield starts null", it.isNull(1))
+            assertTrue("cooked_weight starts null", it.isNull(2))
+            assertEquals(150, it.getInt(3))
+            assertEquals(5, it.getInt(4))
+            assertEquals(200, it.getInt(5))
+        }
+        db.query("SELECT kcal_low, protein_g, carbs_g, fat_g, servings, meal_id FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("logged macros unchanged", 150, it.getInt(0))
+            assertEquals(5, it.getInt(1))
+            assertEquals(27, it.getInt(2))
+            assertEquals(3, it.getInt(3))
+            assertEquals(1.0, it.getDouble(4), 0.0)
+            assertEquals(1L, it.getLong(5))
+        }
+        db.query("SELECT COUNT(*) FROM recipe_ingredient").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(0, it.getInt(0))
+        }
+        db.close()
+    }
+    @Test fun v12ToV13AddsRestaurantFieldsAndExistingMealsStay() {
+        helper.createDatabase(dbName + "-13", 12).use { db ->
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind, barcode) " +
+                    "VALUES (1, 'Shake', 160, 30, 5, 3, 'simple', '0123456789012')"
+            )
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-28', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, protein_g, carbs_g, fat_g, source, meal_id, servings) " +
+                    "VALUES (1, '2026-10-28', '08:00', 'Shake', 1, 160, 160, 30, 5, 3, 'meal', 1, 1.0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-13", 13, true)
+        db.query("SELECT kind, restaurant_name, nutrition_source, barcode, kcal, protein_g FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("simple meals stay simple", "simple", it.getString(0))
+            assertTrue("restaurant_name starts null", it.isNull(1))
+            assertTrue("nutrition_source starts null", it.isNull(2))
+            assertEquals("0123456789012", it.getString(3))
+            assertEquals(160, it.getInt(4))
+            assertEquals(30, it.getInt(5))
+        }
+        db.query("SELECT kcal_low, protein_g, carbs_g, fat_g, meal_id FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("logged macros unchanged", 160, it.getInt(0))
+            assertEquals(30, it.getInt(1))
+            assertEquals(5, it.getInt(2))
+            assertEquals(3, it.getInt(3))
+            assertEquals(1L, it.getLong(4))
+        }
+        db.close()
+    }
+
+
+    @Test fun v13ToV14AddsBarcodeSnapshotColumnsAndExistingRowsGetNull() {
+        helper.createDatabase(dbName + "-14", 13).use { db ->
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind, barcode, restaurant_name, nutrition_source) " +
+                    "VALUES (1, 'Shake', 160, 30, 5, 3, 'simple', '0123456789012', NULL, NULL)"
+            )
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-28', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, protein_g, carbs_g, fat_g, source, meal_id, servings) " +
+                    "VALUES (1, '2026-10-28', '08:00', 'Shake', 1, 160, 160, 30, 5, 3, 'meal', 1, 1.0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-14", 14, true)
+        db.query("SELECT barcode, off_snapshot_json, kcal, protein_g FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("0123456789012", it.getString(0))
+            assertTrue("off_snapshot starts null", it.isNull(1))
+            assertEquals(160, it.getInt(2))
+            assertEquals(30, it.getInt(3))
+        }
+        db.query("SELECT barcode, off_snapshot_json, kcal_low, protein_g, carbs_g, fat_g FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertTrue("existing food_entry barcode null", it.isNull(0))
+            assertTrue("existing food_entry snapshot null", it.isNull(1))
+            assertEquals("logged macros unchanged", 160, it.getInt(2))
+            assertEquals(30, it.getInt(3))
+            assertEquals(5, it.getInt(4))
+            assertEquals(3, it.getInt(5))
+        }
+        db.close()
+    }
+
+
+
+    @Test fun v14ToV15CopiesPrimaryPhotoIntoGalleryAndLeavesNulls() {
+        helper.createDatabase(dbName + "-15", 14).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-28', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, protein_g, carbs_g, fat_g, source, servings, photo) " +
+                    "VALUES (1, '2026-10-28', '12:00', 'burrito', 1, 700, 900, 30, 80, 20, 'ai', 1.0, 'burrito.jpg')"
+            )
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, source, servings, photo) " +
+                    "VALUES (2, '2026-10-28', '13:00', 'no photo', 2, 'ai', 1.0, NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind) " +
+                    "VALUES (1, 'Shake', 160, 30, 5, 3, 'simple')"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-15", 15, true, AppDatabase.MIGRATION_14_15)
+        db.query("SELECT photo, kcal_low, protein_g FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("primary photo column kept", "burrito.jpg", it.getString(0))
+            assertEquals("macros unchanged", 700, it.getInt(1))
+            assertEquals(30, it.getInt(2))
+        }
+        db.query("SELECT owner_type, owner_id, file_name, position FROM food_photo ORDER BY owner_id").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("entry", it.getString(0))
+            assertEquals(1L, it.getLong(1))
+            assertEquals("burrito.jpg", it.getString(2))
+            assertEquals(0, it.getInt(3))
+            assertTrue("entries without photo get no gallery row", !it.moveToNext())
+        }
+        db.query("SELECT COUNT(*) FROM food_photo WHERE owner_type = 'meal'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(0, it.getInt(0))
+        }
+        db.close()
+    }
 }

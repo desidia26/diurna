@@ -16,14 +16,19 @@ class OpenAiCompatFoodEstimator(
     override val model: String get() = modelProvider().ifBlank { "openai-compat" }
     override val gaveUpMessage: String get() = OpenAiCompatErrors.GAVE_UP
 
-    override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
+    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate {
         if (!configured()) throw NoApiKey(NO_CONFIG)
         val key = apiKey().orEmpty() // local servers often need none
         val sendPhoto = photo.takeIf { supportsImages() }
+        val maxTok = if (detailed || ingredients) XaiChat.MAX_COMPLETION_TOKENS_DETAILED else XaiChat.MAX_COMPLETION_TOKENS
         val estimate = EstimatePrompt.parse(
             XaiChat.call(
                 transportProvider(), key, model,
-                XaiChat.request(model, EstimatePrompt.SYSTEM, text, sendPhoto),
+                XaiChat.request(
+                    model, EstimatePrompt.system(detailed, ingredients), text, sendPhoto,
+                    schema = EstimatePrompt.schema(detailed, ingredients),
+                    maxCompletionTokens = maxTok,
+                ),
                 classify = OpenAiCompatErrors::classify,
             )
         )
@@ -63,6 +68,35 @@ class OpenAiCompatCardioReader(
 
     companion object {
         const val NO_CONFIG = "Set a base URL and model for OpenAI-compatible in Setup to read photos"
+    }
+}
+
+
+
+class OpenAiCompatLabelReader(
+    private val apiKey: () -> String?,
+    private val modelProvider: () -> String,
+    private val transportProvider: () -> XaiTransport,
+    private val supportsImages: () -> Boolean = { true },
+    private val configured: () -> Boolean = { true },
+) : LabelReader {
+    override val model: String get() = modelProvider().ifBlank { "openai-compat" }
+
+    override suspend fun read(photo: ByteArray): NutritionLabelReading {
+        if (!supportsImages()) throw EstimateFailed(VisionSupport.PHOTO_FEATURES_DISABLED)
+        if (!configured()) throw NoApiKey(NO_CONFIG)
+        val key = apiKey().orEmpty()
+        val request = XaiChat.request(
+            model, LabelPrompt.SYSTEM, LabelPrompt.USER_TEXT, photo,
+            schemaName = "nutrition_facts", schema = LabelPrompt.SCHEMA,
+        )
+        return LabelPrompt.parse(
+            XaiChat.call(transportProvider(), key, model, request, classify = OpenAiCompatErrors::classify)
+        )
+    }
+
+    companion object {
+        const val NO_CONFIG = "Set a base URL and model for OpenAI-compatible in Setup to read labels"
     }
 }
 

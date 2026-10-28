@@ -6,15 +6,20 @@ import app.diurna.ai.AiProvider
 import app.diurna.ai.AiProviderStore
 import app.diurna.ai.ApiKeyStore
 import app.diurna.ai.ClaudeCardioReader
+import app.diurna.ai.ClaudeLabelReader
 import app.diurna.ai.ClaudeFoodEstimator
 import app.diurna.ai.CardioReader
+import app.diurna.ai.LabelReader
 import app.diurna.ai.GatewaySettingsStore
 import app.diurna.ai.GrokCardioReader
+import app.diurna.ai.GrokLabelReader
 import app.diurna.ai.SelectedCardioReader
+import app.diurna.ai.SelectedLabelReader
 import app.diurna.ai.GrokFoodEstimator
 import app.diurna.ai.HttpXaiTransport
 import app.diurna.ai.OpenAiCompatCardioReader
 import app.diurna.ai.OpenAiCompatFoodEstimator
+import app.diurna.ai.OpenAiCompatLabelReader
 import app.diurna.ai.SelectedFoodEstimator
 import app.diurna.ai.EstimateRunner
 import app.diurna.ai.EstimateWorker
@@ -27,6 +32,7 @@ import app.diurna.data.DayFinalizer
 import app.diurna.data.DayRepository
 import app.diurna.data.NutritionRepository
 import app.diurna.data.FoodPhotos
+import app.diurna.data.FoodPhotoStore
 import app.diurna.data.FoodRepository
 import app.diurna.data.LibraryRepository
 import app.diurna.data.MetricsRepository
@@ -34,6 +40,9 @@ import app.diurna.data.PhotoImporter
 import app.diurna.ui.SelectedDate
 import app.diurna.data.RoutineRepository
 import app.diurna.data.SettingsStore
+import app.diurna.data.fdc.AminoResolver
+import app.diurna.data.fdc.FdcClient
+import app.diurna.data.recipe.RecipeImporter
 import app.diurna.data.StepCounter
 import app.diurna.data.StepSource
 import app.diurna.steps.AndroidStepSensor
@@ -41,24 +50,30 @@ import app.diurna.steps.StepSampling
 import app.diurna.wallpaper.LockWallpaper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
 
 class AppContainer(context: Context) {
+    val appContext = context.applicationContext
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val db = AppDatabase.build(context)
     val settings = SettingsStore(context)
     val days = DayRepository(db)
     val metrics = MetricsRepository(db)
     val foodPhotos = FoodPhotos(File(context.filesDir, "food-photos"))
-    val food = FoodRepository(db, foodPhotos)
+    val foodPhotoStore = FoodPhotoStore(db, foodPhotos)
+    val food = FoodRepository(db, foodPhotos, foodPhotoStore)
     val photoImporter = PhotoImporter(context, foodPhotos)
-    val library = LibraryRepository(db)
+    val library = LibraryRepository(db, photoStore = foodPhotoStore)
     val backups = Backups(context, db, foodPhotos)
     val aiProvider = AiProviderStore(context)
     val gateway = GatewaySettingsStore(context)
     val apiKeys: Map<AiProvider, ApiKeyStore> = AiProvider.entries.associateWith { ApiKeyStore(context, it) }
+    val usdaKey = ApiKeyStore.usda(context)
+    val fdcClient = FdcClient(apiKey = { usdaKey.get() })
+    val aminoResolver = AminoResolver(fdcClient, db.fdcFoodCacheDao())
     val network = NetworkMonitor(context)
 
     private val openAiConfigured: () -> Boolean = {
@@ -70,7 +85,7 @@ class AppContainer(context: Context) {
     }
     private val xaiTransport = HttpXaiTransport { gateway.xaiEndpointOrDefault() }
 
-    val estimates = EstimateRunner(db, SelectedFoodEstimator({ aiProvider.get() }, mapOf(
+    val foodEstimator = SelectedFoodEstimator({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeFoodEstimator(
             apiKey = { apiKeys.getValue(AiProvider.ANTHROPIC).get() },
             baseUrl = { gateway.anthropicBaseOrNull() },
@@ -89,7 +104,15 @@ class AppContainer(context: Context) {
             supportsImages = { gateway.supportsImages(AiProvider.OPENAI_COMPAT) },
             configured = openAiConfigured,
         ),
-    )), photo = foodPhotos::read)
+    ))
+    val estimates = EstimateRunner(
+        db,
+        foodEstimator,
+        photo = foodPhotos::read,
+        detailed = { settings.detailedNutrition.first() },
+        fdcKeyPresent = { usdaKey.get()?.isNotBlank() == true },
+        aminoResolver = aminoResolver,
+    )
     /** Reads cardio machines' summary screens for pieces, with whichever provider is selected. */
     val cardioReader: CardioReader = SelectedCardioReader({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeCardioReader(
@@ -104,6 +127,28 @@ class AppContainer(context: Context) {
             supportsImages = { gateway.supportsImages(AiProvider.XAI) },
         ),
         AiProvider.OPENAI_COMPAT to OpenAiCompatCardioReader(
+            apiKey = { apiKeys.getValue(AiProvider.OPENAI_COMPAT).get() },
+            modelProvider = { gateway.get().openAiModel.trim() },
+            transportProvider = { openAiTransport },
+            supportsImages = { gateway.supportsImages(AiProvider.OPENAI_COMPAT) },
+            configured = openAiConfigured,
+        ),
+    ))
+    /** HTTPS schema.org Recipe import; never sees API keys. */
+    val recipeImporter = RecipeImporter()
+    /** Reads Nutrition Facts labels into the meal editor; person confirms before saving. */
+    val labelReader: LabelReader = SelectedLabelReader({ aiProvider.get() }, mapOf(
+        AiProvider.ANTHROPIC to ClaudeLabelReader(
+            apiKey = { apiKeys.getValue(AiProvider.ANTHROPIC).get() },
+            baseUrl = { gateway.anthropicBaseOrNull() },
+            supportsImages = { gateway.supportsImages(AiProvider.ANTHROPIC) },
+        ),
+        AiProvider.XAI to GrokLabelReader(
+            apiKey = { apiKeys.getValue(AiProvider.XAI).get() },
+            transport = xaiTransport,
+            supportsImages = { gateway.supportsImages(AiProvider.XAI) },
+        ),
+        AiProvider.OPENAI_COMPAT to OpenAiCompatLabelReader(
             apiKey = { apiKeys.getValue(AiProvider.OPENAI_COMPAT).get() },
             modelProvider = { gateway.get().openAiModel.trim() },
             transportProvider = { openAiTransport },

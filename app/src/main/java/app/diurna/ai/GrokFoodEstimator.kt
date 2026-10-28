@@ -40,12 +40,16 @@ class GrokFoodEstimator(
     override val model: String get() = modelProvider()
     override val gaveUpMessage: String get() = GrokErrors.GAVE_UP
 
-    override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
+    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate {
         val key = apiKey() ?: throw NoApiKey(NO_KEY)
         val sendPhoto = photo.takeIf { supportsImages() }
-        val estimate = EstimatePrompt.parse(
-            XaiChat.call(transportProvider(), key, model, XaiChat.request(model, EstimatePrompt.SYSTEM, text, sendPhoto))
-        )
+        // Detailed / ingredient replies need a bit more room for the nullable fields + list.
+        val maxTok = if (detailed || ingredients) XaiChat.MAX_COMPLETION_TOKENS_DETAILED else XaiChat.MAX_COMPLETION_TOKENS
+        val estimate = EstimatePrompt.parse(XaiChat.call(transportProvider(), key, model, XaiChat.request(
+            model, EstimatePrompt.system(detailed, ingredients), text, sendPhoto,
+            schema = EstimatePrompt.schema(detailed, ingredients),
+            maxCompletionTokens = maxTok,
+        )))
         return if (photo != null && sendPhoto == null) {
             estimate.copy(note = VisionSupport.noteWithoutPhoto(estimate.note))
         } else {
@@ -70,6 +74,8 @@ object XaiChat {
 
     /** The reply is a few dozen tokens; the cap only stops a runaway from costing much. */
     const val MAX_COMPLETION_TOKENS = 1024
+    /** Extra headroom when Detailed nutrition asks for the full sub-macro breakdown. */
+    const val MAX_COMPLETION_TOKENS_DETAILED = 1536
 
     /**
      * Posts [request] and returns the structured JSON text. Offline and temporary trouble become
@@ -110,6 +116,7 @@ object XaiChat {
         photoJpeg: ByteArray? = null,
         schemaName: String = "food_estimate",
         schema: Map<String, Any> = EstimatePrompt.SCHEMA,
+        maxCompletionTokens: Int = MAX_COMPLETION_TOKENS,
     ): String = JSONObject()
         .put("model", model)
         .put("messages", JSONArray()
@@ -121,7 +128,7 @@ object XaiChat {
                 .put("name", schemaName)
                 .put("strict", true)
                 .put("schema", toJson(schema))))
-        .put("max_completion_tokens", MAX_COMPLETION_TOKENS)
+        .put("max_completion_tokens", maxCompletionTokens)
         .put("stream", false)
         .toString()
 

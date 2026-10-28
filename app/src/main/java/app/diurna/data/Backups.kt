@@ -103,8 +103,16 @@ class Backups(
         dir.listFiles { f -> f.name.startsWith("daybook-") && f.name.endsWith(".db") }.orEmpty().flatMap { f ->
             runCatching {
                 SQLiteDatabase.openDatabase(f.path, null, SQLiteDatabase.OPEN_READONLY).use { backup ->
-                    backup.rawQuery("SELECT photo FROM food_entry WHERE photo IS NOT NULL", null).use { c ->
-                        buildList { while (c.moveToNext()) add(c.getString(0)) }
+                    buildList {
+                        backup.rawQuery("SELECT photo FROM food_entry WHERE photo IS NOT NULL", null).use { c ->
+                            while (c.moveToNext()) add(c.getString(0))
+                        }
+                        // v15+: gallery rows. Older backups lack the table.
+                        runCatching {
+                            backup.rawQuery("SELECT file_name FROM food_photo", null).use { c ->
+                                while (c.moveToNext()) add(c.getString(0))
+                            }
+                        }
                     }
                 }
             }.getOrDefault(emptyList())

@@ -34,11 +34,13 @@ class ClaudeFoodEstimator(
     private val supportsImages: () -> Boolean = { true },
 ) : FoodEstimator {
 
-    override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate = withContext(Dispatchers.IO) {
+    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate = withContext(Dispatchers.IO) {
         val sendPhoto = photo.takeIf { supportsImages() }
-        val estimate = EstimatePrompt.parse(
-            ClaudeCall.json(apiKey, model, ClaudeRequest.params(model, text, sendPhoto), baseUrl = baseUrl)
-        )
+        val estimate = EstimatePrompt.parse(ClaudeCall.json(apiKey, model, ClaudeRequest.params(
+            model, text, sendPhoto,
+            system = EstimatePrompt.system(detailed, ingredients),
+            schema = EstimatePrompt.schema(detailed, ingredients),
+        ), baseUrl = baseUrl))
         if (photo != null && sendPhoto == null) {
             estimate.copy(note = VisionSupport.noteWithoutPhoto(estimate.note))
         } else {

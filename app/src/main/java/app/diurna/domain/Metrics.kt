@@ -238,4 +238,298 @@ object Metrics {
             fiberKcal = known.map { it.fiberKcal }.average(),
         )
     }
+
+    // ---- Sub-macros (grams; Detailed nutrition) ----
+
+    /**
+     * One day's gram totals from estimated food. P/C/F are always present (0 when missing);
+     * optional sub-macros stay null when unknown — never treated as 0 for coverage.
+     */
+    data class DayMacroGrams(
+        val date: LocalDate,
+        val proteinG: Int,
+        val carbsG: Int,
+        val fatG: Int,
+        val fiberG: Int? = null,
+        val solubleFiberG: Int? = null,
+        val insolubleFiberG: Int? = null,
+        val sugarsG: Int? = null,
+        val addedSugarsG: Int? = null,
+        val starchG: Int? = null,
+        val satFatG: Int? = null,
+        val monoFatG: Int? = null,
+        val polyFatG: Int? = null,
+        val transFatG: Int? = null,
+        val cholesterolMg: Int? = null,
+        val omega3G: Int? = null,
+        val omega6G: Int? = null,
+        val omega9G: Int? = null,
+        val hisMg: Int? = null,
+        val ileMg: Int? = null,
+        val leuMg: Int? = null,
+        val lysMg: Int? = null,
+        val metMg: Int? = null,
+        val pheMg: Int? = null,
+        val thrMg: Int? = null,
+        val trpMg: Int? = null,
+        val valMg: Int? = null,
+        val cysMg: Int? = null,
+        val tyrMg: Int? = null,
+        /** True when any entry that day had a partial FDC amino match. */
+        val aminoPartial: Boolean = false,
+    ) {
+        /** Any carb sub-field known (fiber / sugars / starch). */
+        val hasCarbDetail: Boolean
+            get() = fiberG != null || solubleFiberG != null || insolubleFiberG != null ||
+                sugarsG != null || addedSugarsG != null || starchG != null
+        /** Any fat subtype known. */
+        val hasFatDetail: Boolean
+            get() = satFatG != null || monoFatG != null || polyFatG != null || transFatG != null
+        val hasOmegaOrChol: Boolean
+            get() = omega3G != null || omega6G != null || omega9G != null || cholesterolMg != null
+        val hasAminos: Boolean
+            get() = hisMg != null || ileMg != null || leuMg != null || lysMg != null ||
+                metMg != null || pheMg != null || thrMg != null || trpMg != null ||
+                valMg != null || cysMg != null || tyrMg != null
+        val hasAnyDetail: Boolean get() = hasCarbDetail || hasFatDetail || hasOmegaOrChol || hasAminos
+
+        fun aminos(): AminoAcids = AminoAcids(
+            hisMg, ileMg, leuMg, lysMg, metMg, pheMg, thrMg, trpMg, valMg, cysMg, tyrMg,
+        )
+    }
+
+    /**
+     * Carb gram breakdown for one day (or week average). [otherG] is carbs minus known parts,
+     * floored at 0 — never negative. Null when the day has no carb sub-macro data (a chart gap),
+     * so a day with carbs but no detail does not look like 100% "other".
+     */
+    data class CarbStack(
+        val date: LocalDate,
+        /** Soluble fiber when the split is known; 0 otherwise. */
+        val solubleFiberG: Double,
+        /** Insoluble fiber when the split is known; 0 otherwise. */
+        val insolubleFiberG: Double,
+        /** Total fiber shown as one segment when the soluble/insoluble split is unknown. */
+        val fiberUnspecifiedG: Double,
+        val starchG: Double,
+        /** Sugars excluding added, when added is known; otherwise all sugars. */
+        val sugarsG: Double,
+        /** Added sugars nested under sugars; 0 when unknown. */
+        val addedSugarsG: Double,
+        val otherG: Double,
+        val carbsG: Double,
+        val splitFiber: Boolean,
+        val showAdded: Boolean,
+    ) {
+        val total: Double get() = solubleFiberG + insolubleFiberG + fiberUnspecifiedG + starchG + sugarsG + addedSugarsG + otherG
+    }
+
+    /** Fat gram breakdown. [otherG] = fat − known subtypes, floored at 0. Null = no fat detail that day. */
+    data class FatStack(
+        val date: LocalDate,
+        val satG: Double,
+        val monoG: Double,
+        val polyG: Double,
+        val transG: Double,
+        val otherG: Double,
+        val fatG: Double,
+    ) {
+        val total: Double get() = satG + monoG + polyG + transG + otherG
+    }
+
+    /** Compact omega / cholesterol averages over days that reported each value. */
+    data class LipidSummary(
+        val avgOmega3G: Double?,
+        val avgOmega6G: Double?,
+        val avgOmega9G: Double?,
+        /** Omega-6 ÷ omega-3 over days that have both; null when omega-3 average is 0 or missing. */
+        val omega6to3: Double?,
+        val avgCholesterolMg: Double?,
+        val daysWithOmega: Int,
+        val daysWithChol: Int,
+        val daysWithFood: Int,
+    )
+
+    /** Coverage of detail vs food days — shown so unknown days aren't mistaken for zeros. */
+    data class DetailCoverage(val withDetail: Int, val withFood: Int) {
+        val label: String get() = when {
+            withFood == 0 -> "No food days"
+            withDetail == withFood -> if (withFood == 1) "1 day" else "$withFood days"
+            else -> "Detail on $withDetail of $withFood days"
+        }
+    }
+
+    fun carbStack(day: DayMacroGrams): CarbStack? {
+        if (!day.hasCarbDetail) return null
+        val carbs = day.carbsG.coerceAtLeast(0).toDouble()
+        val sol = day.solubleFiberG
+        val insol = day.insolubleFiberG
+        val fiber = day.fiberG
+        val split = sol != null && insol != null
+        val soluble: Double
+        val insoluble: Double
+        val unspecified: Double
+        if (split) {
+            soluble = sol!!.coerceAtLeast(0).toDouble()
+            insoluble = insol!!.coerceAtLeast(0).toDouble()
+            unspecified = 0.0
+        } else {
+            soluble = 0.0
+            insoluble = 0.0
+            // Prefer explicit total; else sum of whichever split is known.
+            unspecified = (fiber ?: listOfNotNull(sol, insol).takeIf { it.isNotEmpty() }?.sum())
+                ?.coerceAtLeast(0)?.toDouble() ?: 0.0
+        }
+        val starch = day.starchG?.coerceAtLeast(0)?.toDouble() ?: 0.0
+        val sugarsRaw = day.sugarsG?.coerceAtLeast(0)?.toDouble()
+        val addedRaw = day.addedSugarsG?.coerceAtLeast(0)?.toDouble()
+        val showAdded = sugarsRaw != null && addedRaw != null
+        val added: Double
+        val sugars: Double
+        if (showAdded) {
+            added = addedRaw!!.coerceAtMost(sugarsRaw!!)
+            sugars = (sugarsRaw - added).coerceAtLeast(0.0)
+        } else {
+            added = 0.0
+            sugars = sugarsRaw ?: 0.0
+        }
+        val known = soluble + insoluble + unspecified + starch + sugars + added
+        val other = (carbs - known).coerceAtLeast(0.0)
+        return CarbStack(
+            date = day.date,
+            solubleFiberG = soluble,
+            insolubleFiberG = insoluble,
+            fiberUnspecifiedG = unspecified,
+            starchG = starch,
+            sugarsG = sugars,
+            addedSugarsG = added,
+            otherG = other,
+            carbsG = carbs,
+            splitFiber = split,
+            showAdded = showAdded,
+        )
+    }
+
+    fun fatStack(day: DayMacroGrams): FatStack? {
+        if (!day.hasFatDetail) return null
+        val fat = day.fatG.coerceAtLeast(0).toDouble()
+        val sat = day.satFatG?.coerceAtLeast(0)?.toDouble() ?: 0.0
+        val mono = day.monoFatG?.coerceAtLeast(0)?.toDouble() ?: 0.0
+        val poly = day.polyFatG?.coerceAtLeast(0)?.toDouble() ?: 0.0
+        val trans = day.transFatG?.coerceAtLeast(0)?.toDouble() ?: 0.0
+        val other = (fat - sat - mono - poly - trans).coerceAtLeast(0.0)
+        return FatStack(day.date, sat, mono, poly, trans, other, fat)
+    }
+
+    fun dailyCarbStacks(byDate: Map<LocalDate, DayMacroGrams>, from: LocalDate, to: LocalDate): List<CarbStack?> =
+        days(from, to).map { byDate[it]?.let(::carbStack) }
+
+    fun dailyFatStacks(byDate: Map<LocalDate, DayMacroGrams>, from: LocalDate, to: LocalDate): List<FatStack?> =
+        days(from, to).map { byDate[it]?.let(::fatStack) }
+
+    fun weeklyCarbAverages(byDate: Map<LocalDate, DayMacroGrams>, from: LocalDate, to: LocalDate): List<CarbStack?> {
+        val inWindow = byDate.filterKeys { it in weekOf(from)..to }
+            .mapNotNull { (d, g) -> carbStack(g)?.let { d to it } }.toMap()
+        return generateSequence(weekOf(from)) { it.plusWeeks(1) }.takeWhile { it <= to }.map { monday ->
+            val days = inWindow.filterKeys { weekOf(it) == monday }.values
+            if (days.isEmpty()) null else averageCarbStack(days.toList(), monday)
+        }.toList()
+    }
+
+    fun weeklyFatAverages(byDate: Map<LocalDate, DayMacroGrams>, from: LocalDate, to: LocalDate): List<FatStack?> {
+        val inWindow = byDate.filterKeys { it in weekOf(from)..to }
+            .mapNotNull { (d, g) -> fatStack(g)?.let { d to it } }.toMap()
+        return generateSequence(weekOf(from)) { it.plusWeeks(1) }.takeWhile { it <= to }.map { monday ->
+            val days = inWindow.filterKeys { weekOf(it) == monday }.values
+            if (days.isEmpty()) null else averageFatStack(days.toList(), monday)
+        }.toList()
+    }
+
+    fun averageCarbStack(stacks: List<CarbStack>, date: LocalDate = stacks.last().date): CarbStack? {
+        if (stacks.isEmpty()) return null
+        return CarbStack(
+            date = date,
+            solubleFiberG = stacks.map { it.solubleFiberG }.average(),
+            insolubleFiberG = stacks.map { it.insolubleFiberG }.average(),
+            fiberUnspecifiedG = stacks.map { it.fiberUnspecifiedG }.average(),
+            starchG = stacks.map { it.starchG }.average(),
+            sugarsG = stacks.map { it.sugarsG }.average(),
+            addedSugarsG = stacks.map { it.addedSugarsG }.average(),
+            otherG = stacks.map { it.otherG }.average(),
+            carbsG = stacks.map { it.carbsG }.average(),
+            splitFiber = stacks.any { it.splitFiber },
+            showAdded = stacks.any { it.showAdded },
+        )
+    }
+
+    fun averageFatStack(stacks: List<FatStack>, date: LocalDate = stacks.last().date): FatStack? {
+        if (stacks.isEmpty()) return null
+        return FatStack(
+            date = date,
+            satG = stacks.map { it.satG }.average(),
+            monoG = stacks.map { it.monoG }.average(),
+            polyG = stacks.map { it.polyG }.average(),
+            transG = stacks.map { it.transG }.average(),
+            otherG = stacks.map { it.otherG }.average(),
+            fatG = stacks.map { it.fatG }.average(),
+        )
+    }
+
+    fun carbCoverage(byDate: Map<LocalDate, DayMacroGrams>): DetailCoverage =
+        DetailCoverage(byDate.values.count { it.hasCarbDetail }, byDate.size)
+
+    fun fatCoverage(byDate: Map<LocalDate, DayMacroGrams>): DetailCoverage =
+        DetailCoverage(byDate.values.count { it.hasFatDetail }, byDate.size)
+
+    fun lipidSummary(byDate: Map<LocalDate, DayMacroGrams>): LipidSummary? {
+        if (byDate.isEmpty()) return null
+        if (byDate.values.none { it.hasOmegaOrChol }) return null
+        val o3 = byDate.values.mapNotNull { it.omega3G?.coerceAtLeast(0)?.toDouble() }
+        val o6 = byDate.values.mapNotNull { it.omega6G?.coerceAtLeast(0)?.toDouble() }
+        val o9 = byDate.values.mapNotNull { it.omega9G?.coerceAtLeast(0)?.toDouble() }
+        val chol = byDate.values.mapNotNull { it.cholesterolMg?.coerceAtLeast(0)?.toDouble() }
+        val avg3 = o3.takeIf { it.isNotEmpty() }?.average()
+        val avg6 = o6.takeIf { it.isNotEmpty() }?.average()
+        val ratio = if (avg3 != null && avg6 != null && avg3 > 0) avg6 / avg3 else null
+        return LipidSummary(
+            avgOmega3G = avg3,
+            avgOmega6G = avg6,
+            avgOmega9G = o9.takeIf { it.isNotEmpty() }?.average(),
+            omega6to3 = ratio,
+            avgCholesterolMg = chol.takeIf { it.isNotEmpty() }?.average(),
+            daysWithOmega = byDate.values.count { it.omega3G != null || it.omega6G != null || it.omega9G != null },
+            daysWithChol = byDate.values.count { it.cholesterolMg != null },
+            daysWithFood = byDate.size,
+        )
+    }
+
+    /**
+     * Average daily amino mg over days that reported any amino.
+     * [daysWithPartial] counts days that include at least one partial FDC match.
+     * WHO adult-requirement reference lines are drawn in the UI (not stored here).
+     */
+    data class AminoSummary(
+        val average: AminoAcids,
+        val daysWithAminos: Int,
+        val daysWithFood: Int,
+        val daysWithPartial: Int = 0,
+    ) {
+        val coverageLabel: String get() {
+            val base = when {
+                daysWithFood == 0 -> "No food days"
+                daysWithAminos == daysWithFood -> if (daysWithFood == 1) "1 day" else "$daysWithFood days"
+                else -> "Amino data on $daysWithAminos of $daysWithFood days"
+            }
+            return if (daysWithPartial > 0) "$base ($daysWithPartial partial)" else base
+        }
+    }
+
+    fun aminoSummary(byDate: Map<LocalDate, DayMacroGrams>): AminoSummary? {
+        if (byDate.isEmpty()) return null
+        val with = byDate.values.filter { it.hasAminos }
+        if (with.isEmpty()) return null
+        val avg = AminoAcids.average(with.map { it.aminos() }) ?: return null
+        val partial = with.count { it.aminoPartial }
+        return AminoSummary(avg, with.size, byDate.size, partial)
+    }
 }

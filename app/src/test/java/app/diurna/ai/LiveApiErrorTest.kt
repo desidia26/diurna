@@ -37,7 +37,7 @@ class LiveApiErrorTest {
 
     @Test fun invalidKeyShowsTheKeyMessage() = runTest {
         try {
-            ClaudeFoodEstimator({ fakeKey }).estimate("two eggs")
+            ClaudeFoodEstimator({ fakeKey }).estimate("two eggs", photo = null, detailed = false)
             error("expected EstimateFailed")
         } catch (e: EstimateFailed) {
             println("LIVE shown=${e.message}")

@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,6 +40,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.diurna.ai.AiProvider
+import app.diurna.ai.DetailBackfill
+import app.diurna.ai.BackfillWorkState
 import app.diurna.ai.GatewayUrl
 import app.diurna.ai.GrokFoodEstimator
 import app.diurna.ai.XaiChat
@@ -330,6 +334,45 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
     }
 }
 
+
+@Composable
+fun UsdaFdcCard(vm: SetupViewModel) {
+    val lastFour by vm.usdaKeyLastFour.collectAsStateWithLifecycle()
+    var key by remember { mutableStateOf("") }
+    var confirmRemove by remember { mutableStateOf(false) }
+    SectionCard("USDA FoodData Central", chip = { if (lastFour != null) Chip("Key set", Tone.Good) else Chip("No key", Tone.Warn) }) {
+        Hint(
+            "With Detailed nutrition on, Diurna looks up amino acids for each estimated entry's ingredients " +
+                "on USDA FoodData Central (Foundation and SR Legacy foods). Ingredient names only — no personal data — " +
+                "are sent to USDA over HTTPS. Get a free key at https://fdc.nal.usda.gov/api-key-signup"
+        )
+        if (lastFour != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Key ending ••••$lastFour", Modifier.weight(1f), fontFamily = FontFamily.Monospace)
+                TextButton(onClick = { confirmRemove = true }) { Text("Remove") }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    key, { key = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text("api.data.gov key") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+                Button(onClick = { vm.setUsdaKey(key); key = "" }, enabled = key.isNotBlank()) { Text("Save") }
+            }
+        }
+        Hint("Stored encrypted on this phone and left out of backups. Never share or commit the key.")
+    }
+    if (confirmRemove) {
+        ConfirmDialog(
+            "Remove USDA FDC API key?",
+            "New estimates won't look up amino acids until you add a key again.",
+            "Remove",
+            onDismiss = { confirmRemove = false },
+        ) { vm.clearUsdaKey(); confirmRemove = false }
+    }
+}
+
 @Composable
 fun StepsCard(vm: SetupViewModel) {
     val goal by vm.stepGoal.collectAsStateWithLifecycle()
@@ -375,5 +418,93 @@ fun BackupsCard(vm: SetupViewModel) {
             fontFamily = FontFamily.Monospace,
         )
         OutlinedButton(onClick = vm::backupNow) { Text("Back up now") }
+    }
+}
+
+
+@Composable
+fun DetailBackfillCard(vm: SetupViewModel) {
+    val state by vm.backfillState.collectAsStateWithLifecycle()
+    val preview by vm.backfillPreview.collectAsStateWithLifecycle()
+    val provider by vm.aiProvider.collectAsStateWithLifecycle()
+    val usdaFour by vm.usdaKeyLastFour.collectAsStateWithLifecycle()
+    var rangeAll by remember { mutableStateOf(vm.backfillRange.from == null) }
+    LaunchedEffect(Unit) { vm.refreshBackfillPreview() }
+
+    SectionCard("Fill in detail for past entries") {
+        Hint(
+            "Re-runs detailed nutrition for entries that are missing sub-macros or amino acids. " +
+                "Existing calories and protein/carbs/fat stay exactly as they are — only null detail fields are filled. " +
+                "Uses your ${provider.company} API tokens and resends each entry's stored text and photos to that provider. " +
+                (if (usdaFour != null) "Ingredient names also go to USDA for amino lookup."
+                 else "Ingredient names go to USDA only when a USDA key is set.")
+        )
+        Label("Date range")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = !rangeAll,
+                onClick = {
+                    rangeAll = false
+                    vm.setBackfillRange(DetailBackfill.Range.lastDays(java.time.LocalDate.now()))
+                },
+                label = { Text("Last 30 days") },
+            )
+            FilterChip(
+                selected = rangeAll,
+                onClick = {
+                    rangeAll = true
+                    vm.setBackfillRange(DetailBackfill.Range.all())
+                },
+                label = { Text("All") },
+            )
+        }
+        val p = preview
+        if (p != null) {
+            Text(
+                if (p.entryCount == 0) "Nothing to fill in this range."
+                else "%d entries · ~%d AI call%s · %d from saved meals".format(
+                    p.entryCount, p.aiCalls, if (p.aiCalls == 1) "" else "s", p.mealCount,
+                ),
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        when (val s = state) {
+            is BackfillWorkState.Running -> {
+                Text(
+                    if (s.total <= 0) "Starting…" else "Progress: ${s.done} of ${s.total}",
+                    fontFamily = FontFamily.Monospace,
+                )
+                OutlinedButton(onClick = vm::cancelBackfill) { Text("Cancel") }
+            }
+            is BackfillWorkState.Finished -> {
+                val sum = s.summary
+                Text(
+                    "Done: ${sum.filled} filled · ${sum.partialAminos} partial aminos · " +
+                        "${sum.needsMealDetail} need meal detail · ${sum.failed} failed",
+                    fontFamily = FontFamily.Monospace,
+                )
+                Button(
+                    onClick = {
+                        vm.refreshBackfillPreview()
+                        vm.startBackfill()
+                    },
+                    enabled = (preview?.entryCount ?: 0) > 0,
+                ) { Text("Run again") }
+            }
+            is BackfillWorkState.Cancelled -> {
+                Text("Canceled.", fontFamily = FontFamily.Monospace)
+                Button(
+                    onClick = vm::startBackfill,
+                    enabled = (preview?.entryCount ?: 0) > 0,
+                ) { Text("Fill in detail") }
+            }
+            else -> {
+                Button(
+                    onClick = vm::startBackfill,
+                    enabled = (preview?.entryCount ?: 0) > 0,
+                ) { Text("Fill in detail") }
+            }
+        }
     }
 }

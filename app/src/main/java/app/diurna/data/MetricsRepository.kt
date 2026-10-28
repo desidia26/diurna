@@ -25,6 +25,8 @@ class MetricsRepository(db: AppDatabase) {
         val cardio: List<Cardio.Session> = emptyList(),
         /** Estimated food macros in the range, keyed by day. Empty when nothing was logged. */
         val macros: Map<LocalDate, Metrics.MacroStack> = emptyMap(),
+        /** Same days as [macros], with gram totals including optional sub-macros (null = unknown). */
+        val macroGrams: Map<LocalDate, Metrics.DayMacroGrams> = emptyMap(),
         /** True once any food entry has ever been estimated; hides the macros card until then. */
         val hasEstimatedFood: Boolean = false,
     )
@@ -54,6 +56,22 @@ class MetricsRepository(db: AppDatabase) {
                         d to Metrics.macroKcal(
                             d, row.proteinG, row.carbsG, row.fatG,
                             row.fiberG, row.solubleFiberG, row.insolubleFiberG,
+                        )
+                    },
+                    macroGrams = macros.associate { row ->
+                        val d = LocalDate.parse(row.date)
+                        d to Metrics.DayMacroGrams(
+                            date = d,
+                            proteinG = row.proteinG, carbsG = row.carbsG, fatG = row.fatG,
+                            fiberG = row.fiberG, solubleFiberG = row.solubleFiberG, insolubleFiberG = row.insolubleFiberG,
+                            sugarsG = row.sugarsG, addedSugarsG = row.addedSugarsG, starchG = row.starchG,
+                            satFatG = row.satFatG, monoFatG = row.monoFatG, polyFatG = row.polyFatG, transFatG = row.transFatG,
+                            cholesterolMg = row.cholesterolMg,
+                            omega3G = row.omega3G, omega6G = row.omega6G, omega9G = row.omega9G,
+                            hisMg = row.hisMg, ileMg = row.ileMg, leuMg = row.leuMg, lysMg = row.lysMg,
+                            metMg = row.metMg, pheMg = row.pheMg, thrMg = row.thrMg, trpMg = row.trpMg,
+                            valMg = row.valMg, cysMg = row.cysMg, tyrMg = row.tyrMg,
+                            aminoPartial = row.aminoPartial,
                         )
                     },
                     hasEstimatedFood = foodCount > 0,

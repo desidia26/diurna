@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import java.time.LocalDate
 
@@ -58,7 +59,7 @@ data class DayUi(
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
+class DayViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoImportHost {
     /** Chosen AI for food estimates and cardio photo reads; shown in the Log-from-photo disclosure. */
     val aiProvider = c.aiProvider.selected
 
@@ -166,6 +167,26 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
             CardioPhotoResult.Problem("Couldn't read the screen (${e.javaClass.simpleName})")
         }
     }
+
+    /** Reads a Nutrition Facts label into meal fields for confirm-before-save. Temp photo deleted after. */
+    suspend fun readLabelPhoto(name: String): LabelPhotoResult = withContext(Dispatchers.IO) {
+        val bytes = c.foodPhotos.read(name)
+        c.foodPhotos.delete(name)
+        if (bytes == null) return@withContext LabelPhotoResult.Problem("Couldn't read that photo")
+        try {
+            LabelPhotoResult.Read(c.labelReader.read(bytes))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: NoApiKey) {
+            LabelPhotoResult.Problem(e.message ?: "Add an API key in Setup to read labels")
+        } catch (e: EstimateFailed) {
+            LabelPhotoResult.Problem(e.message ?: "Couldn't read the label")
+        } catch (e: EstimateRetryable) {
+            LabelPhotoResult.Problem("Couldn't reach the AI. Check your connection and try again.")
+        } catch (e: Exception) {
+            LabelPhotoResult.Problem("Couldn't read the label (${e.javaClass.simpleName})")
+        }
+    }
     fun deleteSet(setId: Long, loggedId: Long) = io { c.days.deleteSet(setId, loggedId) }
     fun removeWorkout() = io { c.days.removeWorkout(date) }
     fun removeExercise(loggedId: Long) = io { c.days.removeExercise(loggedId) }
@@ -173,15 +194,18 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
 
     // Food
     fun addFood(text: String, photo: String? = null) = io { if (text.isNotBlank()) c.food.add(date, text, photo) }
+    fun addFood(text: String, photos: List<String>) = io { if (text.isNotBlank()) c.food.add(date, text, photos) }
     fun deleteFood(id: Long) = io { c.food.delete(id) }
     fun editFood(id: Long, text: String, time: String, photo: String?) = io { c.food.edit(id, text, time, photo) }
+    fun editFood(id: Long, text: String, time: String, photos: List<String>) = io { c.food.edit(id, text, time, photos) }
+    fun entryPhotos(entryId: Long) = c.food.observePhotos(entryId).map { rows -> rows.map { it.fileName } }
 
     val photos get() = c.foodPhotos
     /** False when Setup says the selected model has no vision; photo food falls back to text. */
     fun supportsImages(): Boolean = c.supportsImages()
-    val captureFile get() = c.photoImporter.captureFile
-    suspend fun importPhoto(uri: Uri) = c.photoImporter.import(uri)
-    suspend fun importCapture() = c.photoImporter.importCapture()
+    override val captureFile get() = c.photoImporter.captureFile
+    override suspend fun importPhoto(uri: Uri) = c.photoImporter.import(uri)
+    override suspend fun importCapture() = c.photoImporter.importCapture()
     /** A photo attached and then removed, replaced or abandoned before it was saved with an entry. */
     fun discardPhoto(name: String?) = io { withContext(Dispatchers.IO) { c.foodPhotos.delete(name) } }
     fun retryEstimates() = io { c.food.retryFailedEstimates() }
@@ -189,7 +213,14 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel() {
     // Saved meals
     val meals = c.library.observeMeals().state(emptyList())
     val detailedNutrition = c.settings.detailedNutrition.state(false)
-    fun logMeal(mealId: Long, servings: Double = 1.0, photo: String? = null) = io { c.library.logMeal(date, mealId, servings, photo) }
+    fun logMeal(mealId: Long, servings: Double = 1.0, photo: String? = null) =
+        io { c.library.logMeal(date, mealId, servings, photo = photo) }
+    fun logMeal(mealId: Long, servings: Double, photos: List<String>) =
+        io { c.library.logMeal(date, mealId, servings, photos = photos) }
+    fun logMealByGrams(mealId: Long, grams: Double, photo: String? = null) =
+        io { c.library.logMealByGrams(date, mealId, grams, photo = photo) }
+    fun logMealByGrams(mealId: Long, grams: Double, photos: List<String>) =
+        io { c.library.logMealByGrams(date, mealId, grams, photos = photos) }
     suspend fun scanBarcode(code: String, upcE: Boolean) = c.library.scan(code, upcE)
     suspend fun saveMeal(meal: MealEntity) = c.library.saveMeal(meal)
     suspend fun mealByBarcode(code: String) = c.library.mealByBarcode(code)

@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "description": "Larger optional set. Includes default cases plus extras. Use -Pset=full.",
+  "passThreshold": 0.7,
+  "include": "default.json",
+  "extraCases": [
+    {
+      "id": "food-big-mac",
+      "prompt": "food",
+      "tags": ["typical"],
+      "input": { "text": "mcdonalds big mac, no fries" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 550,
+        "kcalTolPct": 40,
+        "proteinG": { "min": 20, "max": 35 },
+        "carbsG": { "min": 35, "max": 55 },
+        "fatG": { "min": 25, "max": 40 },
+        "macrosConsistentWithKcal": true
+      }
+    },
+    {
+      "id": "food-large-pizza",
+      "prompt": "food",
+      "tags": ["typical"],
+      "input": { "text": "entire large pepperoni pizza, 8 slices" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 2200,
+        "kcalTolPct": 40,
+        "proteinG": { "min": 80, "max": 140 },
+        "carbsG": { "min": 200, "max": 320 },
+        "fatG": { "min": 80, "max": 140 },
+        "macrosConsistentWithKcal": true
+      }
+    },
+    {
+      "id": "food-coffee-black",
+      "prompt": "food",
+      "tags": ["typical"],
+      "input": { "text": "black coffee, 12 oz" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 5,
+        "kcalTolPct": 200,
+        "proteinG": { "min": 0, "max": 1 },
+        "carbsG": { "min": 0, "max": 2 },
+        "fatG": { "min": 0, "max": 0 },
+        "macrosConsistentWithKcal": false
+      }
+    },
+    {
+      "id": "food-protein-shake",
+      "prompt": "food",
+      "tags": ["typical"],
+      "input": { "text": "whey protein shake, one scoop in water" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 120,
+        "kcalTolPct": 40,
+        "proteinG": { "min": 20, "max": 30 },
+        "carbsG": { "min": 1, "max": 8 },
+        "fatG": { "min": 0, "max": 3 },
+        "macrosConsistentWithKcal": true
+      }
+    },
+    {
+      "id": "food-ambiguous-portion",
+      "prompt": "food",
+      "tags": ["edge"],
+      "input": { "text": "pasta" },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 400,
+        "kcalTolPct": 75,
+        "proteinG": { "min": 5, "max": 30 },
+        "carbsG": { "min": 40, "max": 100 },
+        "fatG": { "min": 2, "max": 30 },
+        "macrosConsistentWithKcal": true
+      }
+    }
+  ]
+}
