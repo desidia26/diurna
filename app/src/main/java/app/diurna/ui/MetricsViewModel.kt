@@ -175,6 +175,11 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
         build(range, s, t?.kcal, mode)
     }.state(null)
 
+    /** Exercises with at least one session, so other screens can offer to open their detail. */
+    val tracked: StateFlow<Set<Long>> = c.metrics.training
+        .map { t -> (t.lifting.map { it.exerciseId } + t.cardio.map { it.exerciseId }).toSet() }
+        .state(emptySet())
+
     private val openExercise = MutableStateFlow<Long?>(null)
     private val metric = MutableStateFlow(LiftMetric.E1RM)
 
