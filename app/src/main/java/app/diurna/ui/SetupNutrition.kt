@@ -212,6 +212,45 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
     }
 }
 
+
+@Composable
+fun UsdaFdcCard(vm: SetupViewModel) {
+    val lastFour by vm.usdaKeyLastFour.collectAsStateWithLifecycle()
+    var key by remember { mutableStateOf("") }
+    var confirmRemove by remember { mutableStateOf(false) }
+    SectionCard("USDA FoodData Central", chip = { if (lastFour != null) Chip("Key set", Tone.Good) else Chip("No key", Tone.Warn) }) {
+        Hint(
+            "With Detailed nutrition on, Diurna looks up amino acids for each estimated entry's ingredients " +
+                "on USDA FoodData Central (Foundation and SR Legacy foods). Ingredient names only — no personal data — " +
+                "are sent to USDA over HTTPS. Get a free key at https://fdc.nal.usda.gov/api-key-signup"
+        )
+        if (lastFour != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Key ending ••••$lastFour", Modifier.weight(1f), fontFamily = FontFamily.Monospace)
+                TextButton(onClick = { confirmRemove = true }) { Text("Remove") }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    key, { key = it }, Modifier.weight(1f), singleLine = true, placeholder = { Text("api.data.gov key") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+                Button(onClick = { vm.setUsdaKey(key); key = "" }, enabled = key.isNotBlank()) { Text("Save") }
+            }
+        }
+        Hint("Stored encrypted on this phone and left out of backups. Never share or commit the key.")
+    }
+    if (confirmRemove) {
+        ConfirmDialog(
+            "Remove USDA FDC API key?",
+            "New estimates won't look up amino acids until you add a key again.",
+            "Remove",
+            onDismiss = { confirmRemove = false },
+        ) { vm.clearUsdaKey(); confirmRemove = false }
+    }
+}
+
 @Composable
 fun StepsCard(vm: SetupViewModel) {
     val goal by vm.stepGoal.collectAsStateWithLifecycle()

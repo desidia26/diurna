@@ -153,6 +153,33 @@ class EstimateParseTest {
         assertTrue(detailed.length - basic.length < 800) // keep the add-on small
     }
 
+    @Test fun parsesIngredientList() {
+        val e = EstimatePrompt.parse(
+            """{"kcal_low":200,"kcal_high":250,"protein_g":20,"carbs_g":10,"fat_g":8,"note":"tofu",
+               "ingredients":[{"name":"tofu, firm","grams":120},{"name":"soy sauce","grams":5}]}"""
+        )
+        assertEquals(2, e.ingredients!!.size)
+        assertEquals("tofu, firm", e.ingredients!![0].name)
+        assertEquals(120.0, e.ingredients!![0].grams, 0.0)
+    }
+
+    @Test fun ingredientsSchemaAndPromptAreGated() {
+        val basic = EstimatePrompt.schema(detailed = false, ingredients = false)
+        assertFalse((basic["properties"] as Map<*, *>).containsKey("ingredients"))
+        assertFalse(EstimatePrompt.system(false, false).contains("FoodData Central"))
+
+        val detailedOnly = EstimatePrompt.schema(detailed = true, ingredients = false)
+        assertFalse((detailedOnly["properties"] as Map<*, *>).containsKey("ingredients"))
+        assertFalse(EstimatePrompt.system(true, false).contains("FoodData Central"))
+
+        val withIng = EstimatePrompt.schema(detailed = true, ingredients = true)
+        assertTrue((withIng["properties"] as Map<*, *>).containsKey("ingredients"))
+        assertTrue((withIng["required"] as List<*>).contains("ingredients"))
+        val sys = EstimatePrompt.system(true, true)
+        assertTrue(sys.contains("FoodData Central"))
+        assertTrue(sys.contains("do NOT invent amino"))
+    }
+
     @Test fun stripsControlCharactersAndCapsTheNote() {
         assertEquals("hithere", EstimatePrompt.sanitizeNote("hi\u0000there\n"))
         assertEquals(EstimatePrompt.NOTE_MAX, EstimatePrompt.sanitizeNote("a".repeat(200)).length)

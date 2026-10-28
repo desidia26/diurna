@@ -26,7 +26,7 @@ class EstimateRunnerTest {
         var failNext: Exception? = null
         var beforeReturn: suspend () -> Unit = {}
         val photos = mutableListOf<ByteArray?>()
-        override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean): FoodEstimate {
+        override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate {
             calls += text
             photos += photo
             failNext?.let { failNext = null; throw it }

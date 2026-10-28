@@ -30,6 +30,8 @@ import app.diurna.data.PhotoImporter
 import app.diurna.ui.SelectedDate
 import app.diurna.data.RoutineRepository
 import app.diurna.data.SettingsStore
+import app.diurna.data.fdc.AminoResolver
+import app.diurna.data.fdc.FdcClient
 import app.diurna.data.StepCounter
 import app.diurna.data.StepSource
 import app.diurna.steps.AndroidStepSensor
@@ -55,11 +57,21 @@ class AppContainer(context: Context) {
     val backups = Backups(context, db, foodPhotos)
     val aiProvider = AiProviderStore(context)
     val apiKeys: Map<AiProvider, ApiKeyStore> = AiProvider.entries.associateWith { ApiKeyStore(context, it) }
+    val usdaKey = ApiKeyStore.usda(context)
+    val fdcClient = FdcClient(apiKey = { usdaKey.get() })
+    val aminoResolver = AminoResolver(fdcClient, db.fdcFoodCacheDao())
     val network = NetworkMonitor(context)
-    val estimates = EstimateRunner(db, SelectedFoodEstimator({ aiProvider.get() }, mapOf(
-        AiProvider.ANTHROPIC to ClaudeFoodEstimator({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
-        AiProvider.XAI to GrokFoodEstimator({ apiKeys.getValue(AiProvider.XAI).get() }),
-    )), photo = foodPhotos::read, detailed = { settings.detailedNutrition.first() })
+    val estimates = EstimateRunner(
+        db,
+        SelectedFoodEstimator({ aiProvider.get() }, mapOf(
+            AiProvider.ANTHROPIC to ClaudeFoodEstimator({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
+            AiProvider.XAI to GrokFoodEstimator({ apiKeys.getValue(AiProvider.XAI).get() }),
+        )),
+        photo = foodPhotos::read,
+        detailed = { settings.detailedNutrition.first() },
+        fdcKeyPresent = { usdaKey.get()?.isNotBlank() == true },
+        aminoResolver = aminoResolver,
+    )
     /** Reads cardio machines' summary screens for pieces, with whichever provider is selected. */
     val cardioReader: CardioReader = SelectedCardioReader({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeCardioReader({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),

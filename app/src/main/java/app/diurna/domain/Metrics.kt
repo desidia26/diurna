@@ -264,6 +264,19 @@ object Metrics {
         val omega3G: Int? = null,
         val omega6G: Int? = null,
         val omega9G: Int? = null,
+        val hisMg: Int? = null,
+        val ileMg: Int? = null,
+        val leuMg: Int? = null,
+        val lysMg: Int? = null,
+        val metMg: Int? = null,
+        val pheMg: Int? = null,
+        val thrMg: Int? = null,
+        val trpMg: Int? = null,
+        val valMg: Int? = null,
+        val cysMg: Int? = null,
+        val tyrMg: Int? = null,
+        /** True when any entry that day had a partial FDC amino match. */
+        val aminoPartial: Boolean = false,
     ) {
         /** Any carb sub-field known (fiber / sugars / starch). */
         val hasCarbDetail: Boolean
@@ -274,7 +287,15 @@ object Metrics {
             get() = satFatG != null || monoFatG != null || polyFatG != null || transFatG != null
         val hasOmegaOrChol: Boolean
             get() = omega3G != null || omega6G != null || omega9G != null || cholesterolMg != null
-        val hasAnyDetail: Boolean get() = hasCarbDetail || hasFatDetail || hasOmegaOrChol
+        val hasAminos: Boolean
+            get() = hisMg != null || ileMg != null || leuMg != null || lysMg != null ||
+                metMg != null || pheMg != null || thrMg != null || trpMg != null ||
+                valMg != null || cysMg != null || tyrMg != null
+        val hasAnyDetail: Boolean get() = hasCarbDetail || hasFatDetail || hasOmegaOrChol || hasAminos
+
+        fun aminos(): AminoAcids = AminoAcids(
+            hisMg, ileMg, leuMg, lysMg, metMg, pheMg, thrMg, trpMg, valMg, cysMg, tyrMg,
+        )
     }
 
     /**
@@ -480,5 +501,35 @@ object Metrics {
             daysWithChol = byDate.values.count { it.cholesterolMg != null },
             daysWithFood = byDate.size,
         )
+    }
+
+    /**
+     * Average daily amino mg over days that reported any amino.
+     * [daysWithPartial] counts days that include at least one partial FDC match.
+     * WHO adult-requirement reference lines are drawn in the UI (not stored here).
+     */
+    data class AminoSummary(
+        val average: AminoAcids,
+        val daysWithAminos: Int,
+        val daysWithFood: Int,
+        val daysWithPartial: Int = 0,
+    ) {
+        val coverageLabel: String get() {
+            val base = when {
+                daysWithFood == 0 -> "No food days"
+                daysWithAminos == daysWithFood -> if (daysWithFood == 1) "1 day" else "$daysWithFood days"
+                else -> "Amino data on $daysWithAminos of $daysWithFood days"
+            }
+            return if (daysWithPartial > 0) "$base ($daysWithPartial partial)" else base
+        }
+    }
+
+    fun aminoSummary(byDate: Map<LocalDate, DayMacroGrams>): AminoSummary? {
+        if (byDate.isEmpty()) return null
+        val with = byDate.values.filter { it.hasAminos }
+        if (with.isEmpty()) return null
+        val avg = AminoAcids.average(with.map { it.aminos() }) ?: return null
+        val partial = with.count { it.aminoPartial }
+        return AminoSummary(avg, with.size, byDate.size, partial)
     }
 }

@@ -240,8 +240,8 @@ class DayRepositoryTest {
         t.food.add(mon, "still estimating")
         val (eggs, coffee) = t.food.observe(mon).first().filter { it.text != "still estimating" }
         val dao = t.db.foodDao()
-        dao.setEstimate(eggs.id, eggs.text, null, 140, 180, 12, 1, 10, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "", "test", 1L) // midpoint 160
-        dao.setEstimate(coffee.id, coffee.text, null, 5, 10, 0, 1, 0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "", "test", 1L) // midpoint 7
+        dao.setEstimate(eggs.id, eggs.text, null, 140, 180, 12, 1, 10, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "", "test", 1L) // midpoint 160
+        dao.setEstimate(coffee.id, coffee.text, null, 5, 10, 0, 1, 0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "", "test", 1L) // midpoint 7
         days.startWorkout(mon.plusDays(2), t.template("Pull A", "Row"))
         val week = days.observeWeek(mon).first()
         assertEquals(7, week.size)

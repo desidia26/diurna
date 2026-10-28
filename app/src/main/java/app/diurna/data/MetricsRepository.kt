@@ -68,6 +68,10 @@ class MetricsRepository(db: AppDatabase) {
                             satFatG = row.satFatG, monoFatG = row.monoFatG, polyFatG = row.polyFatG, transFatG = row.transFatG,
                             cholesterolMg = row.cholesterolMg,
                             omega3G = row.omega3G, omega6G = row.omega6G, omega9G = row.omega9G,
+                            hisMg = row.hisMg, ileMg = row.ileMg, leuMg = row.leuMg, lysMg = row.lysMg,
+                            metMg = row.metMg, pheMg = row.pheMg, thrMg = row.thrMg, trpMg = row.trpMg,
+                            valMg = row.valMg, cysMg = row.cysMg, tyrMg = row.tyrMg,
+                            aminoPartial = row.aminoPartial,
                         )
                     },
                     hasEstimatedFood = foodCount > 0,

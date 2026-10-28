@@ -4,6 +4,7 @@ import app.diurna.AppContainer
 import app.diurna.data.MetricsRepository
 import app.diurna.domain.Cardio
 import app.diurna.domain.Metrics
+import app.diurna.domain.WhoAminoRefs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -73,6 +74,13 @@ data class FatDetailCard(
 
 data class LipidDetailCard(
     val summary: Metrics.LipidSummary,
+)
+
+data class AminoDetailCard(
+    val summary: Metrics.AminoSummary,
+    /** WHO TRS 935 adult requirement refs scaled by latest logged weight; null → hide lines. */
+    val refs: WhoAminoRefs.Scaled? = null,
+    val weightLb: Double? = null,
 )
 
 data class TrainingCard(
@@ -157,6 +165,7 @@ data class MetricsUi(
     val carbs: CarbDetailCard?,
     val fats: FatDetailCard?,
     val lipids: LipidDetailCard?,
+    val aminos: AminoDetailCard?,
     val training: TrainingCard,
     /** Null until any cardio has ever been logged, so people who only lift never see the card. */
     val cardio: CardioCard?,
@@ -299,10 +308,11 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
         val carbs = if (showDetail) carbDetailCard(range, s) else null
         val fats = if (showDetail) fatDetailCard(range, s) else null
         val lipids = if (showDetail) lipidDetailCard(s) else null
+        val aminos = if (showDetail) aminoDetailCard(s) else null
 
         return MetricsUi(
             range, s.from, s.to, (range.days ?: Long.MAX_VALUE) <= 84,
-            weight, mood, macros, carbs, fats, lipids, training,
+            weight, mood, macros, carbs, fats, lipids, aminos, training,
             cardioCard(s).takeIf { s.cardio.isNotEmpty() }, lifts,
         )
     }
@@ -363,6 +373,14 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
 
     private fun lipidDetailCard(s: MetricsRepository.Snapshot): LipidDetailCard? =
         Metrics.lipidSummary(s.macroGrams)?.let(::LipidDetailCard)
+
+    private fun aminoDetailCard(s: MetricsRepository.Snapshot): AminoDetailCard? {
+        val summary = Metrics.aminoSummary(s.macroGrams) ?: return null
+        val weightLb = s.days.mapNotNull { d ->
+            d.bodyWeight?.let { LocalDate.parse(d.date) to it }
+        }.maxByOrNull { it.first }?.second
+        return AminoDetailCard(summary, WhoAminoRefs.scaleLb(weightLb), weightLb)
+    }
 
     private fun cardioCard(s: MetricsRepository.Snapshot): CardioCard {
         val ranged = s.cardio.filter { it.date in s.from..s.to }

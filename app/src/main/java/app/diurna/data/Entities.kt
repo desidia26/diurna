@@ -67,7 +67,28 @@ data class MealEntity(
     @ColumnInfo(name = "omega3_g") val omega3G: Int? = null,
     @ColumnInfo(name = "omega6_g") val omega6G: Int? = null,
     @ColumnInfo(name = "omega9_g") val omega9G: Int? = null,
-)
+    // Amino acids (mg). Nullable = unknown. Filled from USDA FDC or manual entry.
+    @ColumnInfo(name = "his_mg") val hisMg: Int? = null,
+    @ColumnInfo(name = "ile_mg") val ileMg: Int? = null,
+    @ColumnInfo(name = "leu_mg") val leuMg: Int? = null,
+    @ColumnInfo(name = "lys_mg") val lysMg: Int? = null,
+    @ColumnInfo(name = "met_mg") val metMg: Int? = null,
+    @ColumnInfo(name = "phe_mg") val pheMg: Int? = null,
+    @ColumnInfo(name = "thr_mg") val thrMg: Int? = null,
+    @ColumnInfo(name = "trp_mg") val trpMg: Int? = null,
+    @ColumnInfo(name = "val_mg") val valMg: Int? = null,
+    @ColumnInfo(name = "cys_mg") val cysMg: Int? = null,
+    @ColumnInfo(name = "tyr_mg") val tyrMg: Int? = null,
+    /** JSON list of ingredients used for FDC amino lookup (name, grams, optional match). */
+    @ColumnInfo(name = "ingredients_json") val ingredientsJson: String? = null,
+    /** FDC match counts; null when no lookup. Partial when matched < total. */
+    @ColumnInfo(name = "amino_matched") val aminoMatched: Int? = null,
+    @ColumnInfo(name = "amino_total") val aminoTotal: Int? = null,
+) {
+    /** True when some but not all ingredients matched for aminos. */
+    val aminoPartial: Boolean get() =
+        aminoMatched != null && aminoTotal != null && aminoMatched < aminoTotal && aminoMatched > 0
+}
 
 @Entity(tableName = "workout_template", indices = [Index(value = ["name"], unique = true)])
 data class WorkoutTemplateEntity(
@@ -227,6 +248,20 @@ data class FoodEntryEntity(
     @ColumnInfo(name = "omega3_g") val omega3G: Int? = null,
     @ColumnInfo(name = "omega6_g") val omega6G: Int? = null,
     @ColumnInfo(name = "omega9_g") val omega9G: Int? = null,
+    @ColumnInfo(name = "his_mg") val hisMg: Int? = null,
+    @ColumnInfo(name = "ile_mg") val ileMg: Int? = null,
+    @ColumnInfo(name = "leu_mg") val leuMg: Int? = null,
+    @ColumnInfo(name = "lys_mg") val lysMg: Int? = null,
+    @ColumnInfo(name = "met_mg") val metMg: Int? = null,
+    @ColumnInfo(name = "phe_mg") val pheMg: Int? = null,
+    @ColumnInfo(name = "thr_mg") val thrMg: Int? = null,
+    @ColumnInfo(name = "trp_mg") val trpMg: Int? = null,
+    @ColumnInfo(name = "val_mg") val valMg: Int? = null,
+    @ColumnInfo(name = "cys_mg") val cysMg: Int? = null,
+    @ColumnInfo(name = "tyr_mg") val tyrMg: Int? = null,
+    @ColumnInfo(name = "ingredients_json") val ingredientsJson: String? = null,
+    @ColumnInfo(name = "amino_matched") val aminoMatched: Int? = null,
+    @ColumnInfo(name = "amino_total") val aminoTotal: Int? = null,
     /** What the estimate assumed, e.g. "1 cup rice, no guac". */
     @ColumnInfo(name = "estimate_note") val estimateNote: String? = null,
     @ColumnInfo(name = "estimate_model") val estimateModel: String? = null,
@@ -247,6 +282,8 @@ data class FoodEntryEntity(
     val photo: String? = null,
 ) {
     val isMeal: Boolean get() = source == SOURCE_MEAL
+    val aminoPartial: Boolean get() =
+        aminoMatched != null && aminoTotal != null && aminoMatched < aminoTotal && aminoMatched > 0
 
     companion object {
         const val SOURCE_AI = "ai"
@@ -313,6 +350,19 @@ data class DateMacros(
     val omega3G: Int? = null,
     val omega6G: Int? = null,
     val omega9G: Int? = null,
+    val hisMg: Int? = null,
+    val ileMg: Int? = null,
+    val leuMg: Int? = null,
+    val lysMg: Int? = null,
+    val metMg: Int? = null,
+    val pheMg: Int? = null,
+    val thrMg: Int? = null,
+    val trpMg: Int? = null,
+    val valMg: Int? = null,
+    val cysMg: Int? = null,
+    val tyrMg: Int? = null,
+    /** True when any entry that day had a partial FDC amino match. */
+    val aminoPartial: Boolean = false,
 )
 
 data class CatalogExercise(
@@ -324,3 +374,23 @@ data class CatalogExercise(
     val isCardio: Boolean get() = kind == ExerciseEntity.KIND_CARDIO
     val style: Cardio.Style get() = Cardio.Style.of(cardioStyle)
 }
+
+/** Local cache of FDC Foundation/SR Legacy amino profiles keyed by normalized ingredient query. */
+@Entity(tableName = "fdc_food_cache")
+data class FdcFoodCacheEntity(
+    @PrimaryKey @ColumnInfo(name = "query_key") val queryKey: String,
+    @ColumnInfo(name = "fdc_id") val fdcId: Int,
+    val description: String,
+    @ColumnInfo(name = "his_mg_per_100") val hisMgPer100: Int? = null,
+    @ColumnInfo(name = "ile_mg_per_100") val ileMgPer100: Int? = null,
+    @ColumnInfo(name = "leu_mg_per_100") val leuMgPer100: Int? = null,
+    @ColumnInfo(name = "lys_mg_per_100") val lysMgPer100: Int? = null,
+    @ColumnInfo(name = "met_mg_per_100") val metMgPer100: Int? = null,
+    @ColumnInfo(name = "phe_mg_per_100") val pheMgPer100: Int? = null,
+    @ColumnInfo(name = "thr_mg_per_100") val thrMgPer100: Int? = null,
+    @ColumnInfo(name = "trp_mg_per_100") val trpMgPer100: Int? = null,
+    @ColumnInfo(name = "val_mg_per_100") val valMgPer100: Int? = null,
+    @ColumnInfo(name = "cys_mg_per_100") val cysMgPer100: Int? = null,
+    @ColumnInfo(name = "tyr_mg_per_100") val tyrMgPer100: Int? = null,
+    @ColumnInfo(name = "cached_at") val cachedAt: Long,
+)

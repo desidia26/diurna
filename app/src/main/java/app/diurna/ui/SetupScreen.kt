@@ -122,6 +122,7 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
         item { BackupsCard(vm) }
         item { TargetsCard(vm) }
         item { FoodEstimatesCard(vm) }
+        item { UsdaFdcCard(vm) }
         item { LockScreenCard(vm) }
         item {
             SectionCard("Permissions") {

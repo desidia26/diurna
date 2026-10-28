@@ -30,13 +30,13 @@ class GrokFoodEstimator(
 
     override val gaveUpMessage: String get() = GrokErrors.GAVE_UP
 
-    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean): FoodEstimate {
+    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate {
         val key = apiKey() ?: throw NoApiKey(NO_KEY)
-        // Detailed replies need a bit more room for the nullable sub-macro fields.
-        val maxTok = if (detailed) XaiChat.MAX_COMPLETION_TOKENS_DETAILED else XaiChat.MAX_COMPLETION_TOKENS
+        // Detailed / ingredient replies need a bit more room for the nullable fields + list.
+        val maxTok = if (detailed || ingredients) XaiChat.MAX_COMPLETION_TOKENS_DETAILED else XaiChat.MAX_COMPLETION_TOKENS
         return EstimatePrompt.parse(XaiChat.call(transport, key, model, XaiChat.request(
-            model, EstimatePrompt.system(detailed), text, photo,
-            schema = EstimatePrompt.schema(detailed),
+            model, EstimatePrompt.system(detailed, ingredients), text, photo,
+            schema = EstimatePrompt.schema(detailed, ingredients),
             maxCompletionTokens = maxTok,
         )))
     }

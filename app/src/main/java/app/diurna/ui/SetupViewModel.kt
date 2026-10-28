@@ -73,6 +73,14 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
     }
     fun clearApiKey(provider: AiProvider) = io { c.apiKeys.getValue(provider).clear() }
 
+    // USDA FoodData Central (amino acids)
+    val usdaKeyLastFour = c.usdaKey.lastFour
+    fun setUsdaKey(key: String) = io {
+        if (key.isBlank()) return@io
+        c.usdaKey.set(key)
+    }
+    fun clearUsdaKey() = io { c.usdaKey.clear() }
+
     val lockStyle = c.settings.lockStyle.state(LockStyle.AUTO)
     fun setLockStyle(style: LockStyle) = io { c.settings.setLockStyle(style) } // the wallpaper's collector redraws
     suspend fun lockPreview(style: LockStyle) = withContext(Dispatchers.Default) { c.lockWallpaper.preview(style, 360) }

@@ -23,8 +23,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ExerciseSetEntity::class,
         FoodEntryEntity::class,
         MealEntity::class,
+        FdcFoodCacheEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -43,6 +44,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AutoMigration(from = 8, to = 9),
         // v10: detailed nutrition on meals and food entries (fiber, sugars, starch, lipid breakdown).
         AutoMigration(from = 9, to = 10),
+        // v11: amino acids (mg) on meals/food entries + FDC ingredient cache.
+        AutoMigration(from = 10, to = 11),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -52,6 +55,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workoutDao(): WorkoutDao
     abstract fun foodDao(): FoodDao
     abstract fun mealDao(): MealDao
+    abstract fun fdcFoodCacheDao(): FdcFoodCacheDao
 
     /** v2: food estimates, body weight, finalized-day snapshots. The v1 estimate columns were never written. */
     @DeleteColumn(tableName = "food_entry", columnName = "kcal_estimate")

@@ -11,6 +11,9 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import app.diurna.container
 import app.diurna.data.AppDatabase
+import app.diurna.data.fdc.AminoResolver
+import app.diurna.data.fdc.IngredientsJson
+import app.diurna.domain.AminoAcids
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,6 +26,9 @@ import java.util.concurrent.TimeUnit
  *
  * [photo] reads an entry's photo by name. It's read fresh on every attempt (retries included) rather
  * than carried in the work request; a photo that has gone missing just means a text-only estimate.
+ *
+ * When Detailed nutrition is on and an FDC key is available, the model returns an ingredient list
+ * and [aminoResolver] looks up amino milligrams from USDA FoodData Central (never AI-guessed).
  */
 class EstimateRunner(
     private val db: AppDatabase,
@@ -30,6 +36,9 @@ class EstimateRunner(
     private val photo: (String) -> ByteArray? = { null },
     /** When true, the model is asked for fiber / sugars / lipid breakdown (Detailed nutrition). */
     private val detailed: suspend () -> Boolean = { false },
+    /** True when a USDA FDC API key is set (gates ingredient list + amino lookup). */
+    private val fdcKeyPresent: suspend () -> Boolean = { false },
+    private val aminoResolver: AminoResolver? = null,
 ) {
     enum class Outcome { DONE, RETRY }
 
@@ -43,7 +52,21 @@ class EstimateRunner(
                 try {
                     val jpeg = entry.photo?.let { name -> withContext(Dispatchers.IO) { photo(name) } }
                     val wantDetail = detailed()
-                    val e = estimator.estimate(entry.text, jpeg, detailed = wantDetail)
+                    val wantIngredients = wantDetail && fdcKeyPresent() && aminoResolver != null
+                    val e = estimator.estimate(
+                        entry.text, jpeg, detailed = wantDetail, ingredients = wantIngredients,
+                    )
+                    var aminos: AminoAcids? = null
+                    var ingredientsJson: String? = null
+                    var aminoMatched: Int? = null
+                    var aminoTotal: Int? = null
+                    if (wantIngredients && !e.ingredients.isNullOrEmpty()) {
+                        val resolved = aminoResolver!!.resolve(e.ingredients)
+                        aminos = resolved.aminos
+                        ingredientsJson = IngredientsJson.encode(resolved.ingredients)
+                        aminoMatched = resolved.matchedCount
+                        aminoTotal = resolved.totalCount
+                    }
                     // Guarded on the text and photo: if either was edited mid-call this no-ops, and
                     // the edit has already queued the entry for the next pass.
                     food.setEstimate(
@@ -52,6 +75,9 @@ class EstimateRunner(
                         e.sugarsG, e.addedSugarsG, e.starchG,
                         e.satFatG, e.monoFatG, e.polyFatG, e.transFatG,
                         e.cholesterolMg, e.omega3G, e.omega6G, e.omega9G,
+                        aminos?.hisMg, aminos?.ileMg, aminos?.leuMg, aminos?.lysMg, aminos?.metMg,
+                        aminos?.pheMg, aminos?.thrMg, aminos?.trpMg, aminos?.valMg, aminos?.cysMg, aminos?.tyrMg,
+                        ingredientsJson, aminoMatched, aminoTotal,
                         e.note, e.model ?: estimator.model, System.currentTimeMillis(),
                     )
                 } catch (e: CancellationException) {

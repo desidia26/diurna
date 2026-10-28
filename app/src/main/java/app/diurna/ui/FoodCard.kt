@@ -184,6 +184,9 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
             sugarsG = f.sugarsG, addedSugarsG = f.addedSugarsG, starchG = f.starchG,
             satFatG = f.satFatG, monoFatG = f.monoFatG, polyFatG = f.polyFatG, transFatG = f.transFatG,
             cholesterolMg = f.cholesterolMg, omega3G = f.omega3G, omega6G = f.omega6G, omega9G = f.omega9G,
+            hisMg = f.hisMg, ileMg = f.ileMg, leuMg = f.leuMg, lysMg = f.lysMg, metMg = f.metMg,
+            pheMg = f.pheMg, thrMg = f.thrMg, trpMg = f.trpMg, valMg = f.valMg, cysMg = f.cysMg, tyrMg = f.tyrMg,
+            ingredientsJson = f.ingredientsJson, aminoMatched = f.aminoMatched, aminoTotal = f.aminoTotal,
         )
         MealDialog("Save as meal", seed, detailed = detailed, onDismiss = { savingAsMeal = null }) { vm.saveEntryAsMeal(f.id, it) }
     }
@@ -235,7 +238,11 @@ private fun FoodRow(
         f.fiberG != null || f.sugarsG != null || f.addedSugarsG != null || f.starchG != null ||
             f.satFatG != null || f.monoFatG != null || f.polyFatG != null || f.transFatG != null ||
             f.cholesterolMg != null || f.omega3G != null || f.omega6G != null || f.omega9G != null ||
-            f.solubleFiberG != null || f.insolubleFiberG != null
+            f.solubleFiberG != null || f.insolubleFiberG != null ||
+            f.hisMg != null || f.ileMg != null || f.leuMg != null || f.lysMg != null ||
+            f.metMg != null || f.pheMg != null || f.thrMg != null || f.trpMg != null ||
+            f.valMg != null || f.cysMg != null || f.tyrMg != null ||
+            !f.ingredientsJson.isNullOrBlank()
         )
     Row(
         Modifier.fillMaxWidth().clickable(onClickLabel = "Edit", onClick = onEdit),
@@ -306,12 +313,46 @@ private fun NutritionDetail(f: FoodEntryEntity) {
         line("Ω6", f.omega6G),
         line("Ω9", f.omega9G),
     ).joinToString(" · ")
+    val aminos = listOfNotNull(
+        line("His", f.hisMg, "mg"), line("Ile", f.ileMg, "mg"), line("Leu", f.leuMg, "mg"),
+        line("Lys", f.lysMg, "mg"), line("Met", f.metMg, "mg"), line("Phe", f.pheMg, "mg"),
+        line("Thr", f.thrMg, "mg"), line("Trp", f.trpMg, "mg"), line("Val", f.valMg, "mg"),
+        line("Cys", f.cysMg, "mg"), line("Tyr", f.tyrMg, "mg"),
+    ).joinToString(" · ")
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (carbs.isNotEmpty()) {
             Text("Carbs  $carbs", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
         }
         if (fats.isNotEmpty()) {
             Text("Fats   $fats", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
+        if (aminos.isNotEmpty()) {
+            Text("Aminos $aminos", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
+        val matched = f.aminoMatched
+        val total = f.aminoTotal
+        if (matched != null && total != null && total > 0) {
+            if (matched < total) {
+                val missed = f.ingredientsJson?.let { app.diurna.data.fdc.IngredientsJson.decode(it) }
+                    ?.filter { it.fdcId == null }
+                    ?.joinToString(", ") { it.name }
+                    .orEmpty()
+                val missBit = if (missed.isNotEmpty()) " — missed: $missed" else ""
+                Hint("Amino acids partial: matched $matched of $total ingredients$missBit")
+            } else {
+                Hint("Amino acids: matched $matched of $total ingredients")
+            }
+        }
+        f.ingredientsJson?.let { raw ->
+            val list = app.diurna.data.fdc.IngredientsJson.decode(raw)
+            if (!list.isNullOrEmpty() && (matched == null || total == null)) {
+                Hint(
+                    "Ingredients: " + list.joinToString("; ") { ing ->
+                        val match = ing.matchedDescription?.let { " → $it" } ?: ""
+                        "${ing.name} (${"%.0f".format(ing.grams)} g)$match"
+                    }
+                )
+            }
         }
     }
 }
