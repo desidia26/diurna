@@ -1,0 +1,1435 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 12,
+    "identityHash": "ac1afaad137c6282787f963211c69752",
+    "entities": [
+      {
+        "tableName": "exercise",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `hidden` INTEGER NOT NULL DEFAULT 0, `kind` TEXT NOT NULL DEFAULT 'strength', `cardio_style` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hidden",
+            "columnName": "hidden",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'strength'"
+          },
+          {
+            "fieldPath": "cardioStyle",
+            "columnName": "cardio_style",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_exercise_name",
+            "unique": true,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_exercise_name` ON `${TABLE_NAME}` (`name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "workout_template",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_workout_template_name",
+            "unique": true,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_workout_template_name` ON `${TABLE_NAME}` (`name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "template_exercise",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`template_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, `exercise_id` INTEGER NOT NULL, PRIMARY KEY(`template_id`, `position`), FOREIGN KEY(`template_id`) REFERENCES `workout_template`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`exercise_id`) REFERENCES `exercise`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "templateId",
+            "columnName": "template_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exerciseId",
+            "columnName": "exercise_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "template_id",
+            "position"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_template_exercise_exercise_id",
+            "unique": false,
+            "columnNames": [
+              "exercise_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_template_exercise_exercise_id` ON `${TABLE_NAME}` (`exercise_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "workout_template",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "template_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "exercise",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "exercise_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "routine_day",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`weekday` INTEGER NOT NULL, `alarm_time` TEXT NOT NULL, `template_id` INTEGER, PRIMARY KEY(`weekday`), FOREIGN KEY(`template_id`) REFERENCES `workout_template`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "weekday",
+            "columnName": "weekday",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "alarmTime",
+            "columnName": "alarm_time",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "templateId",
+            "columnName": "template_id",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "weekday"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_routine_day_template_id",
+            "unique": false,
+            "columnNames": [
+              "template_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_routine_day_template_id` ON `${TABLE_NAME}` (`template_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "workout_template",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "template_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "day",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`date` TEXT NOT NULL, `alarm_override` TEXT, `scheduled_alarm` TEXT, `scanned_at` TEXT, `morning_source` TEXT, `notes` TEXT, `body_weight` REAL, `planned_workout` TEXT, `target_kcal` INTEGER, `target_protein_g` INTEGER, `target_carbs_g` INTEGER, `target_fat_g` INTEGER, `finalized` INTEGER NOT NULL DEFAULT 0, `steps` INTEGER, `mood` INTEGER, `energy` INTEGER, PRIMARY KEY(`date`))",
+        "fields": [
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "alarmOverride",
+            "columnName": "alarm_override",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "scheduledAlarm",
+            "columnName": "scheduled_alarm",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "scannedAt",
+            "columnName": "scanned_at",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "morningSource",
+            "columnName": "morning_source",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "bodyWeight",
+            "columnName": "body_weight",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "plannedWorkout",
+            "columnName": "planned_workout",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "targetKcal",
+            "columnName": "target_kcal",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "targetProteinG",
+            "columnName": "target_protein_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "targetCarbsG",
+            "columnName": "target_carbs_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "targetFatG",
+            "columnName": "target_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "finalized",
+            "columnName": "finalized",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "steps",
+            "columnName": "steps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "mood",
+            "columnName": "mood",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "energy",
+            "columnName": "energy",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "date"
+          ]
+        }
+      },
+      {
+        "tableName": "day_workout",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `date` TEXT NOT NULL, `name` TEXT NOT NULL, FOREIGN KEY(`date`) REFERENCES `day`(`date`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_day_workout_date",
+            "unique": true,
+            "columnNames": [
+              "date"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_day_workout_date` ON `${TABLE_NAME}` (`date`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "day",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "date"
+            ],
+            "referencedColumns": [
+              "date"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "logged_exercise",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `workout_id` INTEGER NOT NULL, `exercise_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, FOREIGN KEY(`workout_id`) REFERENCES `day_workout`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`exercise_id`) REFERENCES `exercise`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workoutId",
+            "columnName": "workout_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exerciseId",
+            "columnName": "exercise_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_logged_exercise_workout_id",
+            "unique": false,
+            "columnNames": [
+              "workout_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_logged_exercise_workout_id` ON `${TABLE_NAME}` (`workout_id`)"
+          },
+          {
+            "name": "index_logged_exercise_exercise_id",
+            "unique": false,
+            "columnNames": [
+              "exercise_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_logged_exercise_exercise_id` ON `${TABLE_NAME}` (`exercise_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "day_workout",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "workout_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "exercise",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "exercise_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "exercise_set",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `logged_exercise_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, `weight` REAL, `reps` INTEGER, `distance_m` INTEGER, `duration_s` REAL, `split_s` REAL, `best_split_s` REAL, `watts` INTEGER, `kcal` INTEGER, `avg_hr` INTEGER, FOREIGN KEY(`logged_exercise_id`) REFERENCES `logged_exercise`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loggedExerciseId",
+            "columnName": "logged_exercise_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weight",
+            "columnName": "weight",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "reps",
+            "columnName": "reps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "distanceM",
+            "columnName": "distance_m",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "durationS",
+            "columnName": "duration_s",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "splitS",
+            "columnName": "split_s",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "bestSplitS",
+            "columnName": "best_split_s",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "watts",
+            "columnName": "watts",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "kcal",
+            "columnName": "kcal",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "avgHr",
+            "columnName": "avg_hr",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_exercise_set_logged_exercise_id",
+            "unique": false,
+            "columnNames": [
+              "logged_exercise_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_exercise_set_logged_exercise_id` ON `${TABLE_NAME}` (`logged_exercise_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "logged_exercise",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "logged_exercise_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "food_entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `date` TEXT NOT NULL, `time` TEXT NOT NULL, `text` TEXT NOT NULL, `logged_at` INTEGER NOT NULL, `kcal_low` INTEGER, `kcal_high` INTEGER, `protein_g` INTEGER, `carbs_g` INTEGER, `fat_g` INTEGER, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `ingredients_json` TEXT, `amino_matched` INTEGER, `amino_total` INTEGER, `estimate_note` TEXT, `estimate_model` TEXT, `estimated_at` INTEGER, `estimate_error` TEXT, `source` TEXT NOT NULL DEFAULT 'ai', `meal_id` INTEGER, `servings` REAL NOT NULL DEFAULT 1.0, `photo` TEXT, FOREIGN KEY(`date`) REFERENCES `day`(`date`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`meal_id`) REFERENCES `meal`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "time",
+            "columnName": "time",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "loggedAt",
+            "columnName": "logged_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kcalLow",
+            "columnName": "kcal_low",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "kcalHigh",
+            "columnName": "kcal_high",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "proteinG",
+            "columnName": "protein_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "carbsG",
+            "columnName": "carbs_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "fatG",
+            "columnName": "fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "fiberG",
+            "columnName": "fiber_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "solubleFiberG",
+            "columnName": "soluble_fiber_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "insolubleFiberG",
+            "columnName": "insoluble_fiber_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sugarsG",
+            "columnName": "sugars_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "addedSugarsG",
+            "columnName": "added_sugars_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "starchG",
+            "columnName": "starch_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "satFatG",
+            "columnName": "sat_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "monoFatG",
+            "columnName": "mono_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "polyFatG",
+            "columnName": "poly_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "transFatG",
+            "columnName": "trans_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cholesterolMg",
+            "columnName": "cholesterol_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omega3G",
+            "columnName": "omega3_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omega6G",
+            "columnName": "omega6_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omega9G",
+            "columnName": "omega9_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "hisMg",
+            "columnName": "his_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ileMg",
+            "columnName": "ile_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "leuMg",
+            "columnName": "leu_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lysMg",
+            "columnName": "lys_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "metMg",
+            "columnName": "met_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pheMg",
+            "columnName": "phe_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "thrMg",
+            "columnName": "thr_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trpMg",
+            "columnName": "trp_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "valMg",
+            "columnName": "val_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cysMg",
+            "columnName": "cys_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tyrMg",
+            "columnName": "tyr_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ingredientsJson",
+            "columnName": "ingredients_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "aminoMatched",
+            "columnName": "amino_matched",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "aminoTotal",
+            "columnName": "amino_total",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "estimateNote",
+            "columnName": "estimate_note",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "estimateModel",
+            "columnName": "estimate_model",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "estimatedAt",
+            "columnName": "estimated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "estimateError",
+            "columnName": "estimate_error",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'ai'"
+          },
+          {
+            "fieldPath": "mealId",
+            "columnName": "meal_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "servings",
+            "columnName": "servings",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "1.0"
+          },
+          {
+            "fieldPath": "photo",
+            "columnName": "photo",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_food_entry_date",
+            "unique": false,
+            "columnNames": [
+              "date"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_food_entry_date` ON `${TABLE_NAME}` (`date`)"
+          },
+          {
+            "name": "index_food_entry_meal_id",
+            "unique": false,
+            "columnNames": [
+              "meal_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_food_entry_meal_id` ON `${TABLE_NAME}` (`meal_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "day",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "date"
+            ],
+            "referencedColumns": [
+              "date"
+            ]
+          },
+          {
+            "table": "meal",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "meal_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "meal",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `kcal` INTEGER NOT NULL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `note` TEXT, `barcode` TEXT, `kind` TEXT NOT NULL DEFAULT 'simple', `servings_yield` REAL, `cooked_weight_g` REAL, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `ingredients_json` TEXT, `amino_matched` INTEGER, `amino_total` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kcal",
+            "columnName": "kcal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "proteinG",
+            "columnName": "protein_g",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "carbsG",
+            "columnName": "carbs_g",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fatG",
+            "columnName": "fat_g",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "barcode",
+            "columnName": "barcode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'simple'"
+          },
+          {
+            "fieldPath": "servingsYield",
+            "columnName": "servings_yield",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "cookedWeightG",
+            "columnName": "cooked_weight_g",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "fiberG",
+            "columnName": "fiber_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "solubleFiberG",
+            "columnName": "soluble_fiber_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "insolubleFiberG",
+            "columnName": "insoluble_fiber_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sugarsG",
+            "columnName": "sugars_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "addedSugarsG",
+            "columnName": "added_sugars_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "starchG",
+            "columnName": "starch_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "satFatG",
+            "columnName": "sat_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "monoFatG",
+            "columnName": "mono_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "polyFatG",
+            "columnName": "poly_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "transFatG",
+            "columnName": "trans_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cholesterolMg",
+            "columnName": "cholesterol_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omega3G",
+            "columnName": "omega3_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omega6G",
+            "columnName": "omega6_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omega9G",
+            "columnName": "omega9_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "hisMg",
+            "columnName": "his_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ileMg",
+            "columnName": "ile_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "leuMg",
+            "columnName": "leu_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lysMg",
+            "columnName": "lys_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "metMg",
+            "columnName": "met_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pheMg",
+            "columnName": "phe_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "thrMg",
+            "columnName": "thr_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trpMg",
+            "columnName": "trp_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "valMg",
+            "columnName": "val_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cysMg",
+            "columnName": "cys_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tyrMg",
+            "columnName": "tyr_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ingredientsJson",
+            "columnName": "ingredients_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "aminoMatched",
+            "columnName": "amino_matched",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "aminoTotal",
+            "columnName": "amino_total",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_meal_name",
+            "unique": true,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_meal_name` ON `${TABLE_NAME}` (`name`)"
+          },
+          {
+            "name": "index_meal_barcode",
+            "unique": true,
+            "columnNames": [
+              "barcode"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_meal_barcode` ON `${TABLE_NAME}` (`barcode`)"
+          },
+          {
+            "name": "index_meal_kind",
+            "unique": false,
+            "columnNames": [
+              "kind"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_meal_kind` ON `${TABLE_NAME}` (`kind`)"
+          }
+        ]
+      },
+      {
+        "tableName": "recipe_ingredient",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `meal_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `unit` TEXT NOT NULL, `grams` REAL, `density_id` TEXT, `grams_per_each` REAL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `kcal` INTEGER NOT NULL, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `source` TEXT, `fdc_id` INTEGER, `barcode` TEXT, `source_meal_id` INTEGER, FOREIGN KEY(`meal_id`) REFERENCES `meal`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mealId",
+            "columnName": "meal_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unit",
+            "columnName": "unit",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grams",
+            "columnName": "grams",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "densityId",
+            "columnName": "density_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "gramsPerEach",
+            "columnName": "grams_per_each",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "proteinG",
+            "columnName": "protein_g",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "carbsG",
+            "columnName": "carbs_g",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fatG",
+            "columnName": "fat_g",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kcal",
+            "columnName": "kcal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fiberG",
+            "columnName": "fiber_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "solubleFiberG",
+            "columnName": "soluble_fiber_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "insolubleFiberG",
+            "columnName": "insoluble_fiber_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sugarsG",
+            "columnName": "sugars_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "addedSugarsG",
+            "columnName": "added_sugars_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "starchG",
+            "columnName": "starch_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "satFatG",
+            "columnName": "sat_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "monoFatG",
+            "columnName": "mono_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "polyFatG",
+            "columnName": "poly_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "transFatG",
+            "columnName": "trans_fat_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cholesterolMg",
+            "columnName": "cholesterol_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omega3G",
+            "columnName": "omega3_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omega6G",
+            "columnName": "omega6_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "omega9G",
+            "columnName": "omega9_g",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "hisMg",
+            "columnName": "his_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ileMg",
+            "columnName": "ile_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "leuMg",
+            "columnName": "leu_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lysMg",
+            "columnName": "lys_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "metMg",
+            "columnName": "met_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pheMg",
+            "columnName": "phe_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "thrMg",
+            "columnName": "thr_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trpMg",
+            "columnName": "trp_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "valMg",
+            "columnName": "val_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cysMg",
+            "columnName": "cys_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tyrMg",
+            "columnName": "tyr_mg",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fdcId",
+            "columnName": "fdc_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "barcode",
+            "columnName": "barcode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sourceMealId",
+            "columnName": "source_meal_id",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recipe_ingredient_meal_id",
+            "unique": false,
+            "columnNames": [
+              "meal_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recipe_ingredient_meal_id` ON `${TABLE_NAME}` (`meal_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "meal",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "meal_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "fdc_food_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`query_key` TEXT NOT NULL, `fdc_id` INTEGER NOT NULL, `description` TEXT NOT NULL, `his_mg_per_100` INTEGER, `ile_mg_per_100` INTEGER, `leu_mg_per_100` INTEGER, `lys_mg_per_100` INTEGER, `met_mg_per_100` INTEGER, `phe_mg_per_100` INTEGER, `thr_mg_per_100` INTEGER, `trp_mg_per_100` INTEGER, `val_mg_per_100` INTEGER, `cys_mg_per_100` INTEGER, `tyr_mg_per_100` INTEGER, `cached_at` INTEGER NOT NULL, PRIMARY KEY(`query_key`))",
+        "fields": [
+          {
+            "fieldPath": "queryKey",
+            "columnName": "query_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fdcId",
+            "columnName": "fdc_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hisMgPer100",
+            "columnName": "his_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "ileMgPer100",
+            "columnName": "ile_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "leuMgPer100",
+            "columnName": "leu_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lysMgPer100",
+            "columnName": "lys_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "metMgPer100",
+            "columnName": "met_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pheMgPer100",
+            "columnName": "phe_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "thrMgPer100",
+            "columnName": "thr_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trpMgPer100",
+            "columnName": "trp_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "valMgPer100",
+            "columnName": "val_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cysMgPer100",
+            "columnName": "cys_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tyrMgPer100",
+            "columnName": "tyr_mg_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cachedAt",
+            "columnName": "cached_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "query_key"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ac1afaad137c6282787f963211c69752')"
+    ]
+  }
+}

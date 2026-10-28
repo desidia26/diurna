@@ -37,6 +37,10 @@ object Changelog {
             7, "2026-10-28", "Fill in detail for past entries",
             "With Detailed nutrition on, Setup can fill in fiber, sugars, fats and amino acids for food you logged before, over the last 30 days or everything. It shows how many AI calls that takes before you start, and never changes the calories or macros already recorded.",
         ),
+        Entry(
+            8, "2026-10-28", "Recipes",
+            "Saved meals can now be recipes: add ingredients by hand, from a barcode, from another saved item or from USDA's database, and the totals per serving add up as you go. Log a recipe by servings, or by grams if you weighed the cooked dish. Library can show meals and recipes separately.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }

@@ -39,8 +39,12 @@ data class ExerciseEntity(
     }
 }
 
-/** A saved food with exact numbers, typed in once and logged with a tap. Flat: no sub-meals. */
-@Entity(tableName = "meal", indices = [Index(value = ["name"], unique = true), Index(value = ["barcode"], unique = true)])
+/**
+ * A saved food with exact numbers. [KIND_SIMPLE] is a flat P/C/F entry; [KIND_RECIPE] has
+ * [RecipeIngredientEntity] rows whose snapshots sum into per-serving totals; [KIND_RESTAURANT]
+ * is reserved for PR 3 (nutrition_source). Only simple and recipe appear in UI for now.
+ */
+@Entity(tableName = "meal", indices = [Index(value = ["name"], unique = true), Index(value = ["barcode"], unique = true), Index(value = ["kind"])])
 data class MealEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
@@ -52,6 +56,12 @@ data class MealEntity(
     val note: String? = null,
     /** Package barcode for meals added by scanning, normalized by [normalizeBarcode]. */
     val barcode: String? = null,
+    /** [KIND_SIMPLE], [KIND_RECIPE], or [KIND_RESTAURANT]. Existing rows migrate to simple. */
+    @ColumnInfo(defaultValue = "'simple'") val kind: String = KIND_SIMPLE,
+    /** How many servings the recipe batch makes. Null/1 for simple meals. */
+    @ColumnInfo(name = "servings_yield") val servingsYield: Double? = null,
+    /** Optional cooked batch weight in grams; enables logging by grams eaten. */
+    @ColumnInfo(name = "cooked_weight_g") val cookedWeightG: Double? = null,
     // Detailed nutrition (nullable = unknown). Opt-in in Setup; null is distinct from 0.
     @ColumnInfo(name = "fiber_g") val fiberG: Int? = null,
     @ColumnInfo(name = "soluble_fiber_g") val solubleFiberG: Int? = null,
@@ -88,7 +98,81 @@ data class MealEntity(
     /** True when some but not all ingredients matched for aminos. */
     val aminoPartial: Boolean get() =
         aminoMatched != null && aminoTotal != null && aminoMatched < aminoTotal && aminoMatched > 0
+
+    val isRecipe: Boolean get() = kind == KIND_RECIPE
+    val isSimple: Boolean get() = kind == KIND_SIMPLE || kind.isBlank()
+    val isRestaurant: Boolean get() = kind == KIND_RESTAURANT
+    /** Effective servings the batch yields (recipes); 1 for simple. */
+    val yieldOrOne: Double get() = servingsYield?.takeIf { it > 0 } ?: 1.0
+
+    companion object {
+        const val KIND_SIMPLE = "simple"
+        const val KIND_RECIPE = "recipe"
+        const val KIND_RESTAURANT = "restaurant"
+    }
 }
+
+/**
+ * One ingredient line on a [MealEntity] recipe. Values are a snapshot for the amount used
+ * (not per-100g), so past recipe totals stay stable if the source food later changes.
+ */
+@Entity(
+    tableName = "recipe_ingredient",
+    foreignKeys = [
+        ForeignKey(MealEntity::class, ["id"], ["meal_id"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("meal_id")],
+)
+data class RecipeIngredientEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "meal_id") val mealId: Long,
+    val position: Int,
+    val name: String,
+    val amount: Double,
+    /** g / ml / cup / tbsp / tsp / each — see [app.diurna.domain.IngredientUnit]. */
+    val unit: String = "g",
+    /** Resolved mass in grams for this line; null when volume had no density (blocked). */
+    val grams: Double? = null,
+    /** Density id from [app.diurna.domain.IngredientDensities], when volume was converted. */
+    @ColumnInfo(name = "density_id") val densityId: String? = null,
+    /** For unit=each: grams per one item used to resolve [grams]. */
+    @ColumnInfo(name = "grams_per_each") val gramsPerEach: Double? = null,
+    @ColumnInfo(name = "protein_g") val proteinG: Int = 0,
+    @ColumnInfo(name = "carbs_g") val carbsG: Int = 0,
+    @ColumnInfo(name = "fat_g") val fatG: Int = 0,
+    val kcal: Int = 0,
+    @ColumnInfo(name = "fiber_g") val fiberG: Int? = null,
+    @ColumnInfo(name = "soluble_fiber_g") val solubleFiberG: Int? = null,
+    @ColumnInfo(name = "insoluble_fiber_g") val insolubleFiberG: Int? = null,
+    @ColumnInfo(name = "sugars_g") val sugarsG: Int? = null,
+    @ColumnInfo(name = "added_sugars_g") val addedSugarsG: Int? = null,
+    @ColumnInfo(name = "starch_g") val starchG: Int? = null,
+    @ColumnInfo(name = "sat_fat_g") val satFatG: Int? = null,
+    @ColumnInfo(name = "mono_fat_g") val monoFatG: Int? = null,
+    @ColumnInfo(name = "poly_fat_g") val polyFatG: Int? = null,
+    @ColumnInfo(name = "trans_fat_g") val transFatG: Int? = null,
+    @ColumnInfo(name = "cholesterol_mg") val cholesterolMg: Int? = null,
+    @ColumnInfo(name = "omega3_g") val omega3G: Int? = null,
+    @ColumnInfo(name = "omega6_g") val omega6G: Int? = null,
+    @ColumnInfo(name = "omega9_g") val omega9G: Int? = null,
+    @ColumnInfo(name = "his_mg") val hisMg: Int? = null,
+    @ColumnInfo(name = "ile_mg") val ileMg: Int? = null,
+    @ColumnInfo(name = "leu_mg") val leuMg: Int? = null,
+    @ColumnInfo(name = "lys_mg") val lysMg: Int? = null,
+    @ColumnInfo(name = "met_mg") val metMg: Int? = null,
+    @ColumnInfo(name = "phe_mg") val pheMg: Int? = null,
+    @ColumnInfo(name = "thr_mg") val thrMg: Int? = null,
+    @ColumnInfo(name = "trp_mg") val trpMg: Int? = null,
+    @ColumnInfo(name = "val_mg") val valMg: Int? = null,
+    @ColumnInfo(name = "cys_mg") val cysMg: Int? = null,
+    @ColumnInfo(name = "tyr_mg") val tyrMg: Int? = null,
+    /** Origin: manual / fdc / barcode / meal. */
+    val source: String? = null,
+    @ColumnInfo(name = "fdc_id") val fdcId: Int? = null,
+    val barcode: String? = null,
+    /** Library meal this line was copied from, if any. */
+    @ColumnInfo(name = "source_meal_id") val sourceMealId: Long? = null,
+)
 
 @Entity(tableName = "workout_template", indices = [Index(value = ["name"], unique = true)])
 data class WorkoutTemplateEntity(

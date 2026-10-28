@@ -1,7 +1,9 @@
 package app.diurna.data
 
 import androidx.room.withTransaction
+import app.diurna.domain.AminoAcids
 import app.diurna.domain.Cardio
+import app.diurna.domain.RecipeMath
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
@@ -15,6 +17,7 @@ class LibraryRepository(
     private val now: () -> LocalDateTime = LocalDateTime::now,
 ) {
     private val meals = db.mealDao()
+    private val ingredients = db.recipeIngredientDao()
     private val food = db.foodDao()
     private val exercises = db.exerciseDao()
 
@@ -27,12 +30,85 @@ class LibraryRepository(
 
     fun observeMeals(): Flow<List<MealEntity>> = meals.observeByUse()
 
+    /** [kind] null = all; [MealEntity.KIND_SIMPLE] / [MealEntity.KIND_RECIPE]. */
+    fun observeMeals(kind: String?): Flow<List<MealEntity>> =
+        if (kind == null) meals.observeByUse() else meals.observeByUseFiltered(kind)
+
+    fun observeIngredients(mealId: Long): Flow<List<RecipeIngredientEntity>> =
+        ingredients.observeForMeal(mealId)
+
+    suspend fun ingredientsFor(mealId: Long): List<RecipeIngredientEntity> =
+        ingredients.forMeal(mealId)
+
     /** Adds a meal, or updates it when [meal] has an id. Past entries keep the numbers they were logged with. */
     suspend fun saveMeal(meal: MealEntity): Result = when (val v = validate(meal)) {
         is Validated.Bad -> v.problem
         is Validated.Good -> {
             if (meal.id == 0L) meals.insert(v.meal) else meals.update(v.meal)
             Result.Ok
+        }
+    }
+
+    /**
+     * Saves a recipe meal and replaces its ingredient snapshots. Recomputes per-serving totals
+     * from [lines] via [RecipeMath]; refuses when a volume line has no resolved grams.
+     */
+    suspend fun saveRecipe(meal: MealEntity, lines: List<RecipeIngredientEntity>): Result = db.withTransaction {
+        if (lines.isEmpty()) return@withTransaction Result.Problem("Add at least one ingredient.")
+        val blocked = lines.firstOrNull { it.grams == null && IngredientNeedsMass(it) }
+        if (blocked != null) {
+            return@withTransaction Result.Problem(
+                "\"${blocked.name}\" needs a density (or grams) before volume can convert to mass.",
+            )
+        }
+        val yield = meal.servingsYield?.takeIf { it > 0 } ?: 1.0
+        val totals = RecipeMath.perServing(lines.map { it.toNutrition() }, yield)
+        val withTotals = meal.copy(
+            kind = MealEntity.KIND_RECIPE,
+            servingsYield = yield,
+            kcal = totals.kcal,
+            proteinG = totals.proteinG,
+            carbsG = totals.carbsG,
+            fatG = totals.fatG,
+            fiberG = totals.fiberG,
+            solubleFiberG = totals.solubleFiberG,
+            insolubleFiberG = totals.insolubleFiberG,
+            sugarsG = totals.sugarsG,
+            addedSugarsG = totals.addedSugarsG,
+            starchG = totals.starchG,
+            satFatG = totals.satFatG,
+            monoFatG = totals.monoFatG,
+            polyFatG = totals.polyFatG,
+            transFatG = totals.transFatG,
+            cholesterolMg = totals.cholesterolMg,
+            omega3G = totals.omega3G,
+            omega6G = totals.omega6G,
+            omega9G = totals.omega9G,
+            hisMg = totals.aminos.hisMg,
+            ileMg = totals.aminos.ileMg,
+            leuMg = totals.aminos.leuMg,
+            lysMg = totals.aminos.lysMg,
+            metMg = totals.aminos.metMg,
+            pheMg = totals.aminos.pheMg,
+            thrMg = totals.aminos.thrMg,
+            trpMg = totals.aminos.trpMg,
+            valMg = totals.aminos.valMg,
+            cysMg = totals.aminos.cysMg,
+            tyrMg = totals.aminos.tyrMg,
+            aminoMatched = totals.aminoMatched,
+            aminoTotal = totals.aminoTotal,
+        )
+        when (val v = validate(withTotals)) {
+            is Validated.Bad -> v.problem
+            is Validated.Good -> {
+                val id = if (v.meal.id == 0L) meals.insert(v.meal) else {
+                    meals.update(v.meal)
+                    v.meal.id
+                }
+                ingredients.deleteForMeal(id)
+                ingredients.insertAll(lines.mapIndexed { i, line -> line.copy(id = 0, mealId = id, position = i) })
+                Result.Ok
+            }
         }
     }
 
@@ -48,7 +124,19 @@ class LibraryRepository(
         if (meal.barcode != null && meals.barcodeTakenByOther(meal.barcode, meal.id) > 0) {
             return Validated.Bad(Result.Problem("Another meal already has this barcode."))
         }
-        return Validated.Good(meal.copy(name = name, note = meal.note?.trim()?.ifEmpty { null }))
+        val kind = when (meal.kind) {
+            MealEntity.KIND_RECIPE, MealEntity.KIND_RESTAURANT -> meal.kind
+            else -> MealEntity.KIND_SIMPLE
+        }
+        return Validated.Good(
+            meal.copy(
+                name = name,
+                note = meal.note?.trim()?.ifEmpty { null },
+                kind = kind,
+                servingsYield = meal.servingsYield?.takeIf { it > 0 },
+                cookedWeightG = meal.cookedWeightG?.takeIf { it > 0 },
+            ),
+        )
     }
 
     suspend fun deleteMeal(id: Long) = meals.delete(id)
@@ -77,10 +165,12 @@ class LibraryRepository(
         }
         // Unparseable, implausible or calorie-less answers all count as not found.
         val draft = json?.let { parseOffProduct(it) } ?: return ScanResult.NotFound
-        return ScanResult.Found(draft.copy(barcode = code))
+        return ScanResult.Found(draft.copy(barcode = code, kind = MealEntity.KIND_SIMPLE))
     }
 
     suspend fun mealByBarcode(code: String): MealEntity? = meals.byBarcode(code)
+
+    suspend fun getMeal(id: Long): MealEntity? = meals.get(id)
 
     /** Logs a saved meal with exact numbers: no AI call. */
     suspend fun logMeal(date: LocalDate, mealId: Long, servings: Double = 1.0, photo: String? = null) = db.withTransaction {
@@ -97,6 +187,18 @@ class LibraryRepository(
             )
         )
         applyMeal(id, meal, servings)
+    }
+
+    /**
+     * Logs a recipe by cooked grams eaten when [MealEntity.cookedWeightG] is set.
+     * servings = gramsEaten / cookedWeightG.
+     */
+    suspend fun logMealByGrams(date: LocalDate, mealId: Long, gramsEaten: Double, photo: String? = null): Result {
+        val meal = meals.get(mealId) ?: return Result.Problem("Meal not found.")
+        val cooked = meal.cookedWeightG ?: return Result.Problem("This recipe has no cooked weight.")
+        if (gramsEaten <= 0 || cooked <= 0) return Result.Problem("Grams must be positive.")
+        logMeal(date, mealId, servings = gramsEaten / cooked, photo = photo)
+        return Result.Ok
     }
 
     /**
@@ -132,7 +234,7 @@ class LibraryRepository(
      * and links the entry to it so it shows the exact numbers.
      */
     suspend fun saveEntryAsMeal(entryId: Long, meal: MealEntity): Result = db.withTransaction {
-        when (val v = validate(meal.copy(id = 0))) {
+        when (val v = validate(meal.copy(id = 0, kind = MealEntity.KIND_SIMPLE))) {
             is Validated.Bad -> v.problem
             is Validated.Good -> {
                 val id = meals.insert(v.meal)
@@ -206,3 +308,33 @@ class LibraryRepository(
     /** False when the exercise has history or is in a routine workout; hide it instead. */
     suspend fun deleteExercise(id: Long): Boolean = exercises.deleteIfUnused(id) > 0
 }
+
+/** Volume / each without resolved grams needs a density or grams-per-each. */
+private fun IngredientNeedsMass(line: RecipeIngredientEntity): Boolean {
+    val u = line.unit.lowercase()
+    return u == "ml" || u == "cup" || u == "tbsp" || u == "tsp" || u == "each"
+}
+
+fun RecipeIngredientEntity.toNutrition(): RecipeMath.IngredientNutrition =
+    RecipeMath.IngredientNutrition(
+        proteinG = proteinG,
+        carbsG = carbsG,
+        fatG = fatG,
+        fiberG = fiberG,
+        solubleFiberG = solubleFiberG,
+        insolubleFiberG = insolubleFiberG,
+        sugarsG = sugarsG,
+        addedSugarsG = addedSugarsG,
+        starchG = starchG,
+        satFatG = satFatG,
+        monoFatG = monoFatG,
+        polyFatG = polyFatG,
+        transFatG = transFatG,
+        cholesterolMg = cholesterolMg,
+        omega3G = omega3G,
+        omega6G = omega6G,
+        omega9G = omega9G,
+        aminos = AminoAcids(
+            hisMg, ileMg, leuMg, lysMg, metMg, pheMg, thrMg, trpMg, valMg, cysMg, tyrMg,
+        ),
+    )

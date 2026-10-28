@@ -282,4 +282,42 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v11ToV12AddsRecipeFieldsAndExistingMealsStaySimple() {
+        helper.createDatabase(dbName + "-12", 11).use { db ->
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, fiber_g, lys_mg) " +
+                    "VALUES (1, 'Oats', 150, 5, 27, 3, 4, 200)"
+            )
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-28', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, protein_g, carbs_g, fat_g, source, meal_id, servings) " +
+                    "VALUES (1, '2026-10-28', '08:00', 'Oats', 1, 150, 150, 5, 27, 3, 'meal', 1, 1.0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-12", 12, true)
+        db.query("SELECT kind, servings_yield, cooked_weight_g, kcal, protein_g, lys_mg FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("existing meals become simple", "simple", it.getString(0))
+            assertTrue("servings_yield starts null", it.isNull(1))
+            assertTrue("cooked_weight starts null", it.isNull(2))
+            assertEquals(150, it.getInt(3))
+            assertEquals(5, it.getInt(4))
+            assertEquals(200, it.getInt(5))
+        }
+        db.query("SELECT kcal_low, protein_g, carbs_g, fat_g, servings, meal_id FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("logged macros unchanged", 150, it.getInt(0))
+            assertEquals(5, it.getInt(1))
+            assertEquals(27, it.getInt(2))
+            assertEquals(3, it.getInt(3))
+            assertEquals(1.0, it.getDouble(4), 0.0)
+            assertEquals(1L, it.getLong(5))
+        }
+        db.query("SELECT COUNT(*) FROM recipe_ingredient").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(0, it.getInt(0))
+        }
+        db.close()
+    }
 }

@@ -161,6 +161,29 @@ interface MealDao {
 
     @Query("DELETE FROM meal WHERE id = :id")
     suspend fun delete(id: Long)
+
+    /** Filter library by kind: null = all; "simple" / "recipe" / "restaurant". */
+    @Query(
+        """SELECT m.* FROM meal m LEFT JOIN food_entry f ON f.meal_id = m.id
+           WHERE (:kind IS NULL OR m.kind = :kind)
+           GROUP BY m.id ORDER BY COUNT(f.id) DESC, m.name COLLATE NOCASE"""
+    )
+    fun observeByUseFiltered(kind: String?): Flow<List<MealEntity>>
+}
+
+@Dao
+interface RecipeIngredientDao {
+    @Query("SELECT * FROM recipe_ingredient WHERE meal_id = :mealId ORDER BY position, id")
+    fun observeForMeal(mealId: Long): Flow<List<RecipeIngredientEntity>>
+
+    @Query("SELECT * FROM recipe_ingredient WHERE meal_id = :mealId ORDER BY position, id")
+    suspend fun forMeal(mealId: Long): List<RecipeIngredientEntity>
+
+    @Insert
+    suspend fun insertAll(rows: List<RecipeIngredientEntity>)
+
+    @Query("DELETE FROM recipe_ingredient WHERE meal_id = :mealId")
+    suspend fun deleteForMeal(mealId: Long)
 }
 
 /**

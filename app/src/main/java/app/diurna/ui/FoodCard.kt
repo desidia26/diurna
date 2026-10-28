@@ -168,12 +168,17 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         }
     }
     servingsOf?.let { m ->
-        ServingsDialog(1.0, title = "${m.name} · ${m.kcal} kcal each", onDismiss = { servingsOf = null }) {
-            logMeal(m.id, it); servingsOf = null
-        }
+        ServingsDialog(
+            1.0,
+            title = "${m.name} · ${m.kcal} kcal each",
+            cookedWeightG = m.cookedWeightG,
+            onDismiss = { servingsOf = null },
+            onPick = { logMeal(m.id, it); servingsOf = null },
+            onPickGrams = { g -> vm.logMealByGrams(m.id, g, photo); text = ""; photo = null; servingsOf = null },
+        )
     }
     servingsFor?.let { f ->
-        ServingsDialog(f.servings, onDismiss = { servingsFor = null }) { vm.setServings(f.id, it); servingsFor = null }
+        ServingsDialog(f.servings, onDismiss = { servingsFor = null }, onPick = { vm.setServings(f.id, it); servingsFor = null })
     }
     savingAsMeal?.let { f ->
         // Pre-filled from the estimate; correct it from the label once and it's exact from then on.
@@ -364,8 +369,16 @@ fun Double.servingsLabel(): String = when (this) {
 }
 
 @Composable
-private fun ServingsDialog(current: Double, onDismiss: () -> Unit, title: String = "Servings", onPick: (Double) -> Unit) {
+private fun ServingsDialog(
+    current: Double,
+    onDismiss: () -> Unit,
+    title: String = "Servings",
+    cookedWeightG: Double? = null,
+    onPick: (Double) -> Unit,
+    onPickGrams: ((Double) -> Unit)? = null,
+) {
     var custom by remember { mutableStateOf("") }
+    var grams by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -377,13 +390,25 @@ private fun ServingsDialog(current: Double, onDismiss: () -> Unit, title: String
                     }
                 }
                 OutlinedTextField(
-                    custom, { custom = it }, Modifier.fillMaxWidth(), label = { Text("Other") }, singleLine = true,
+                    custom, { custom = it }, Modifier.fillMaxWidth(), label = { Text("Other servings") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 )
+                if (cookedWeightG != null && cookedWeightG > 0 && onPickGrams != null) {
+                    Hint("Or log by cooked weight (batch ${"%.0f".format(cookedWeightG)} g).")
+                    OutlinedTextField(
+                        grams, { grams = it }, Modifier.fillMaxWidth(), label = { Text("Grams eaten") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(enabled = (custom.toDoubleOrNull() ?: 0.0) > 0, onClick = { onPick(custom.toDouble()) }) { Text("Set") }
+            val g = grams.toDoubleOrNull()
+            if (g != null && g > 0 && onPickGrams != null) {
+                TextButton(onClick = { onPickGrams(g) }) { Text("Log grams") }
+            } else {
+                TextButton(enabled = (custom.toDoubleOrNull() ?: 0.0) > 0, onClick = { onPick(custom.toDouble()) }) { Text("Set") }
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

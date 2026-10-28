@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.diurna.data.CatalogExercise
 import app.diurna.data.LibraryRepository.Result
 import app.diurna.data.MealEntity
+import app.diurna.data.RecipeIngredientEntity
 import app.diurna.ui.theme.LocalStatusColors
 import kotlinx.coroutines.launch
 
@@ -92,22 +93,65 @@ fun PageHeader(title: String, onBack: () -> Unit) {
 @Composable
 fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
     val meals by vm.meals.collectAsStateWithLifecycle()
+    val allMeals by vm.allMeals.collectAsStateWithLifecycle()
     val detailed by vm.detailedNutrition.collectAsStateWithLifecycle()
+    val filter by vm.mealKindFilter.collectAsStateWithLifecycle()
+    val hasFdcKey by vm.hasFdcKey.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf<MealEntity?>(null) }
+    var editingRecipe by remember { mutableStateOf<MealEntity?>(null) }
+    var recipeLines by remember { mutableStateOf<List<RecipeIngredientEntity>>(emptyList()) }
     var confirmDelete by remember { mutableStateOf<MealEntity?>(null) }
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { PageHeader("Meals", onBack) }
         item {
-            Hint("Your regular foods with exact numbers, e.g. from the label. Pick one in the Day screen's food box to log it instantly.")
+            Hint("Saved meals and recipes with exact numbers. Pick one in the Day screen's food box to log it instantly.")
         }
-        item { Button(onClick = { editing = MealEntity(name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0) }) { Text("Add meal") } }
-        if (meals.isEmpty()) item { Hint("No saved meals yet. You can also save one from any food entry on the Day screen.") }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = filter == null, onClick = { vm.setMealFilter(null) }, label = { Text("All") })
+                FilterChip(selected = filter == MealEntity.KIND_SIMPLE, onClick = { vm.setMealFilter(MealEntity.KIND_SIMPLE) }, label = { Text("Meals") })
+                FilterChip(selected = filter == MealEntity.KIND_RECIPE, onClick = { vm.setMealFilter(MealEntity.KIND_RECIPE) }, label = { Text("Recipes") })
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { editing = MealEntity(name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_SIMPLE) }) {
+                    Text("Add meal")
+                }
+                Button(onClick = {
+                    editingRecipe = MealEntity(name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_RECIPE, servingsYield = 1.0)
+                    recipeLines = emptyList()
+                }) { Text("Add recipe") }
+            }
+        }
+        if (meals.isEmpty()) item { Hint("Nothing here yet. Add a meal or recipe, or save one from a Day food entry.") }
         items(meals, key = { it.id }) { m ->
-            Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Edit") { editing = m }, verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().clickable(onClickLabel = "Edit") {
+                    if (m.isRecipe) {
+                        scope.launch {
+                            recipeLines = vm.loadIngredients(m.id)
+                            editingRecipe = m
+                        }
+                    } else {
+                        editing = m
+                    }
+                },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
-                    Text(m.name, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(m.name, fontWeight = FontWeight.SemiBold)
+                        if (m.isRecipe) {
+                            Text("Recipe", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                     Text(m.macroLine(), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                     m.note?.let { Hint(it) }
+                    if (m.isRecipe && m.aminoPartial) {
+                        Hint("Aminos partial (${m.aminoMatched}/${m.aminoTotal})")
+                    }
                 }
                 TextButton(onClick = { confirmDelete = m }) { Text("Delete") }
             }
@@ -116,6 +160,21 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
     }
     editing?.let { m ->
         MealDialog(if (m.id == 0L) "Add meal" else "Edit meal", m, detailed = detailed, onDismiss = { editing = null }, onSave = vm::saveMeal)
+    }
+    editingRecipe?.let { m ->
+        RecipeDialog(
+            title = if (m.id == 0L) "Add recipe" else "Edit recipe",
+            initial = m,
+            initialLines = recipeLines,
+            detailed = detailed,
+            hasFdcKey = hasFdcKey,
+            savedMeals = allMeals,
+            searchFdc = vm::searchFdc,
+            loadFdcNutrition = vm::loadFdcNutrition,
+            scanBarcode = vm::scanBarcode,
+            onDismiss = { editingRecipe = null },
+            onSave = vm::saveRecipe,
+        )
     }
     confirmDelete?.let { m ->
         ConfirmDialog(
@@ -250,6 +309,7 @@ fun MealDialog(
                 val meal = initial.copy(
                     name = name, kcal = kcal.toIntOrNull() ?: 0, proteinG = p.toIntOrNull() ?: 0,
                     carbsG = c.toIntOrNull() ?: 0, fatG = f.toIntOrNull() ?: 0, note = note.ifBlank { null },
+                    kind = MealEntity.KIND_SIMPLE,
                     fiberG = if (detailed) opt(fiber) else initial.fiberG,
                     solubleFiberG = if (detailed) opt(solFiber) else initial.solubleFiberG,
                     insolubleFiberG = if (detailed) opt(insolFiber) else initial.insolubleFiberG,
