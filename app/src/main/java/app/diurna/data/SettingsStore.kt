@@ -70,6 +70,15 @@ class SettingsStore(private val context: Context) : StepStateStore {
         context.dataStore.edit { it[cardioKey] = enabled }
     }
 
+    // ---- What's new ----
+    // The newest Changelog entry already shown. Null until the first launch that has a changelog.
+    private val changelogSeenKey = intPreferencesKey("changelog_seen")
+    val changelogSeen: Flow<Int?> = context.dataStore.data.map { it[changelogSeenKey] }.distinctUntilChanged()
+
+    suspend fun setChangelogSeen(id: Int) {
+        context.dataStore.edit { it[changelogSeenKey] = id }
+    }
+
     // ---- Steps ----
     private val stepGoalKey = intPreferencesKey("step_goal")
     val stepGoal: Flow<Int> = context.dataStore.data.map { it[stepGoalKey] ?: 10_000 }.distinctUntilChanged()
