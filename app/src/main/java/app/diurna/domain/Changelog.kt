@@ -53,6 +53,10 @@ object Changelog {
             11, "2026-10-28", "Barcodes stay with what you log",
             "A scanned barcode is now kept on the food entry along with Open Food Facts' data for it. If a product isn't found or the lookup fails, you get a form to type the numbers in, and the barcode is still saved. Filling in detail later uses the product's own data before asking the AI.",
         ),
+        Entry(
+            12, "2026-10-28", "Several photos per meal",
+            "Food entries and saved meals can now hold up to 5 photos. The first one is the one sent for the estimate.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }

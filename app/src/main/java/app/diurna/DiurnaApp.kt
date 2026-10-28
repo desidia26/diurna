@@ -27,6 +27,7 @@ import app.diurna.data.DayFinalizer
 import app.diurna.data.DayRepository
 import app.diurna.data.NutritionRepository
 import app.diurna.data.FoodPhotos
+import app.diurna.data.FoodPhotoStore
 import app.diurna.data.FoodRepository
 import app.diurna.data.LibraryRepository
 import app.diurna.data.MetricsRepository
@@ -56,9 +57,10 @@ class AppContainer(context: Context) {
     val days = DayRepository(db)
     val metrics = MetricsRepository(db)
     val foodPhotos = FoodPhotos(File(context.filesDir, "food-photos"))
-    val food = FoodRepository(db, foodPhotos)
+    val foodPhotoStore = FoodPhotoStore(db, foodPhotos)
+    val food = FoodRepository(db, foodPhotos, foodPhotoStore)
     val photoImporter = PhotoImporter(context, foodPhotos)
-    val library = LibraryRepository(db)
+    val library = LibraryRepository(db, photoStore = foodPhotoStore)
     val backups = Backups(context, db, foodPhotos)
     val aiProvider = AiProviderStore(context)
     val apiKeys: Map<AiProvider, ApiKeyStore> = AiProvider.entries.associateWith { ApiKeyStore(context, it) }

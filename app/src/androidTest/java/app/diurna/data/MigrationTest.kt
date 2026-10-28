@@ -387,4 +387,42 @@ class MigrationTest {
     }
 
 
+
+    @Test fun v14ToV15CopiesPrimaryPhotoIntoGalleryAndLeavesNulls() {
+        helper.createDatabase(dbName + "-15", 14).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-28', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, protein_g, carbs_g, fat_g, source, servings, photo) " +
+                    "VALUES (1, '2026-10-28', '12:00', 'burrito', 1, 700, 900, 30, 80, 20, 'ai', 1.0, 'burrito.jpg')"
+            )
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, source, servings, photo) " +
+                    "VALUES (2, '2026-10-28', '13:00', 'no photo', 2, 'ai', 1.0, NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind) " +
+                    "VALUES (1, 'Shake', 160, 30, 5, 3, 'simple')"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-15", 15, true, AppDatabase.MIGRATION_14_15)
+        db.query("SELECT photo, kcal_low, protein_g FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("primary photo column kept", "burrito.jpg", it.getString(0))
+            assertEquals("macros unchanged", 700, it.getInt(1))
+            assertEquals(30, it.getInt(2))
+        }
+        db.query("SELECT owner_type, owner_id, file_name, position FROM food_photo ORDER BY owner_id").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("entry", it.getString(0))
+            assertEquals(1L, it.getLong(1))
+            assertEquals("burrito.jpg", it.getString(2))
+            assertEquals(0, it.getInt(3))
+            assertTrue("entries without photo get no gallery row", !it.moveToNext())
+        }
+        db.query("SELECT COUNT(*) FROM food_photo WHERE owner_type = 'meal'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(0, it.getInt(0))
+        }
+        db.close()
+    }
 }

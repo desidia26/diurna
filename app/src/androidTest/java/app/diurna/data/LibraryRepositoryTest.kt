@@ -42,9 +42,11 @@ class LibraryRepositoryTest {
 
     @Test fun aMealLoggedWithAPhotoKeepsIt() = runTest {
         lib.saveMeal(shake)
-        lib.logMeal(mon, meals().single().id, photo = "shake.jpg")
+        val photo = t.foodPhotos.newName().also { java.io.File(t.photoDir, it).writeBytes(byteArrayOf(1)) }
+        lib.logMeal(mon, meals().single().id, photo = photo)
         val e = food().single()
-        assertEquals("shake.jpg", e.photo)
+        assertEquals(photo, e.photo)
+        assertEquals(listOf(photo), t.foodPhotoStore.forEntry(e.id).map { it.fileName })
         assertTrue("still exact, never queued for AI", e.isMeal && t.db.foodDao().pendingEstimates().isEmpty())
     }
 

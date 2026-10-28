@@ -186,6 +186,45 @@ interface RecipeIngredientDao {
     suspend fun deleteForMeal(mealId: Long)
 }
 
+@Dao
+interface FoodPhotoDao {
+    @Query(
+        """SELECT * FROM food_photo
+           WHERE owner_type = :ownerType AND owner_id = :ownerId
+           ORDER BY position, id"""
+    )
+    fun observe(ownerType: String, ownerId: Long): Flow<List<FoodPhotoEntity>>
+
+    @Query(
+        """SELECT * FROM food_photo
+           WHERE owner_type = :ownerType AND owner_id = :ownerId
+           ORDER BY position, id"""
+    )
+    suspend fun forOwner(ownerType: String, ownerId: Long): List<FoodPhotoEntity>
+
+    @Query("SELECT file_name FROM food_photo")
+    suspend fun allFileNames(): List<String>
+
+    @Query("SELECT COUNT(*) FROM food_photo WHERE owner_type = :ownerType AND owner_id = :ownerId")
+    suspend fun count(ownerType: String, ownerId: Long): Int
+
+    @Insert
+    suspend fun insert(row: FoodPhotoEntity): Long
+
+    @Insert
+    suspend fun insertAll(rows: List<FoodPhotoEntity>)
+
+    @Query("DELETE FROM food_photo WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM food_photo WHERE owner_type = :ownerType AND owner_id = :ownerId")
+    suspend fun deleteForOwner(ownerType: String, ownerId: Long)
+
+    @Query("SELECT * FROM food_photo WHERE id = :id")
+    suspend fun get(id: Long): FoodPhotoEntity?
+}
+
+
 /**
  * Case-insensitive, so "bench press" and "Bench press" share history. Typing a hidden exercise's
  * name brings it back. Call inside a transaction.
@@ -462,7 +501,7 @@ interface FoodDao {
     suspend fun setBarcodeSnapshot(id: Long, barcode: String?, offSnapshotJson: String?)
 
     @Query("SELECT photo FROM food_entry WHERE photo IS NOT NULL")
-    suspend fun photosInUse(): List<String>
+    suspend fun entryPrimaryPhotos(): List<String>
 
     /** Sets a meal entry's numbers (already multiplied by servings). */
     @Query(
