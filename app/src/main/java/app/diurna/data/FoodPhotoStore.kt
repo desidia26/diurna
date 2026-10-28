@@ -35,9 +35,8 @@ class FoodPhotoStore(
      */
     suspend fun replaceAll(ownerType: String, ownerId: Long, fileNames: List<String>) {
         // Validate names via FoodPhotos; file need not exist yet (import race / tests).
-        val capped = fileNames.distinct()
-            .mapNotNull { photos.file(it)?.name }
-            .take(FoodPhotoEntity.MAX_PER_OWNER)
+        val requested = fileNames.distinct().mapNotNull { photos.file(it)?.name }
+        val capped = requested.take(FoodPhotoEntity.MAX_PER_OWNER)
         val oldNames = dao.forOwner(ownerType, ownerId).map { it.fileName }
         db.withTransaction {
             dao.deleteForOwner(ownerType, ownerId)
@@ -56,8 +55,10 @@ class FoodPhotoStore(
             syncPrimary(ownerType, ownerId, capped.firstOrNull())
         }
         val keep = allInUse()
+        // Drop previous gallery files and any over-cap extras that never became rows.
+        val candidates = (oldNames + requested).distinct()
         withContext(Dispatchers.IO) {
-            oldNames.filter { it !in keep }.forEach { photos.delete(it) }
+            candidates.filter { it !in keep }.forEach { photos.delete(it) }
         }
     }
 
