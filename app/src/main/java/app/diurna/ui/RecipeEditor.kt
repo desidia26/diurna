@@ -524,8 +524,19 @@ private fun BarcodeIngredientDialog(
                             val factor = grams / 100.0
                             onAdd(mealToDraft(m, grams, factor, barcode = m.barcode, source = "barcode"))
                         }
-                        app.diurna.data.LibraryRepository.ScanResult.NotFound -> problem = "Product not found."
-                        is app.diurna.data.LibraryRepository.ScanResult.Failed -> problem = r.message
+                        is app.diurna.data.LibraryRepository.ScanResult.NotFound -> {
+                            val m = r.draft
+                            if (m.barcode != null) {
+                                // Keep barcode on the ingredient even when OFF had nothing usable.
+                                onAdd(mealToDraft(m.copy(name = m.name.ifBlank { "Scanned item" }), grams, grams / 100.0, barcode = m.barcode, source = "barcode"))
+                            } else problem = "Product not found."
+                        }
+                        is app.diurna.data.LibraryRepository.ScanResult.Failed -> {
+                            val m = r.draft
+                            if (m.barcode != null) {
+                                onAdd(mealToDraft(m.copy(name = m.name.ifBlank { "Scanned item" }), grams, grams / 100.0, barcode = m.barcode, source = "barcode"))
+                            } else problem = r.message
+                        }
                     }
                     busy = false
                 }

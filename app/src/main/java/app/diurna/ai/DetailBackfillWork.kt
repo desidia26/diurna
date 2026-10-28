@@ -19,6 +19,11 @@ import app.diurna.R
 import app.diurna.container
 import app.diurna.data.AppDatabase
 import app.diurna.data.FoodEntryEntity
+import app.diurna.data.OffSnapshot
+import app.diurna.data.OpenFoodFacts
+import app.diurna.data.ProductSource
+import app.diurna.data.parseOffSnapshot
+import app.diurna.data.servingGrams
 import app.diurna.data.fdc.AminoResolver
 import app.diurna.data.fdc.IngredientsJson
 import kotlinx.coroutines.CancellationException
@@ -42,6 +47,7 @@ class DetailBackfillRunner(
     private val aminoResolver: AminoResolver? = null,
     private val onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> },
     private val isCancelled: () -> Boolean = { false },
+    private val products: ProductSource = OpenFoodFacts(),
 ) {
     suspend fun preview(fromKey: String?, toKey: String?): DetailBackfill.Preview {
         val entries = db.foodDao().estimatedInRange(fromKey, toKey)
@@ -51,7 +57,7 @@ class DetailBackfillRunner(
         for (e in entries) {
             when {
                 DetailBackfill.needsAiFill(e, wantAminos) -> ai++
-                DetailBackfill.needsMealAttempt(e) -> meal++
+                DetailBackfill.needsMealAttempt(e) || DetailBackfill.needsOffAttempt(e) -> meal++
             }
         }
         return DetailBackfill.Preview(entryCount = ai + meal, aiCalls = ai, mealCount = meal)
@@ -62,7 +68,9 @@ class DetailBackfillRunner(
         val candidates = food.estimatedInRange(fromKey, toKey)
         val wantAminos = fdcKeyPresent() && aminoResolver != null
         val work = candidates.filter {
-            DetailBackfill.needsAiFill(it, wantAminos) || DetailBackfill.needsMealAttempt(it)
+            DetailBackfill.needsAiFill(it, wantAminos) ||
+                DetailBackfill.needsMealAttempt(it) ||
+                DetailBackfill.needsOffAttempt(it)
         }
         var filled = 0
         var partial = 0
@@ -85,32 +93,37 @@ class DetailBackfillRunner(
                 continue
             }
             try {
-                when (entry.source) {
+                // Prefer OFF (snapshot or retry) for barcode entries; never changes stored macros.
+                var wrote = DetailBackfill.needsOffAttempt(entry) && fillOff(entry)
+                val fresh = food.get(entry.id) ?: entry
+                when (fresh.source) {
                     FoodEntryEntity.SOURCE_MEAL -> {
-                        when (val r = fillMeal(entry)) {
-                            MealResult.FILLED -> {
-                                filled++
-                                val after = food.get(entry.id)
-                                if (after?.aminoPartial == true) partial++
-                            }
-                            MealResult.NEEDS_DETAIL -> needsMeal++
-                            MealResult.SKIPPED -> skipped++
+                        when (val r = fillMeal(fresh)) {
+                            MealResult.FILLED -> wrote = true
+                            MealResult.NEEDS_DETAIL -> if (!wrote) needsMeal++
+                            MealResult.SKIPPED -> Unit
                         }
                     }
                     else -> {
-                        if (!DetailBackfill.needsAiFill(entry, wantAminos)) {
-                            skipped++
-                        } else {
-                            val ok = fillAi(entry, wantAminos)
-                            if (ok) {
-                                filled++
-                                val after = food.get(entry.id)
-                                if (after?.aminoPartial == true) partial++
-                            } else {
-                                failed++
+                        if (DetailBackfill.needsAiFill(fresh, wantAminos)) {
+                            when {
+                                fillAi(fresh, wantAminos) -> wrote = true
+                                !wrote -> failed++
                             }
                         }
                     }
+                }
+                when {
+                    wrote -> {
+                        filled++
+                        val after = food.get(entry.id)
+                        if (after?.aminoPartial == true) partial++
+                    }
+                    // needsMeal already counted above when meal lacked detail and OFF wrote nothing
+                    fresh.source == FoodEntryEntity.SOURCE_MEAL &&
+                        DetailBackfill.needsMealAttempt(food.get(entry.id) ?: fresh) &&
+                        !wrote -> Unit
+                    else -> skipped++
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -123,6 +136,38 @@ class DetailBackfillRunner(
     }
 
     private enum class MealResult { FILLED, NEEDS_DETAIL, SKIPPED }
+
+    /**
+     * Fill null sub-macros from OFF snapshot (retrying a failed lookup). Macros stay unchanged.
+     * Returns true when at least one null was written.
+     */
+    private suspend fun fillOff(entry: FoodEntryEntity): Boolean {
+        if (!DetailBackfill.needsOffAttempt(entry)) return false
+        val code = entry.barcode ?: return false
+        var snap = OffSnapshot.decode(entry.offSnapshotJson)
+        if (snap == null || !snap.lookupOk || snap.per100Json == null) {
+            val json = try {
+                products.fetch(code)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            val at = System.currentTimeMillis()
+            snap = json?.let { parseOffSnapshot(it, at) } ?: OffSnapshot.failed(at)
+            db.foodDao().setBarcodeSnapshot(entry.id, code, snap.encode())
+        }
+        if (!snap.lookupOk) return false
+        val grams = snap.servingGrams() * entry.servings.coerceAtLeast(0.0)
+        val incoming = DetailBackfill.fromOffSnapshot(snap, grams) ?: return false
+        val fresh = db.foodDao().get(entry.id) ?: return false
+        if (DetailBackfill.macrosOf(fresh) != DetailBackfill.macrosOf(entry)) return false
+        val current = DetailBackfill.fromEntry(fresh)
+        val merged = DetailBackfill.mergeNullsOnly(current, incoming, fresh.carbsG, fresh.fatG)
+        if (merged == current) return false
+        writeDetail(fresh, merged)
+        return true
+    }
 
     private suspend fun fillMeal(entry: FoodEntryEntity): MealResult {
         if (!DetailBackfill.needsMealAttempt(entry)) return MealResult.SKIPPED

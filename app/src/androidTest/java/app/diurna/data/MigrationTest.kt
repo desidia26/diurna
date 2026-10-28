@@ -353,4 +353,38 @@ class MigrationTest {
         db.close()
     }
 
+
+    @Test fun v13ToV14AddsBarcodeSnapshotColumnsAndExistingRowsGetNull() {
+        helper.createDatabase(dbName + "-14", 13).use { db ->
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind, barcode, restaurant_name, nutrition_source) " +
+                    "VALUES (1, 'Shake', 160, 30, 5, 3, 'simple', '0123456789012', NULL, NULL)"
+            )
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-28', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, protein_g, carbs_g, fat_g, source, meal_id, servings) " +
+                    "VALUES (1, '2026-10-28', '08:00', 'Shake', 1, 160, 160, 30, 5, 3, 'meal', 1, 1.0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-14", 14, true)
+        db.query("SELECT barcode, off_snapshot_json, kcal, protein_g FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("0123456789012", it.getString(0))
+            assertTrue("off_snapshot starts null", it.isNull(1))
+            assertEquals(160, it.getInt(2))
+            assertEquals(30, it.getInt(3))
+        }
+        db.query("SELECT barcode, off_snapshot_json, kcal_low, protein_g, carbs_g, fat_g FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertTrue("existing food_entry barcode null", it.isNull(0))
+            assertTrue("existing food_entry snapshot null", it.isNull(1))
+            assertEquals("logged macros unchanged", 160, it.getInt(2))
+            assertEquals(30, it.getInt(3))
+            assertEquals(5, it.getInt(4))
+            assertEquals(3, it.getInt(5))
+        }
+        db.close()
+    }
+
+
 }

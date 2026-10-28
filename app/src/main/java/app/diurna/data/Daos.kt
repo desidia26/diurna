@@ -457,6 +457,10 @@ interface FoodDao {
     @Query("UPDATE food_entry SET photo = :photo WHERE id = :id")
     suspend fun setPhoto(id: Long, photo: String?)
 
+    /** Persists barcode + OFF snapshot without touching macros or estimate identity. */
+    @Query("UPDATE food_entry SET barcode = :barcode, off_snapshot_json = :offSnapshotJson WHERE id = :id")
+    suspend fun setBarcodeSnapshot(id: Long, barcode: String?, offSnapshotJson: String?)
+
     @Query("SELECT photo FROM food_entry WHERE photo IS NOT NULL")
     suspend fun photosInUse(): List<String>
 

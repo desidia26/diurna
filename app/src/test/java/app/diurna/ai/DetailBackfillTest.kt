@@ -1,6 +1,7 @@
 package app.diurna.ai
 
 import app.diurna.data.FoodEntryEntity
+import app.diurna.data.OffSnapshot
 import app.diurna.data.MealEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -180,4 +181,33 @@ class DetailBackfillTest {
     // silence unused - entry() default id
     private fun entry(id: Long, carbs: Int, fat: Int, protein: Int, kcalLow: Int, kcalHigh: Int) =
         entry(carbs = carbs, fat = fat, protein = protein, kcalLow = kcalLow, kcalHigh = kcalHigh).copy(id = id)
+
+    @Test fun offSnapshotFillsNullsOnlyAndLeavesMacrosAlone() {
+        val snap = OffSnapshot(
+            productName = "Oats",
+            lookedUpAt = 1L,
+            lookupOk = true,
+            per100Json = """{"kcal":379,"protein_g":13,"carbs_g":70,"fat_g":7,"fiber_g":10,"sugars_g":1,"sat_fat_g":1}""",
+        )
+        val e = entry(carbs = 40, fat = 20, fiber = null, sugars = null, satFat = 3)
+        val incoming = DetailBackfill.fromOffSnapshot(snap, grams = 100.0)!!
+        val merged = DetailBackfill.mergeNullsOnly(DetailBackfill.fromEntry(e), incoming, e.carbsG, e.fatG)
+        assertEquals(10, merged.fiberG) // filled from OFF
+        assertEquals(1, merged.sugarsG)
+        assertEquals(3, merged.satFatG) // existing kept
+        // Macros of the entry are not part of Detail — prove snapshot via macrosOf identity.
+        assertEquals(DetailBackfill.macrosOf(e), DetailBackfill.macrosOf(e.copy(fiberG = merged.fiberG, sugarsG = merged.sugarsG)))
+        assertTrue(DetailBackfill.needsOffAttempt(e.copy(barcode = "0012345678905")))
+        assertFalse(DetailBackfill.needsOffAttempt(e)) // no barcode
+    }
+
+    @Test fun fromOffSnapshotScalesByGrams() {
+        val snap = OffSnapshot(
+            lookedUpAt = 1L, lookupOk = true,
+            per100Json = """{"kcal":200,"protein_g":10,"carbs_g":20,"fat_g":5,"fiber_g":8}""",
+        )
+        val d = DetailBackfill.fromOffSnapshot(snap, grams = 50.0)!!
+        assertEquals(4, d.fiberG) // 8 * 0.5
+    }
+
 }

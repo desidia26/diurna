@@ -1,6 +1,8 @@
 package app.diurna.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -152,4 +154,40 @@ class BarcodeLookupTest {
         assertEquals(28, m.carbsG)
         assertNull(m.fiberG)
     }
+
+    @Test fun parseOffSnapshotKeepsPer100AndCapsRaw() {
+        val json = off("""{"product_name":"Oats","serving_size":"40 g","nutriments":{"energy-kcal_100g":379,"proteins_100g":13,"carbohydrates_100g":60,"fiber_100g":10,"fat_100g":7,"sugars_100g":1}}""")
+        val snap = parseOffSnapshot(json, lookedUpAt = 42L)!!
+        assertTrue(snap.lookupOk)
+        assertEquals("Oats", snap.productName)
+        assertEquals("40 g", snap.servingSize)
+        assertEquals(42L, snap.lookedUpAt)
+        assertNotNull(snap.per100Json)
+        assertEquals(json, snap.rawJson)
+        val macros = snap.toMacros(100.0)!!
+        assertEquals(379, macros.kcal)
+        assertEquals(13, macros.proteinG)
+        // US-style carbs = available + fiber
+        assertEquals(70, macros.carbsG)
+        val round = OffSnapshot.decode(snap.encode())!!
+        assertEquals(snap.productName, round.productName)
+        assertTrue(round.lookupOk)
+    }
+
+    @Test fun failedSnapshotEncodesAndDecodes() {
+        val s = OffSnapshot.failed(99L)
+        assertFalse(s.lookupOk)
+        val d = OffSnapshot.decode(s.encode())!!
+        assertEquals(99L, d.lookedUpAt)
+        assertFalse(d.lookupOk)
+        assertNull(d.per100Json)
+        assertNull(s.toMacros(100.0))
+    }
+
+    @Test fun rawJsonOverCapIsDropped() {
+        val huge = "x".repeat(OffSnapshot.MAX_RAW_CHARS + 10)
+        val snap = OffSnapshot(productName = "X", lookedUpAt = 1, lookupOk = true, per100Json = """{"kcal":1}""", rawJson = huge)
+        assertNull(OffSnapshot.decode(snap.encode())!!.rawJson)
+    }
+
 }

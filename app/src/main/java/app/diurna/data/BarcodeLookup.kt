@@ -205,3 +205,152 @@ private fun parseOrThrow(json: String): MealEntity? {
         omega9G = optGrams("omega-9-fat"),
     )
 }
+
+/**
+ * Source snapshot from an Open Food Facts lookup, stored on the meal and/or food entry.
+ *
+ * OFF product data is public/crowd-sourced (no personal data). [rawJson] is capped so a hostile
+ * response cannot bloat the DB; [encode] drops it when over [MAX_RAW_CHARS].
+ * Logged macros on the entry are never silently overwritten from this snapshot — backfill and
+ * re-estimate only fill nulls (or replace on an explicit re-estimate).
+ */
+data class OffSnapshot(
+    val productName: String? = null,
+    val servingSize: String? = null,
+    /** Per-100g nutrients as parsed from OFF (`_100g` keys), JSON object string. */
+    val per100Json: String? = null,
+    val lookedUpAt: Long,
+    val lookupOk: Boolean,
+    /** Capped raw OFF response; null when omitted or too large. */
+    val rawJson: String? = null,
+) {
+    fun encode(): String {
+        val o = JSONObject()
+        o.put("lookedUpAt", lookedUpAt)
+        o.put("lookupOk", lookupOk)
+        if (productName != null) o.put("productName", productName)
+        if (servingSize != null) o.put("servingSize", servingSize)
+        if (per100Json != null) o.put("per100", JSONObject(per100Json))
+        val raw = rawJson?.takeIf { it.length <= MAX_RAW_CHARS }
+        if (raw != null) o.put("raw", raw)
+        return o.toString()
+    }
+
+    companion object {
+        /** Keep raw OFF payloads small; product JSON with selected fields is typically a few KB. */
+        const val MAX_RAW_CHARS = 32 * 1024
+
+        fun decode(json: String?): OffSnapshot? {
+            if (json.isNullOrBlank()) return null
+            return try {
+                val o = JSONObject(json)
+                OffSnapshot(
+                    productName = o.optString("productName").ifEmpty { null },
+                    servingSize = o.optString("servingSize").ifEmpty { null },
+                    per100Json = o.optJSONObject("per100")?.toString(),
+                    lookedUpAt = o.getLong("lookedUpAt"),
+                    lookupOk = o.optBoolean("lookupOk", false),
+                    rawJson = o.optString("raw").ifEmpty { null },
+                )
+            } catch (_: JSONException) {
+                null
+            }
+        }
+
+        fun failed(at: Long = System.currentTimeMillis()) =
+            OffSnapshot(lookedUpAt = at, lookupOk = false)
+    }
+}
+
+/**
+ * Parses per-100g nutrients and product name/serving from an OFF response without scaling to a
+ * serving. Null when the payload has no usable `_100g` energy.
+ */
+fun parseOffSnapshot(json: String, lookedUpAt: Long = System.currentTimeMillis()): OffSnapshot? {
+    return try {
+        val root = JSONObject(json)
+        if (root.optInt("status", 1) == 0) return null
+        val p = root.optJSONObject("product") ?: return null
+        val n = p.optJSONObject("nutriments") ?: return null
+        fun num(key: String): Double? =
+            n.opt(key)?.toString()?.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }
+        fun kcal100(): Double? =
+            num("energy-kcal_100g") ?: num("energy_100g")?.let { it / 4.184 }
+        val kcal = kcal100() ?: return null
+        if (kcal > MAX_KCAL) return null
+        val per100 = JSONObject()
+        per100.put("kcal", kcal.roundToInt())
+        fun putG(outKey: String, vararg keys: String) {
+            val v = keys.firstNotNullOfOrNull { num(it) } ?: return
+            per100.put(outKey, v.coerceAtMost(MAX_GRAMS))
+        }
+        putG("protein_g", "proteins_100g")
+        val avail = num("carbohydrates_100g")
+        val fiber = num("fiber_100g")
+        when {
+            avail != null && fiber != null -> per100.put("carbs_g", (avail + fiber).coerceAtMost(MAX_GRAMS))
+            avail != null -> per100.put("carbs_g", avail.coerceAtMost(MAX_GRAMS))
+        }
+        putG("fat_g", "fat_100g")
+        putG("fiber_g", "fiber_100g")
+        putG("sugars_g", "sugars_100g")
+        putG("added_sugars_g", "added-sugars_100g")
+        putG("starch_g", "starch_100g")
+        putG("sat_fat_g", "saturated-fat_100g")
+        putG("mono_fat_g", "monounsaturated-fat_100g")
+        putG("poly_fat_g", "polyunsaturated-fat_100g")
+        putG("trans_fat_g", "trans-fat_100g")
+        num("cholesterol_100g")?.let { per100.put("cholesterol_mg", (it * 1000.0).coerceAtMost(MAX_CHOL_MG)) }
+        putG("omega3_g", "omega-3-fat_100g")
+        putG("omega6_g", "omega-6-fat_100g")
+        putG("omega9_g", "omega-9-fat_100g")
+        putG("soluble_fiber_g", "soluble-fiber_100g", "fiber-soluble_100g")
+        putG("insoluble_fiber_g", "insoluble-fiber_100g", "fiber-insoluble_100g")
+
+        val name = cleanText(p.optString("product_name"), MAX_NAME).ifEmpty { null }
+        val serving = cleanText(p.optString("serving_size"), MAX_NOTE).ifEmpty { null }
+        val raw = if (json.length <= OffSnapshot.MAX_RAW_CHARS) json else null
+        OffSnapshot(
+            productName = name,
+            servingSize = serving,
+            per100Json = per100.toString(),
+            lookedUpAt = lookedUpAt,
+            lookupOk = true,
+            rawJson = raw,
+        )
+    } catch (_: JSONException) {
+        null
+    }
+}
+
+/** Macros (kcal / P / C / F) from per-100g snapshot scaled by grams; null if snapshot unusable. */
+fun OffSnapshot.toMacros(grams: Double): OffMacros? {
+    if (!lookupOk || per100Json == null || grams <= 0) return null
+    val n = try { JSONObject(per100Json) } catch (_: JSONException) { return null }
+    val scale = grams / 100.0
+    fun req(key: String): Int {
+        val v = n.optDouble(key, 0.0).takeIf { it.isFinite() && it >= 0 } ?: 0.0
+        return (v * scale).coerceAtMost(if (key == "kcal") MAX_KCAL else MAX_GRAMS).roundToInt()
+    }
+    if (!n.has("kcal")) return null
+    return OffMacros(req("kcal"), req("protein_g"), req("carbs_g"), req("fat_g"))
+}
+
+data class OffMacros(val kcal: Int, val proteinG: Int, val carbsG: Int, val fatG: Int)
+
+/** Grams for one serving from the snapshot; defaults to 100 g when unknown. */
+fun OffSnapshot.servingGrams(): Double {
+    rawJson?.let { raw ->
+        try {
+            val p = JSONObject(raw).optJSONObject("product")
+            val q = p?.opt("serving_quantity")?.toString()?.toDoubleOrNull()
+            if (q != null && q.isFinite() && q > 0 && q <= MAX_GRAMS) return q
+        } catch (_: JSONException) { }
+    }
+    servingSize?.let { s ->
+        val m = Regex("""([\d]+(?:\.\d+)?)\s*g\b""", RegexOption.IGNORE_CASE).find(s)
+        val g = m?.groupValues?.get(1)?.toDoubleOrNull()
+        if (g != null && g.isFinite() && g > 0 && g <= MAX_GRAMS) return g
+    }
+    return 100.0
+}

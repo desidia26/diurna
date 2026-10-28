@@ -185,6 +185,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         val seed = MealEntity(
             name = f.text.lines().first().trim().replaceFirstChar { it.uppercase() },
             kcal = f.kcalMid ?: 0, proteinG = f.proteinG ?: 0, carbsG = f.carbsG ?: 0, fatG = f.fatG ?: 0,
+            barcode = f.barcode, offSnapshotJson = f.offSnapshotJson,
             fiberG = f.fiberG, solubleFiberG = f.solubleFiberG, insolubleFiberG = f.insolubleFiberG,
             sugarsG = f.sugarsG, addedSugarsG = f.addedSugarsG, starchG = f.starchG,
             satFatG = f.satFatG, monoFatG = f.monoFatG, polyFatG = f.polyFatG, transFatG = f.transFatG,

@@ -56,6 +56,11 @@ data class MealEntity(
     val note: String? = null,
     /** Package barcode for meals added by scanning, normalized by [normalizeBarcode]. */
     val barcode: String? = null,
+    /**
+     * Open Food Facts source snapshot JSON ([OffSnapshot.encode]), when this meal was scanned.
+     * Public product data only; see [OffSnapshot]. Null when never looked up or added manually.
+     */
+    @ColumnInfo(name = "off_snapshot_json") val offSnapshotJson: String? = null,
     /** [KIND_SIMPLE], [KIND_RECIPE], or [KIND_RESTAURANT]. Existing rows migrate to simple. */
     @ColumnInfo(defaultValue = "'simple'") val kind: String = KIND_SIMPLE,
     /** How many servings the recipe batch makes. Null/1 for simple meals. */
@@ -312,7 +317,7 @@ data class ExerciseSetEntity(
         // Deleting a saved meal keeps past entries and their numbers.
         ForeignKey(MealEntity::class, ["id"], ["meal_id"], onDelete = ForeignKey.SET_NULL),
     ],
-    indices = [Index("date"), Index("meal_id")],
+    indices = [Index("date"), Index("meal_id"), Index("barcode")],
 )
 data class FoodEntryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -373,6 +378,13 @@ data class FoodEntryEntity(
      * which stays the main description; the estimate uses both.
      */
     val photo: String? = null,
+    /** Package barcode when logged from a scan or a saved meal that has one. Kept even if OFF failed. */
+    val barcode: String? = null,
+    /**
+     * Open Food Facts source snapshot ([OffSnapshot.encode]) at lookup time. Public product data;
+     * raw OFF JSON inside is size-capped. Never silently overwrites the user's logged macros.
+     */
+    @ColumnInfo(name = "off_snapshot_json") val offSnapshotJson: String? = null,
 ) {
     val isMeal: Boolean get() = source == SOURCE_MEAL
     val aminoPartial: Boolean get() =
