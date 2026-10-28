@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Cleartext stays off globally. Named localhost aliases used by emulators and local
-  gateways may use http. Private LAN IP ranges cannot be expressed here; those are
-  enforced in-app by GatewayUrl (and still blocked by the platform unless Larry
-  later approves weakening base-config — see the byo-gateway PR security notes).
+  Cleartext stays off globally. Only named localhost / emulator aliases may use http,
+  matching GatewayUrl.allowsCleartextHost. LAN servers need HTTPS (decision on PR #21).
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />

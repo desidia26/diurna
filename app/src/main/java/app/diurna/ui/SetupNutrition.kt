@@ -188,11 +188,14 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
         AiProvider.XAI -> gateway.xaiSupportsImages
         AiProvider.OPENAI_COMPAT -> gateway.openAiSupportsImages
     }
-    val cleartextWarning = when (provider) {
-        AiProvider.OPENAI_COMPAT -> openAiBase.takeIf { GatewayUrl.isCleartextUrl(it) }
-        AiProvider.ANTHROPIC -> anthropicBase.takeIf { it.isNotBlank() && GatewayUrl.isCleartextUrl(it) }
-        AiProvider.XAI -> xaiEndpoint.takeIf { it.isNotBlank() && GatewayUrl.isCleartextUrl(it) }
+    val baseUrlForCleartext = when (provider) {
+        AiProvider.OPENAI_COMPAT -> openAiBase
+        AiProvider.ANTHROPIC -> anthropicBase
+        AiProvider.XAI -> xaiEndpoint
     }
+    val cleartextBlocked = GatewayUrl.cleartextBlockedHint(baseUrlForCleartext)
+    val cleartextLocalOk = cleartextBlocked == null && baseUrlForCleartext.isNotBlank() &&
+        GatewayUrl.isCleartextUrl(baseUrlForCleartext)
     val chipLabel = when {
         provider == AiProvider.OPENAI_COMPAT && openAiBase.isNotBlank() && openAiModel.isNotBlank() ->
             if (lastFour != null) "Ready" else "Ready (no key)"
@@ -222,6 +225,8 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
                 openAiBase, { openAiBase = it }, Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text("Base URL") },
                 placeholder = { Text("https://host/v1 or …/chat/completions") },
+                isError = cleartextBlocked != null,
+                supportingText = cleartextBlocked?.let { { Text(it) } },
             )
             OutlinedTextField(
                 openAiModel, { openAiModel = it }, Modifier.fillMaxWidth(), singleLine = true,
@@ -234,7 +239,7 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
                     onClick = {
                         vm.saveGateway { it.copy(openAiBaseUrl = openAiBase.trim(), openAiModel = openAiModel.trim()) }
                     },
-                    enabled = gatewayDirty && openAiBase.isNotBlank() && openAiModel.isNotBlank(),
+                    enabled = gatewayDirty && openAiBase.isNotBlank() && openAiModel.isNotBlank() && cleartextBlocked == null,
                 ) { Text("Save gateway") }
                 if (gatewayDirty) TextButton(onClick = {
                     openAiBase = gateway.openAiBaseUrl
@@ -247,10 +252,15 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
                 anthropicBase, { anthropicBase = it }, Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text("Base URL (optional)") },
                 placeholder = { Text("Empty = api.anthropic.com") },
+                isError = cleartextBlocked != null,
+                supportingText = cleartextBlocked?.let { { Text(it) } },
             )
             if (anthropicBase != gateway.anthropicBaseUrl) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { vm.saveGateway { it.copy(anthropicBaseUrl = anthropicBase.trim()) } }) { Text("Save base URL") }
+                    Button(
+                        onClick = { vm.saveGateway { it.copy(anthropicBaseUrl = anthropicBase.trim()) } },
+                        enabled = cleartextBlocked == null,
+                    ) { Text("Save base URL") }
                     TextButton(onClick = { anthropicBase = gateway.anthropicBaseUrl }) { Text("Discard") }
                 }
             }
@@ -260,16 +270,21 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
                 xaiEndpoint, { xaiEndpoint = it }, Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text("Endpoint (optional)") },
                 placeholder = { Text("Empty = ${XaiChat.ENDPOINT}") },
+                isError = cleartextBlocked != null,
+                supportingText = cleartextBlocked?.let { { Text(it) } },
             )
             if (xaiEndpoint != gateway.xaiEndpoint) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { vm.saveGateway { it.copy(xaiEndpoint = xaiEndpoint.trim()) } }) { Text("Save endpoint") }
+                    Button(
+                        onClick = { vm.saveGateway { it.copy(xaiEndpoint = xaiEndpoint.trim()) } },
+                        enabled = cleartextBlocked == null,
+                    ) { Text("Save endpoint") }
                     TextButton(onClick = { xaiEndpoint = gateway.xaiEndpoint }) { Text("Discard") }
                 }
             }
         }
-        if (cleartextWarning != null) {
-            Hint("HTTP (no TLS) — only for localhost or a private LAN. Public hosts must use HTTPS.")
+        if (cleartextLocalOk) {
+            Hint("HTTP (no TLS) — only for localhost or the emulator. LAN servers need HTTPS.")
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Model supports images", Modifier.weight(1f))

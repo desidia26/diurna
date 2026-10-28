@@ -2,20 +2,22 @@ package app.diurna.ai
 
 import java.net.InetAddress
 import java.net.URI
-import java.net.UnknownHostException
 import java.util.Locale
 
 /**
  * Normalizes and validates user-entered AI gateway URLs. Base URLs and model names aren't secrets,
- * but a URL must never carry userinfo (credentials in the authority), and cleartext is only for
- * loopback / private LAN / .local — never for a public host.
- *
- * Android's network security config can't express IP ranges, so cleartext to LAN IPs is gated here
- * in-app. Platform cleartext stays off globally except for named localhost aliases; see
- * res/xml/network_security_config.xml and the PR security notes.
+ * but a URL must never carry userinfo (credentials in the authority), and cleartext (http) is
+ * only for localhost and the Android emulator host alias — never for a LAN or public host.
+ * LAN servers need HTTPS (e.g. Tailscale `tailscale serve`, or a reverse proxy such as Caddy).
+ * Matches res/xml/network_security_config.xml: platform cleartext stays off globally except those
+ * same named aliases. Larry's decision on PR #21: do not widen cleartext for RFC1918.
  */
 object GatewayUrl {
     const val CHAT_COMPLETIONS_SUFFIX = "/chat/completions"
+
+    /** Shown in Setup and thrown from [assertAllowed] when http targets a non-local host. */
+    const val CLEARTEXT_BLOCKED =
+        "HTTP is only allowed for localhost and the emulator. Use HTTPS for a LAN server."
 
     /** Default Anthropic Messages API origin (SDK appends /v1/messages). */
     const val ANTHROPIC_DEFAULT_BASE = "https://api.anthropic.com"
@@ -53,40 +55,47 @@ object GatewayUrl {
     }
 
     /**
-     * Validates a URL that will be contacted: scheme/host rules, no userinfo, and for http the host
-     * must resolve to a private or loopback address (or be a known local name before resolve).
-     * [resolve] is injectable so unit tests don't touch DNS.
+     * Validates a URL that will be contacted: scheme/host rules, no userinfo, and for http the
+     * host must be localhost or the emulator alias (same allowlist as network_security_config).
      */
-    fun assertAllowed(
-        url: String,
-        resolve: (String) -> List<InetAddress> = ::resolveHost,
-    ): ValidatedUrl {
+    fun assertAllowed(url: String): ValidatedUrl {
         val uri = parseHttpUri(url.trim())
         rejectUserinfo(uri)
         val host = uri.host ?: throw GatewayUrlException("URL needs a host")
         val scheme = uri.scheme!!.lowercase(Locale.US)
         val cleartext = scheme == "http"
-        if (cleartext && !allowsCleartextHost(host, resolve)) {
-            throw GatewayUrlException(
-                "HTTP (no TLS) is only allowed for localhost, .local, and private LAN addresses. Use HTTPS for anything else."
-            )
+        if (cleartext && !allowsCleartextHost(host)) {
+            throw GatewayUrlException(CLEARTEXT_BLOCKED)
         }
         return ValidatedUrl(url = rebuild(uri, uri.rawPath.orEmpty()), host = host, cleartext = cleartext)
     }
 
-    /** True when http to [host] is permitted (name check, then resolved addresses must all be private/loopback). */
-    fun allowsCleartextHost(host: String, resolve: (String) -> List<InetAddress> = ::resolveHost): Boolean {
+    /**
+     * True when http to [host] is permitted: localhost, loopback literals, or the emulator's
+     * `10.0.2.2` host alias — the same names allowlisted in network_security_config.xml.
+     * Private LAN addresses and `.local` names are not cleartext-allowed; use HTTPS.
+     */
+    fun allowsCleartextHost(host: String): Boolean {
         val h = host.trim().lowercase(Locale.US).trimEnd('.')
         if (h.isEmpty()) return false
-        if (isLocalName(h)) return true
-        if (isLiteralPrivateOrLoopback(h)) return true
-        val addrs = try {
-            resolve(h)
-        } catch (_: UnknownHostException) {
-            return false
+        return isCleartextAllowedName(h)
+    }
+
+    /**
+     * Supporting/error copy for Setup when the typed URL is http to something other than
+     * localhost/emulator. Null when the URL is blank, not http, or cleartext-allowed.
+     */
+    fun cleartextBlockedHint(raw: String): String? {
+        if (raw.isBlank()) return null
+        val uri = try {
+            parseHttpUri(raw.trim())
+        } catch (_: GatewayUrlException) {
+            return null
         }
-        if (addrs.isEmpty()) return false
-        return addrs.all { isPrivateOrLoopback(it) }
+        if (!uri.scheme.equals("http", ignoreCase = true)) return null
+        val host = uri.host ?: return null
+        if (allowsCleartextHost(host)) return null
+        return CLEARTEXT_BLOCKED
     }
 
     fun isPrivateOrLoopback(address: InetAddress): Boolean {
@@ -117,12 +126,13 @@ object GatewayUrl {
     /** Host-only check without DNS: localhost aliases, .local, or a private/loopback literal. */
     fun looksLocalOrPrivate(host: String): Boolean {
         val h = host.trim().lowercase(Locale.US).trimEnd('.')
-        return isLocalName(h) || isLiteralPrivateOrLoopback(h)
+        return isCleartextAllowedName(h) || h.endsWith(".local") || isLiteralPrivateOrLoopback(h)
     }
 
-    private fun isLocalName(host: String): Boolean =
-        host == "localhost" || host == "localhost." || host.endsWith(".local") ||
-            host == "10.0.2.2" // Android emulator's host loopback alias
+    private fun isCleartextAllowedName(host: String): Boolean =
+        host == "localhost" || host == "localhost." ||
+            host == "127.0.0.1" || host == "::1" || host == "[::1]" ||
+            host == "10.0.2.2" // Android emulator → host loopback
 
     private fun isLiteralPrivateOrLoopback(host: String): Boolean {
         if (host == "127.0.0.1" || host == "::1" || host == "[::1]") return true
@@ -171,8 +181,6 @@ object GatewayUrl {
         return "${uri.scheme}://${uri.host}$port$path$q"
     }
 
-    private fun resolveHost(host: String): List<InetAddress> =
-        InetAddress.getAllByName(host).toList()
 }
 
 data class ValidatedUrl(val url: String, val host: String, val cleartext: Boolean)

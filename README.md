@@ -89,6 +89,14 @@ Requires JDK 17 and the Android SDK at `~/Android/Sdk` (platform 36), or `sdk.di
   Back the keystore up somewhere safe: Android only installs updates signed with the same key, so losing it means uninstalling (and losing the app's data) to install a new build.
 - **In the app:** open **Setup**, clear the permission checklist, add a Claude API key for food estimates, or pick Grok and add an xAI key (a separate workspace or team with a spend limit is a good idea), print the porch code and scan it once to arm alarms, then try **Test alarm in 1 minute**.
 
+
+## Local or LAN model servers
+
+Setup → Food estimates → **OpenAI-compatible** can point at a server you run (Ollama, LM Studio, llama.cpp, LiteLLM, and similar `/v1/chat/completions` hosts).
+
+- **On the phone or emulator:** plain `http` is allowed for `localhost`, `127.0.0.1`, and the emulator’s host alias `10.0.2.2` (traffic to the machine running the emulator).
+- **On another machine on your LAN:** use **HTTPS**. Plain `http` to a LAN address is rejected (platform cleartext stays off outside those localhost aliases). Practical options include Tailscale HTTPS certificates via [`tailscale serve`](https://tailscale.com/kb/1242/tailscale-serve), or a reverse proxy such as [Caddy](https://caddyserver.com/) that terminates TLS in front of the model server.
+
 ## Scripts
 
 Day-to-day work goes through `scripts/`. Anything that touches a device picks the plugged-in phone first, then a running emulator; set `ANDROID_SERIAL` to choose one yourself.

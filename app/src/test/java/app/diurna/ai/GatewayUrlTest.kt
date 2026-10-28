@@ -2,6 +2,7 @@ package app.diurna.ai
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,38 +66,54 @@ class GatewayUrlTest {
         assertEquals(XaiChat.ENDPOINT, GatewayUrl.normalizeChatCompletions(XaiChat.ENDPOINT))
     }
 
-    @Test fun cleartextAllowsLoopbackAndPrivateLiterals() {
-        assertTrue(GatewayUrl.allowsCleartextHost("localhost") { error("no dns") })
-        assertTrue(GatewayUrl.allowsCleartextHost("127.0.0.1") { error("no dns") })
-        assertTrue(GatewayUrl.allowsCleartextHost("10.0.2.2") { error("no dns") })
-        assertTrue(GatewayUrl.allowsCleartextHost("10.0.0.5") { error("no dns") })
-        assertTrue(GatewayUrl.allowsCleartextHost("192.168.1.10") { error("no dns") })
-        assertTrue(GatewayUrl.allowsCleartextHost("172.16.0.1") { error("no dns") })
-        assertTrue(GatewayUrl.allowsCleartextHost("172.31.255.1") { error("no dns") })
-        assertTrue(GatewayUrl.allowsCleartextHost("nas.local") { error("no dns") })
-        assertTrue(GatewayUrl.allowsCleartextHost("169.254.1.1") { error("no dns") })
+    @Test fun cleartextAllowsLocalhostAndEmulatorOnly() {
+        assertTrue(GatewayUrl.allowsCleartextHost("localhost"))
+        assertTrue(GatewayUrl.allowsCleartextHost("127.0.0.1"))
+        assertTrue(GatewayUrl.allowsCleartextHost("10.0.2.2"))
+        assertTrue(GatewayUrl.allowsCleartextHost("::1"))
+        assertTrue(GatewayUrl.allowsCleartextHost("[::1]"))
+        val local = GatewayUrl.assertAllowed("http://localhost:11434/v1/chat/completions")
+        assertTrue(local.cleartext)
+        assertEquals("localhost", local.host)
     }
 
-    @Test fun cleartextBlocksPublicHostsEvenIfNameLooksFine() {
-        val public = listOf(InetAddress.getByName("8.8.8.8"))
-        assertFalse(GatewayUrl.allowsCleartextHost("example.com") { public })
+    @Test fun cleartextBlocksLanAndPublicHttp() {
+        assertFalse(GatewayUrl.allowsCleartextHost("10.0.0.5"))
+        assertFalse(GatewayUrl.allowsCleartextHost("192.168.1.10"))
+        assertFalse(GatewayUrl.allowsCleartextHost("172.16.0.1"))
+        assertFalse(GatewayUrl.allowsCleartextHost("nas.local"))
+        assertFalse(GatewayUrl.allowsCleartextHost("example.com"))
+        val e = assertThrows(GatewayUrlException::class.java) {
+            GatewayUrl.assertAllowed("http://192.168.1.10/v1/chat/completions")
+        }
+        assertEquals(GatewayUrl.CLEARTEXT_BLOCKED, e.message)
         assertThrows(GatewayUrlException::class.java) {
-            GatewayUrl.assertAllowed("http://example.com/v1/chat/completions") { public }
+            GatewayUrl.assertAllowed("http://example.com/v1/chat/completions")
         }
     }
 
-    @Test fun cleartextAllowsHostnameThatResolvesOnlyToPrivate() {
-        val lan = listOf(InetAddress.getByName("192.168.0.50"))
-        assertTrue(GatewayUrl.allowsCleartextHost("gateway.home") { lan })
-        val v = GatewayUrl.assertAllowed("http://gateway.home/v1/chat/completions") { lan }
-        assertTrue(v.cleartext)
+    @Test fun cleartextBlockedHintForLanHttp() {
+        assertEquals(
+            GatewayUrl.CLEARTEXT_BLOCKED,
+            GatewayUrl.cleartextBlockedHint("http://192.168.0.5:8080/v1"),
+        )
+        assertEquals(
+            GatewayUrl.CLEARTEXT_BLOCKED,
+            GatewayUrl.cleartextBlockedHint("http://nas.local/v1"),
+        )
+        assertNull(GatewayUrl.cleartextBlockedHint("http://localhost:11434/v1"))
+        assertNull(GatewayUrl.cleartextBlockedHint("https://192.168.0.5/v1"))
+        assertNull(GatewayUrl.cleartextBlockedHint(""))
+        assertNull(GatewayUrl.cleartextBlockedHint("not a url @@"))
     }
 
     @Test fun httpsIsAlwaysAllowedBySchemeCheck() {
-        val public = listOf(InetAddress.getByName("1.1.1.1"))
-        val v = GatewayUrl.assertAllowed("https://api.x.ai/v1/chat/completions") { public }
+        val v = GatewayUrl.assertAllowed("https://api.x.ai/v1/chat/completions")
         assertFalse(v.cleartext)
         assertEquals("api.x.ai", v.host)
+        // LAN over HTTPS is fine
+        val lan = GatewayUrl.assertAllowed("https://192.168.1.10/v1/chat/completions")
+        assertFalse(lan.cleartext)
     }
 
     @Test fun rejectsNonHttpSchemesAndBlank() {
