@@ -49,6 +49,10 @@ object Changelog {
             10, "2026-10-28", "Restaurant meals",
             "Saved meals can be marked as restaurant meals, with the restaurant's name and whether the numbers are published by the restaurant or estimated. Estimate from menu photo fills them in from a picture of the menu. Library has a Restaurants filter.",
         ),
+        Entry(
+            11, "2026-10-28", "Barcodes stay with what you log",
+            "A scanned barcode is now kept on the food entry along with Open Food Facts' data for it. If a product isn't found or the lookup fails, you get a form to type the numbers in, and the barcode is still saved. Filling in detail later uses the product's own data before asking the AI.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
