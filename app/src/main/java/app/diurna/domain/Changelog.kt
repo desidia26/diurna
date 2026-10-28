@@ -45,6 +45,10 @@ object Changelog {
             9, "2026-10-28", "Fill a meal from its label",
             "When adding or editing a saved meal, Fill from label photo reads a Nutrition Facts panel with the AI you picked and fills in the name, serving and numbers for you to check. Nothing is saved until you tap Save, and the photo is deleted after reading.",
         ),
+        Entry(
+            10, "2026-10-28", "Restaurant meals",
+            "Saved meals can be marked as restaurant meals, with the restaurant's name and whether the numbers are published by the restaurant or estimated. Estimate from menu photo fills them in from a picture of the menu. Library has a Restaurants filter.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
