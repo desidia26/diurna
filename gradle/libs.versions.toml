@@ -1,7 +1,7 @@
 [versions]
 agp = "8.11.1"
-kotlin = "2.2.0"
-ksp = "2.2.0-2.0.2"
+kotlin = "2.4.21"
+ksp = "2.3.12"
 coreKtx = "1.16.0"
 activityCompose = "1.10.1"
 composeBom = "2026.06.00"
@@ -17,7 +17,7 @@ jackson = "2.18.12"
 work = "2.10.2"
 junit = "4.13.2"
 orgJson = "20240303"
-coroutines = "1.10.2"
+coroutines = "1.11.0"
 androidxJunit = "1.2.1"
 androidxTestRunner = "1.6.2"
 
