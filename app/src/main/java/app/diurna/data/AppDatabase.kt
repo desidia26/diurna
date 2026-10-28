@@ -26,7 +26,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RecipeIngredientEntity::class,
         FdcFoodCacheEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -49,6 +49,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AutoMigration(from = 10, to = 11),
         // v12: meal.kind + servings_yield + cooked_weight_g; recipe_ingredient snapshots.
         AutoMigration(from = 11, to = 12),
+        // v13: restaurant_name + nutrition_source on meal.
+        AutoMigration(from = 12, to = 13),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {

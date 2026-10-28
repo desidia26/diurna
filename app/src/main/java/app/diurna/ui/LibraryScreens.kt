@@ -108,13 +108,14 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { PageHeader("Meals", onBack) }
         item {
-            Hint("Saved meals and recipes with exact numbers. Pick one in the Day screen's food box to log it instantly.")
+            Hint("Saved meals, recipes, and restaurant dishes with exact numbers. Pick one in the Day screen's food box to log it instantly.")
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = filter == null, onClick = { vm.setMealFilter(null) }, label = { Text("All") })
                 FilterChip(selected = filter == MealEntity.KIND_SIMPLE, onClick = { vm.setMealFilter(MealEntity.KIND_SIMPLE) }, label = { Text("Meals") })
                 FilterChip(selected = filter == MealEntity.KIND_RECIPE, onClick = { vm.setMealFilter(MealEntity.KIND_RECIPE) }, label = { Text("Recipes") })
+                FilterChip(selected = filter == MealEntity.KIND_RESTAURANT, onClick = { vm.setMealFilter(MealEntity.KIND_RESTAURANT) }, label = { Text("Restaurants") })
             }
         }
         item {
@@ -126,9 +127,16 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
                     editingRecipe = MealEntity(name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_RECIPE, servingsYield = 1.0)
                     recipeLines = emptyList()
                 }) { Text("Add recipe") }
+                Button(onClick = {
+                    editing = MealEntity(
+                        name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0,
+                        kind = MealEntity.KIND_RESTAURANT,
+                        nutritionSource = MealEntity.SOURCE_ESTIMATE,
+                    )
+                }) { Text("Add restaurant") }
             }
         }
-        if (meals.isEmpty()) item { Hint("Nothing here yet. Add a meal or recipe, or save one from a Day food entry.") }
+        if (meals.isEmpty()) item { Hint("Nothing here yet. Add a meal, recipe, or restaurant dish, or save one from a Day food entry.") }
         items(meals, key = { it.id }) { m ->
             Row(
                 Modifier.fillMaxWidth().clickable(onClickLabel = "Edit") {
@@ -149,8 +157,18 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
                         if (m.isRecipe) {
                             Text("Recipe", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         }
+                        if (m.isRestaurant) {
+                            Text("Restaurant", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                     Text(m.macroLine(), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                    if (m.isRestaurant) {
+                        val src = when (m.nutritionSource) {
+                            MealEntity.SOURCE_PUBLISHED -> "Published nutrition"
+                            else -> "Estimate"
+                        }
+                        Hint(listOfNotNull(m.restaurantName, src).joinToString(" · "))
+                    }
                     m.note?.let { Hint(it) }
                     if (m.isRecipe && m.aminoPartial) {
                         Hint("Aminos partial (${m.aminoMatched}/${m.aminoTotal})")
@@ -162,7 +180,15 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
         }
     }
     editing?.let { m ->
-        MealDialog(if (m.id == 0L) "Add meal" else "Edit meal", m, detailed = detailed, labelHost = vm, onDismiss = { editing = null }, onSave = vm::saveMeal)
+        MealDialog(
+            when {
+                m.isRestaurant && m.id == 0L -> "Add restaurant dish"
+                m.isRestaurant -> "Edit restaurant dish"
+                m.id == 0L -> "Add meal"
+                else -> "Edit meal"
+            },
+            m, detailed = detailed, labelHost = vm, onDismiss = { editing = null }, onSave = vm::saveMeal,
+        )
     }
     editingRecipe?.let { m ->
         RecipeDialog(
@@ -190,7 +216,8 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
 /**
  * Add/edit a saved meal. Also used by "Save as meal" on a food entry. Stays open to show problems.
  * [detailed] shows fiber / sugars / lipid fields (Setup → Detailed nutrition).
- * [labelHost] enables "Fill from label photo": AI fills the fields; Save is the confirm step.
+ * [labelHost] enables "Fill from label photo" (simple meals) or "Estimate from menu photo"
+ * (restaurant meals). AI fills the fields; Save is the confirm step.
  */
 @Composable
 fun MealDialog(
@@ -211,6 +238,11 @@ fun MealDialog(
     var c by remember { mutableStateOf(start(initial.carbsG)) }
     var f by remember { mutableStateOf(start(initial.fatG)) }
     var note by remember { mutableStateOf(initial.note ?: "") }
+    val isRestaurant = initial.isRestaurant
+    var restaurantName by remember { mutableStateOf(initial.restaurantName ?: "") }
+    var nutritionSource by remember {
+        mutableStateOf(initial.nutritionSource ?: MealEntity.SOURCE_ESTIMATE)
+    }
     var fiber by remember { mutableStateOf(startOpt(initial.fiberG)) }
     var solFiber by remember { mutableStateOf(startOpt(initial.solubleFiberG)) }
     var insolFiber by remember { mutableStateOf(startOpt(initial.insolubleFiberG)) }
@@ -237,48 +269,86 @@ fun MealDialog(
     var cys by remember { mutableStateOf(startOpt(initial.cysMg)) }
     var tyr by remember { mutableStateOf(startOpt(initial.tyrMg)) }
     var problem by remember { mutableStateOf<String?>(null) }
-    var fromLabel by remember { mutableStateOf(false) }
-    var readingLabel by remember { mutableStateOf(false) }
-    var labelMenu by remember { mutableStateOf(false) }
-    val labelReader: (suspend (String) -> LabelPhotoResult)? = when (labelHost) {
-        is LibraryViewModel -> labelHost::readLabelPhoto
-        is DayViewModel -> labelHost::readLabelPhoto
-        else -> null
-    }
-    val attacher = if (labelHost != null && labelReader != null) {
+    var fromPhoto by remember { mutableStateOf(false) }
+    var readingPhoto by remember { mutableStateOf(false) }
+    var photoMenu by remember { mutableStateOf(false) }
+    val libraryVm = labelHost as? LibraryViewModel
+    val dayVm = labelHost as? DayViewModel
+    val canLabel = !isRestaurant && (libraryVm != null || dayVm != null)
+    val canEstimate = isRestaurant && libraryVm != null
+    val attacher = if (labelHost != null && (canLabel || canEstimate)) {
         rememberPhotoAttacher(labelHost) { photoName ->
-            readingLabel = true
+            readingPhoto = true
             scope.launch {
-                when (val r = labelReader(photoName)) {
-                    is LabelPhotoResult.Read -> {
-                        val lab = r.reading
-                        if (name.isBlank() && lab.productName.isNotBlank()) name = lab.productName
-                        if (lab.serving.isNotBlank()) note = lab.serving
-                        kcal = lab.kcal.toString()
-                        p = lab.proteinG.toString()
-                        c = lab.carbsG.toString()
-                        f = lab.fatG.toString()
-                        if (detailed) {
-                            fiber = lab.fiberG?.toString() ?: ""
-                            sugars = lab.sugarsG?.toString() ?: ""
-                            addedSugars = lab.addedSugarsG?.toString() ?: ""
-                            sat = lab.satFatG?.toString() ?: ""
-                            trans = lab.transFatG?.toString() ?: ""
-                            chol = lab.cholesterolMg?.toString() ?: ""
+                if (canEstimate) {
+                    when (val r = libraryVm!!.estimateRestaurantPhoto(photoName, name, restaurantName, detailed)) {
+                        is RestaurantEstimateResult.Ok -> {
+                            val e = r.estimate
+                            kcal = ((e.kcalLow + e.kcalHigh) / 2).toString()
+                            p = e.proteinG.toString()
+                            c = e.carbsG.toString()
+                            f = e.fatG.toString()
+                            if (e.note.isNotBlank()) note = e.note
+                            if (detailed) {
+                                fiber = e.fiberG?.toString() ?: fiber
+                                sugars = e.sugarsG?.toString() ?: sugars
+                                addedSugars = e.addedSugarsG?.toString() ?: addedSugars
+                                sat = e.satFatG?.toString() ?: sat
+                                mono = e.monoFatG?.toString() ?: mono
+                                poly = e.polyFatG?.toString() ?: poly
+                                trans = e.transFatG?.toString() ?: trans
+                                chol = e.cholesterolMg?.toString() ?: chol
+                                o3 = e.omega3G?.toString() ?: o3
+                                o6 = e.omega6G?.toString() ?: o6
+                                o9 = e.omega9G?.toString() ?: o9
+                            }
+                            nutritionSource = MealEntity.SOURCE_ESTIMATE
+                            fromPhoto = true
+                            problem = null
                         }
-                        fromLabel = true
-                        problem = null
+                        is RestaurantEstimateResult.Problem -> {
+                            fromPhoto = true
+                            problem = r.message
+                        }
                     }
-                    is LabelPhotoResult.Problem -> {
-                        fromLabel = true
-                        problem = r.message
+                } else {
+                    val read = when {
+                        libraryVm != null -> libraryVm.readLabelPhoto(photoName)
+                        dayVm != null -> dayVm.readLabelPhoto(photoName)
+                        else -> LabelPhotoResult.Problem("No reader")
+                    }
+                    when (read) {
+                        is LabelPhotoResult.Read -> {
+                            val lab = read.reading
+                            if (name.isBlank() && lab.productName.isNotBlank()) name = lab.productName
+                            if (lab.serving.isNotBlank()) note = lab.serving
+                            kcal = lab.kcal.toString()
+                            p = lab.proteinG.toString()
+                            c = lab.carbsG.toString()
+                            f = lab.fatG.toString()
+                            if (detailed) {
+                                fiber = lab.fiberG?.toString() ?: ""
+                                sugars = lab.sugarsG?.toString() ?: ""
+                                addedSugars = lab.addedSugarsG?.toString() ?: ""
+                                sat = lab.satFatG?.toString() ?: ""
+                                trans = lab.transFatG?.toString() ?: ""
+                                chol = lab.cholesterolMg?.toString() ?: ""
+                            }
+                            fromPhoto = true
+                            problem = null
+                        }
+                        is LabelPhotoResult.Problem -> {
+                            fromPhoto = true
+                            problem = read.message
+                        }
                     }
                 }
-                readingLabel = false
+                readingPhoto = false
             }
         }
     } else null
-    val valid = name.isNotBlank() && kcal.toIntOrNull() != null
+    val valid = name.isNotBlank() && kcal.toIntOrNull() != null &&
+        (!isRestaurant || restaurantName.isNotBlank())
     fun opt(s: String): Int? = s.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -289,6 +359,49 @@ fun MealDialog(
                     name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Name") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 )
+                if (isRestaurant) {
+                    OutlinedTextField(
+                        restaurantName, { restaurantName = it }, Modifier.fillMaxWidth(),
+                        label = { Text("Restaurant") }, placeholder = { Text("Chipotle") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = nutritionSource == MealEntity.SOURCE_PUBLISHED,
+                            onClick = { nutritionSource = MealEntity.SOURCE_PUBLISHED },
+                            label = { Text("Published") },
+                        )
+                        FilterChip(
+                            selected = nutritionSource == MealEntity.SOURCE_ESTIMATE,
+                            onClick = { nutritionSource = MealEntity.SOURCE_ESTIMATE },
+                            label = { Text("Estimate") },
+                        )
+                    }
+                    Hint("Published = chain nutrition page / labeled values. Estimate = AI or your guess.")
+                }
+                if (attacher != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box {
+                            TextButton(
+                                onClick = { photoMenu = true },
+                                enabled = !readingPhoto && !attacher.busy,
+                            ) {
+                                Text(if (isRestaurant) "Estimate from menu photo" else "Fill from label photo")
+                            }
+                            DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
+                                DropdownMenuItem(text = { Text("Take photo") }, onClick = { photoMenu = false; attacher.takePhoto() })
+                                DropdownMenuItem(text = { Text("Choose photo") }, onClick = { photoMenu = false; attacher.choosePhoto() })
+                            }
+                        }
+                        if (readingPhoto || attacher.busy) {
+                            Hint(if (isRestaurant) "Estimating from photo…" else "Reading the label…")
+                        }
+                    }
+                    attacher.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn) }
+                    if (fromPhoto && problem == null) {
+                        Hint(if (isRestaurant) "Check the estimate, then Save." else "Check the numbers from the label, then Save.")
+                    }
+                }
                 OutlinedTextField(kcal, { kcal = it }, Modifier.fillMaxWidth(), label = { Text("Calories") }, suffix = { Text("kcal") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(Triple("Protein", p) { v: String -> p = v }, Triple("Carbs", c) { v: String -> c = v }, Triple("Fat", f) { v: String -> f = v }).forEach { (label, value, set) ->
@@ -357,7 +470,9 @@ fun MealDialog(
                 val meal = initial.copy(
                     name = name, kcal = kcal.toIntOrNull() ?: 0, proteinG = p.toIntOrNull() ?: 0,
                     carbsG = c.toIntOrNull() ?: 0, fatG = f.toIntOrNull() ?: 0, note = note.ifBlank { null },
-                    kind = MealEntity.KIND_SIMPLE,
+                    kind = if (isRestaurant) MealEntity.KIND_RESTAURANT else MealEntity.KIND_SIMPLE,
+                    restaurantName = if (isRestaurant) restaurantName.ifBlank { null } else null,
+                    nutritionSource = if (isRestaurant) nutritionSource else null,
                     fiberG = if (detailed) opt(fiber) else initial.fiberG,
                     solubleFiberG = if (detailed) opt(solFiber) else initial.solubleFiberG,
                     insolubleFiberG = if (detailed) opt(insolFiber) else initial.insolubleFiberG,

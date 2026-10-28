@@ -5,6 +5,7 @@ import app.diurna.AppContainer
 import app.diurna.ai.EstimateFailed
 import app.diurna.ai.EstimateRetryable
 import app.diurna.ai.NoApiKey
+import app.diurna.ai.FoodEstimate
 import app.diurna.ai.NutritionLabelReading
 import app.diurna.data.LibraryRepository.Result
 import app.diurna.data.MealEntity
@@ -25,6 +26,11 @@ import kotlinx.coroutines.flow.map
 sealed interface LabelPhotoResult {
     data class Read(val reading: NutritionLabelReading) : LabelPhotoResult
     data class Problem(val message: String) : LabelPhotoResult
+}
+
+sealed interface RestaurantEstimateResult {
+    data class Ok(val estimate: FoodEstimate) : RestaurantEstimateResult
+    data class Problem(val message: String) : RestaurantEstimateResult
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -99,6 +105,42 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoIm
             LabelPhotoResult.Problem("Couldn't reach the AI. Check your connection and try again.")
         } catch (e: Exception) {
             LabelPhotoResult.Problem("Couldn't read the label (${e.javaClass.simpleName})")
+        }
+    }
+
+    /**
+     * Estimates a restaurant dish from a menu or nutrition-page photo via the selected food
+     * estimator. Temp photo deleted after. Caller fills the form; Save confirms.
+     */
+    suspend fun estimateRestaurantPhoto(
+        name: String,
+        dishHint: String,
+        restaurantHint: String,
+        detailed: Boolean,
+    ): RestaurantEstimateResult = withContext(Dispatchers.IO) {
+        val bytes = c.foodPhotos.read(name)
+        c.foodPhotos.delete(name)
+        if (bytes == null) return@withContext RestaurantEstimateResult.Problem("Couldn't read that photo")
+        val text = buildString {
+            append("Restaurant meal")
+            if (restaurantHint.isNotBlank()) append(" from ").append(restaurantHint.trim())
+            if (dishHint.isNotBlank()) append(": ").append(dishHint.trim())
+            else append(" (see photo of menu or nutrition page)")
+        }
+        try {
+            RestaurantEstimateResult.Ok(c.foodEstimator.estimate(text, bytes, detailed = detailed, ingredients = false))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: NoApiKey) {
+            RestaurantEstimateResult.Problem(e.message ?: "Add an API key in Setup to estimate from photos")
+        } catch (e: EstimateFailed) {
+            RestaurantEstimateResult.Problem(e.message ?: "Couldn't estimate from that photo")
+        } catch (e: EstimateRetryable) {
+            RestaurantEstimateResult.Problem("Couldn't reach the AI. Check your connection and try again.")
+        } catch (e: IOException) {
+            RestaurantEstimateResult.Problem("Couldn't reach the AI. Check your connection and try again.")
+        } catch (e: Exception) {
+            RestaurantEstimateResult.Problem("Couldn't estimate (${e.javaClass.simpleName})")
         }
     }
 }

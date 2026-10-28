@@ -42,7 +42,7 @@ data class ExerciseEntity(
 /**
  * A saved food with exact numbers. [KIND_SIMPLE] is a flat P/C/F entry; [KIND_RECIPE] has
  * [RecipeIngredientEntity] rows whose snapshots sum into per-serving totals; [KIND_RESTAURANT]
- * is reserved for PR 3 (nutrition_source). Only simple and recipe appear in UI for now.
+ * is a dish from a restaurant with optional [nutritionSource] (published vs estimate).
  */
 @Entity(tableName = "meal", indices = [Index(value = ["name"], unique = true), Index(value = ["barcode"], unique = true), Index(value = ["kind"])])
 data class MealEntity(
@@ -62,6 +62,13 @@ data class MealEntity(
     @ColumnInfo(name = "servings_yield") val servingsYield: Double? = null,
     /** Optional cooked batch weight in grams; enables logging by grams eaten. */
     @ColumnInfo(name = "cooked_weight_g") val cookedWeightG: Double? = null,
+    /** Restaurant name for [KIND_RESTAURANT] dishes (e.g. "Chipotle"). */
+    @ColumnInfo(name = "restaurant_name") val restaurantName: String? = null,
+    /**
+     * For restaurant meals: [SOURCE_PUBLISHED] (chain nutrition page / labeled) or
+     * [SOURCE_ESTIMATE] (menu photo / AI guess). Null for non-restaurant.
+     */
+    @ColumnInfo(name = "nutrition_source") val nutritionSource: String? = null,
     // Detailed nutrition (nullable = unknown). Opt-in in Setup; null is distinct from 0.
     @ColumnInfo(name = "fiber_g") val fiberG: Int? = null,
     @ColumnInfo(name = "soluble_fiber_g") val solubleFiberG: Int? = null,
@@ -109,6 +116,8 @@ data class MealEntity(
         const val KIND_SIMPLE = "simple"
         const val KIND_RECIPE = "recipe"
         const val KIND_RESTAURANT = "restaurant"
+        const val SOURCE_PUBLISHED = "published"
+        const val SOURCE_ESTIMATE = "estimate"
     }
 }
 
