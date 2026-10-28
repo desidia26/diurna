@@ -29,6 +29,10 @@ object Changelog {
             5, "2026-10-28", "Carbs and fats on Metrics",
             "With Detailed nutrition on, Metrics adds a Carbs card (fiber, starch, sugars), a Fats card (saturated, mono, poly, trans) and a summary of omegas and cholesterol. Days without that detail show as gaps, and each card says how many days it covers.",
         ),
+        Entry(
+            6, "2026-10-28", "Amino acids",
+            "With Detailed nutrition on and a free USDA FoodData Central key added in Setup, food entries get essential amino acids, worked out from USDA's data for each ingredient rather than guessed by the AI. When only some ingredients match, the entry says which ones were missed.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
