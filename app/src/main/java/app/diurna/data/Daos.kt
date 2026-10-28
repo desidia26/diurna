@@ -326,6 +326,22 @@ interface FoodDao {
     )
     fun observeKcal(from: String, to: String): Flow<List<DateKcal>>
 
+    /** Each day's protein/carbs/fat grams from estimated entries. Missing macros count as 0. */
+    @Query(
+        """SELECT date,
+              SUM(COALESCE(protein_g, 0)) AS proteinG,
+              SUM(COALESCE(carbs_g, 0)) AS carbsG,
+              SUM(COALESCE(fat_g, 0)) AS fatG
+           FROM food_entry
+           WHERE date BETWEEN :from AND :to AND estimated_at IS NOT NULL
+           GROUP BY date"""
+    )
+    fun observeMacros(from: String, to: String): Flow<List<DateMacros>>
+
+    /** How many food entries have ever been estimated; Metrics hides the macros card while 0. */
+    @Query("SELECT COUNT(*) FROM food_entry WHERE estimated_at IS NOT NULL")
+    fun observeEstimatedFoodCount(): Flow<Int>
+
     @Insert
     suspend fun insert(entry: FoodEntryEntity): Long
 

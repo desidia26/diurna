@@ -264,6 +264,9 @@ data class DateName(
 
 data class DateKcal(val date: String, val kcal: Int)
 
+/** Per-day macro grams from estimated food entries (null grams summed as 0 in the query). */
+data class DateMacros(val date: String, val proteinG: Int, val carbsG: Int, val fatG: Int)
+
 data class CatalogExercise(
     val id: Long, val name: String, val hidden: Boolean, val logged: Int, val inRoutine: Int,
     val kind: String = ExerciseEntity.KIND_STRENGTH,

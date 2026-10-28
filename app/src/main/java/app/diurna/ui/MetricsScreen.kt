@@ -68,6 +68,7 @@ fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues, onClose: 
         item { RangeChips(m.range, vm::setRange) }
         item { WeightCardView(m.weight, m.showDots, m.from, m.to) }
         item { MoodCardView(m.mood, m.from, m.to) }
+        m.macros?.let { card -> item { MacroCardView(card, m.from, m.to, vm::setMacroChartMode) } }
         item { TrainingCardView(m.training) }
         // Only once cardio has been logged; lifting-only Metrics is unchanged.
         m.cardio?.let { c -> item { CardioCardView(c, onOpen = vm::openCardio) } }
@@ -143,6 +144,76 @@ private fun MoodCardView(card: MoodCard, from: LocalDate, to: LocalDate) {
             Legend("Mood", c.primary)
             Legend("Energy (dashed)", c.onSurface)
             Hint(if (card.smoothed) "7-day averages" else "Gaps are unrated days")
+        }
+    }
+}
+
+@Composable
+private fun MacroCardView(
+    card: MacroCard,
+    from: LocalDate,
+    to: LocalDate,
+    onMode: (Metrics.MacroChartMode) -> Unit,
+) {
+    val chip = if (card.daysWithFood == 1) "1 day" else "${card.daysWithFood} days"
+    SectionCard("Macros", chip = { Hint(chip) }) {
+        if (card.daysWithFood == 0) {
+            Hint("No food logged in this range.")
+            return@SectionCard
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Metrics.MacroChartMode.entries.forEach { mode ->
+                    FilterChip(mode == card.mode, { onMode(mode) }, label = { Text(mode.label) })
+                }
+            }
+        }
+        val avg = card.average
+        val avgTotal = card.averageKcal
+        if (avg != null && avgTotal != null) {
+            val unit = if (card.daily) "kcal · daily avg" else "kcal · weekly avg"
+            Headline(
+                value = "%,d".format(avgTotal.roundToInt()),
+                unit = unit,
+                delta = null,
+                deltaColor = null,
+            )
+            val pct = Metrics.macroPercent(avg)
+            if (pct != null) {
+                Hint(
+                    "P ${pct.proteinKcal.roundToInt()}% · C ${pct.carbsKcal.roundToInt()}% · F ${pct.fatKcal.roundToInt()}%",
+                )
+            }
+        }
+        val c = MaterialTheme.colorScheme
+        val fatColor = LocalStatusColors.current.warn
+        val colors = listOf(c.primary, c.secondary, fatColor)
+        val shown = if (card.mode == Metrics.MacroChartMode.PERCENT) card.percentStacks else card.stacks
+        val bars = shown.map { s ->
+            s?.let { StackBar(listOf(it.proteinKcal, it.carbsKcal, it.fatKcal)) }
+        }
+        val isPct = card.mode == Metrics.MacroChartMode.PERCENT
+        val ref = card.targetKcal?.toDouble()?.takeIf { !isPct }
+        val period = if (card.daily) "daily" else "weekly"
+        val modeWord = if (isPct) "percent" else "calories"
+        StackedBarChart(
+            bars = bars,
+            colors = colors,
+            description = "Calories by macro, $period $modeWord from ${from.short()} to ${to.short()}" +
+                (ref?.let { ", target %,d kcal".format(it.roundToInt()) } ?: ""),
+            yMax = if (isPct) 100.0 else null,
+            reference = ref,
+            label = if (isPct) { v -> "${v.roundToInt()}%" } else { v ->
+                if (v >= 1000) "%.1fk".format(v / 1000) else "${v.roundToInt()}"
+            },
+        )
+        ChartDates(from.short(), to.short())
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Legend("Protein", c.primary)
+            Legend("Carbs", c.secondary)
+            Legend("Fat", fatColor)
+            if (ref != null) Hint("Dashed = target")
+            else if (!card.daily) Hint("Week averages")
         }
     }
 }
