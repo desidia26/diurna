@@ -6,10 +6,14 @@ import app.diurna.ai.AiProvider
 import app.diurna.ai.AiProviderStore
 import app.diurna.ai.ApiKeyStore
 import app.diurna.ai.ClaudeCardioReader
+import app.diurna.ai.ClaudeLabelReader
 import app.diurna.ai.ClaudeFoodEstimator
 import app.diurna.ai.CardioReader
+import app.diurna.ai.LabelReader
 import app.diurna.ai.GrokCardioReader
+import app.diurna.ai.GrokLabelReader
 import app.diurna.ai.SelectedCardioReader
+import app.diurna.ai.SelectedLabelReader
 import app.diurna.ai.GrokFoodEstimator
 import app.diurna.ai.SelectedFoodEstimator
 import app.diurna.ai.EstimateRunner
@@ -77,6 +81,11 @@ class AppContainer(context: Context) {
     val cardioReader: CardioReader = SelectedCardioReader({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeCardioReader({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
         AiProvider.XAI to GrokCardioReader({ apiKeys.getValue(AiProvider.XAI).get() }),
+    ))
+    /** Reads Nutrition Facts labels into the meal editor; person confirms before saving. */
+    val labelReader: LabelReader = SelectedLabelReader({ aiProvider.get() }, mapOf(
+        AiProvider.ANTHROPIC to ClaudeLabelReader({ apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
+        AiProvider.XAI to GrokLabelReader({ apiKeys.getValue(AiProvider.XAI).get() }),
     ))
     val selectedDate = SelectedDate()
     val nutrition = NutritionRepository(db, settings.profile)

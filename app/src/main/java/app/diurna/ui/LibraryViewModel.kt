@@ -1,20 +1,34 @@
 package app.diurna.ui
 
+import android.net.Uri
 import app.diurna.AppContainer
+import app.diurna.ai.EstimateFailed
+import app.diurna.ai.EstimateRetryable
+import app.diurna.ai.NoApiKey
+import app.diurna.ai.NutritionLabelReading
 import app.diurna.data.LibraryRepository.Result
 import app.diurna.data.MealEntity
 import app.diurna.data.RecipeIngredientEntity
 import app.diurna.data.fdc.FdcNutritionProfile
 import app.diurna.data.fdc.FdcSearchHit
 import app.diurna.domain.Cardio
+import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 
+sealed interface LabelPhotoResult {
+    data class Read(val reading: NutritionLabelReading) : LabelPhotoResult
+    data class Problem(val message: String) : LabelPhotoResult
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
-class LibraryViewModel(private val c: AppContainer) : ScreenViewModel() {
+class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoImportHost {
     /** null = All, [MealEntity.KIND_SIMPLE] = Meals, [MealEntity.KIND_RECIPE] = Recipes. */
     private val mealFilter = MutableStateFlow<String?>(null)
     val mealKindFilter = mealFilter
@@ -58,4 +72,33 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel() {
     fun deleteMeal(id: Long) = io { c.library.deleteMeal(id) }
     fun setExerciseHidden(id: Long, hidden: Boolean) = io { c.library.setExerciseHidden(id, hidden) }
     fun deleteExercise(id: Long) = io { c.library.deleteExercise(id) }
+
+    override val captureFile get() = c.photoImporter.captureFile
+    override suspend fun importPhoto(uri: Uri) = c.photoImporter.import(uri)
+    override suspend fun importCapture() = c.photoImporter.importCapture()
+    fun discardPhoto(name: String?) = io {
+        withContext(Dispatchers.IO) { c.foodPhotos.delete(name) }
+    }
+
+    suspend fun readLabelPhoto(name: String): LabelPhotoResult = withContext(Dispatchers.IO) {
+        val bytes = c.foodPhotos.read(name)
+        // Always drop the temp file: the label photo is only for filling fields, not stored on the meal.
+        c.foodPhotos.delete(name)
+        if (bytes == null) return@withContext LabelPhotoResult.Problem("Couldn't read that photo")
+        try {
+            LabelPhotoResult.Read(c.labelReader.read(bytes))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: NoApiKey) {
+            LabelPhotoResult.Problem(e.message ?: "Add an API key in Setup to read labels")
+        } catch (e: EstimateFailed) {
+            LabelPhotoResult.Problem(e.message ?: "Couldn't read the label")
+        } catch (e: EstimateRetryable) {
+            LabelPhotoResult.Problem("Couldn't reach the AI. Check your connection and try again.")
+        } catch (e: IOException) {
+            LabelPhotoResult.Problem("Couldn't reach the AI. Check your connection and try again.")
+        } catch (e: Exception) {
+            LabelPhotoResult.Problem("Couldn't read the label (${e.javaClass.simpleName})")
+        }
+    }
 }

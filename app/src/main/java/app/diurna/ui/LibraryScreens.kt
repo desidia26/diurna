@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,6 +22,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Switch
 import app.diurna.domain.Cardio
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -159,7 +162,7 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
         }
     }
     editing?.let { m ->
-        MealDialog(if (m.id == 0L) "Add meal" else "Edit meal", m, detailed = detailed, onDismiss = { editing = null }, onSave = vm::saveMeal)
+        MealDialog(if (m.id == 0L) "Add meal" else "Edit meal", m, detailed = detailed, labelHost = vm, onDismiss = { editing = null }, onSave = vm::saveMeal)
     }
     editingRecipe?.let { m ->
         RecipeDialog(
@@ -184,13 +187,17 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
     }
 }
 
-/** Add/edit a saved meal. Also used by "Save as meal" on a food entry. Stays open to show problems.
- *  [detailed] shows the opt-in fiber / sugars / lipid fields (Setup → Detailed nutrition). */
+/**
+ * Add/edit a saved meal. Also used by "Save as meal" on a food entry. Stays open to show problems.
+ * [detailed] shows fiber / sugars / lipid fields (Setup → Detailed nutrition).
+ * [labelHost] enables "Fill from label photo": AI fills the fields; Save is the confirm step.
+ */
 @Composable
 fun MealDialog(
     title: String,
     initial: MealEntity,
     detailed: Boolean = false,
+    labelHost: PhotoImportHost? = null,
     onDismiss: () -> Unit,
     onSave: suspend (MealEntity) -> Result,
 ) {
@@ -230,6 +237,47 @@ fun MealDialog(
     var cys by remember { mutableStateOf(startOpt(initial.cysMg)) }
     var tyr by remember { mutableStateOf(startOpt(initial.tyrMg)) }
     var problem by remember { mutableStateOf<String?>(null) }
+    var fromLabel by remember { mutableStateOf(false) }
+    var readingLabel by remember { mutableStateOf(false) }
+    var labelMenu by remember { mutableStateOf(false) }
+    val labelReader: (suspend (String) -> LabelPhotoResult)? = when (labelHost) {
+        is LibraryViewModel -> labelHost::readLabelPhoto
+        is DayViewModel -> labelHost::readLabelPhoto
+        else -> null
+    }
+    val attacher = if (labelHost != null && labelReader != null) {
+        rememberPhotoAttacher(labelHost) { photoName ->
+            readingLabel = true
+            scope.launch {
+                when (val r = labelReader(photoName)) {
+                    is LabelPhotoResult.Read -> {
+                        val lab = r.reading
+                        if (name.isBlank() && lab.productName.isNotBlank()) name = lab.productName
+                        if (lab.serving.isNotBlank()) note = lab.serving
+                        kcal = lab.kcal.toString()
+                        p = lab.proteinG.toString()
+                        c = lab.carbsG.toString()
+                        f = lab.fatG.toString()
+                        if (detailed) {
+                            fiber = lab.fiberG?.toString() ?: ""
+                            sugars = lab.sugarsG?.toString() ?: ""
+                            addedSugars = lab.addedSugarsG?.toString() ?: ""
+                            sat = lab.satFatG?.toString() ?: ""
+                            trans = lab.transFatG?.toString() ?: ""
+                            chol = lab.cholesterolMg?.toString() ?: ""
+                        }
+                        fromLabel = true
+                        problem = null
+                    }
+                    is LabelPhotoResult.Problem -> {
+                        fromLabel = true
+                        problem = r.message
+                    }
+                }
+                readingLabel = false
+            }
+        }
+    } else null
     val valid = name.isNotBlank() && kcal.toIntOrNull() != null
     fun opt(s: String): Int? = s.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
     AlertDialog(

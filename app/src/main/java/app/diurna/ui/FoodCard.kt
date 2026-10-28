@@ -161,7 +161,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         )
     }
     scannedDraft?.let { draft ->
-        MealDialog("Add from barcode", draft, detailed = detailed, onDismiss = { scannedDraft = null }) { meal ->
+        MealDialog("Add from barcode", draft, detailed = detailed, labelHost = vm, onDismiss = { scannedDraft = null }) { meal ->
             vm.saveMeal(meal).also { r ->
                 if (r == LibraryRepository.Result.Ok) servingsOf = vm.mealByBarcode(draft.barcode!!)
             }
@@ -193,7 +193,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
             pheMg = f.pheMg, thrMg = f.thrMg, trpMg = f.trpMg, valMg = f.valMg, cysMg = f.cysMg, tyrMg = f.tyrMg,
             ingredientsJson = f.ingredientsJson, aminoMatched = f.aminoMatched, aminoTotal = f.aminoTotal,
         )
-        MealDialog("Save as meal", seed, detailed = detailed, onDismiss = { savingAsMeal = null }) { vm.saveEntryAsMeal(f.id, it) }
+        MealDialog("Save as meal", seed, detailed = detailed, labelHost = vm, onDismiss = { savingAsMeal = null }) { vm.saveEntryAsMeal(f.id, it) }
     }
     editing?.let { f ->
         FoodEditDialog(f, vm, onDismiss = { editing = null }) { newText, newTime, newPhoto ->
