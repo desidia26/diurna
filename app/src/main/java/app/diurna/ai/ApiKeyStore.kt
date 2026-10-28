@@ -19,9 +19,13 @@ import javax.crypto.spec.GCMParameterSpec
  * (res/xml/backup_rules.xml). If the Keystore key is ever lost, the stored key reads as absent
  * and just needs re-entering.
  */
-class ApiKeyStore(context: Context, provider: AiProvider = AiProvider.ANTHROPIC) {
-    // Anthropic keeps its original pref name so a key saved before providers existed still reads.
-    private val blobKey = if (provider == AiProvider.ANTHROPIC) KEY_BLOB else "${provider.id}_api_key"
+class ApiKeyStore(context: Context, private val blobKey: String) {
+    constructor(context: Context, provider: AiProvider = AiProvider.ANTHROPIC) : this(
+        context,
+        // Anthropic keeps its original pref name so a key saved before providers existed still reads.
+        if (provider == AiProvider.ANTHROPIC) KEY_BLOB else "${provider.id}_api_key",
+    )
+
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val _lastFour = MutableStateFlow(get()?.takeLast(4))
 
@@ -66,10 +70,13 @@ class ApiKeyStore(context: Context, provider: AiProvider = AiProvider.ANTHROPIC)
         return gen.generateKey()
     }
 
-    private companion object {
+    companion object {
         const val PREFS = "secure"
         const val KEY_BLOB = "anthropic_api_key"
+        /** Encrypted prefs key for the USDA FoodData Central API key (never logged / never backed up). */
+        const val USDA_BLOB = "usda_fdc_api_key"
         const val ALIAS = "daybook_api_key"
+        fun usda(context: Context) = ApiKeyStore(context, USDA_BLOB)
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val TRANSFORM = "AES/GCM/NoPadding"
         const val IV_BYTES = 12

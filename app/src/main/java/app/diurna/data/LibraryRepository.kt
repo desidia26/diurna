@@ -119,6 +119,9 @@ class LibraryRepository(
                 o(entry.sugarsG), o(entry.addedSugarsG), o(entry.starchG),
                 o(entry.satFatG), o(entry.monoFatG), o(entry.polyFatG), o(entry.transFatG),
                 o(entry.cholesterolMg), o(entry.omega3G), o(entry.omega6G), o(entry.omega9G),
+                o(entry.hisMg), o(entry.ileMg), o(entry.leuMg), o(entry.lysMg), o(entry.metMg),
+                o(entry.pheMg), o(entry.thrMg), o(entry.trpMg), o(entry.valMg), o(entry.cysMg), o(entry.tyrMg),
+                entry.ingredientsJson,
                 System.currentTimeMillis(),
             )
         }
@@ -148,6 +151,9 @@ class LibraryRepository(
             o(meal.sugarsG), o(meal.addedSugarsG), o(meal.starchG),
             o(meal.satFatG), o(meal.monoFatG), o(meal.polyFatG), o(meal.transFatG),
             o(meal.cholesterolMg), o(meal.omega3G), o(meal.omega6G), o(meal.omega9G),
+            o(meal.hisMg), o(meal.ileMg), o(meal.leuMg), o(meal.lysMg), o(meal.metMg),
+            o(meal.pheMg), o(meal.thrMg), o(meal.trpMg), o(meal.valMg), o(meal.cysMg), o(meal.tyrMg),
+            meal.ingredientsJson,
             System.currentTimeMillis(),
         )
     }

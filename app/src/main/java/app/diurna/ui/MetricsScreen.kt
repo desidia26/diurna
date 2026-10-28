@@ -2,7 +2,11 @@ package app.diurna.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -30,7 +35,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,6 +82,7 @@ fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues) {
         m.carbs?.let { card -> item { CarbDetailCardView(card, m.from, m.to) } }
         m.fats?.let { card -> item { FatDetailCardView(card, m.from, m.to) } }
         m.lipids?.let { card -> item { LipidDetailCardView(card) } }
+        m.aminos?.let { card -> item { AminoDetailCardView(card) } }
         item { TrainingCardView(m.training) }
         // Only once cardio has been logged; lifting-only Metrics is unchanged.
         m.cardio?.let { c -> item { CardioCardView(c, onOpen = vm::openCardio) } }
@@ -376,6 +385,56 @@ private fun LipidDetailCardView(card: LipidDetailCard) {
         }
     }
 }
+
+@Composable
+private fun AminoDetailCardView(card: AminoDetailCard) {
+    val s = card.summary
+    val avg = s.average
+    SectionCard("Amino acids", chip = { Hint(s.coverageLabel) }) {
+        val rows = listOf(
+            "His" to avg.hisMg, "Ile" to avg.ileMg, "Leu" to avg.leuMg, "Lys" to avg.lysMg,
+            "Met" to avg.metMg, "Phe" to avg.pheMg, "Thr" to avg.thrMg, "Trp" to avg.trpMg,
+            "Val" to avg.valMg, "Cys" to avg.cysMg, "Tyr" to avg.tyrMg,
+        ).filter { it.second != null }
+        if (rows.isEmpty()) {
+            Hint("No amino data in this range.")
+            return@SectionCard
+        }
+        val maxMg = rows.maxOf { it.second!!.toDouble() }.coerceAtLeast(1.0)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            rows.forEach { (label, mg) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, Modifier.width(36.dp), fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.labelMedium)
+                    val frac = (mg!!.toDouble() / maxMg).toFloat().coerceIn(0f, 1f)
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(frac)
+                                .background(MaterialTheme.colorScheme.primary),
+                        )
+                    }
+                    Text(
+                        "%,d mg".format(mg),
+                        Modifier.width(72.dp),
+                        textAlign = TextAlign.End,
+                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+            Hint("Average daily mg over days with amino data. No targets yet.")
+        }
+    }
+}
+
 
 private fun carbAvgLine(avg: Metrics.CarbStack, splitFiber: Boolean, showAdded: Boolean): String {
     val parts = buildList {

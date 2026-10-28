@@ -235,7 +235,11 @@ private fun FoodRow(
         f.fiberG != null || f.sugarsG != null || f.addedSugarsG != null || f.starchG != null ||
             f.satFatG != null || f.monoFatG != null || f.polyFatG != null || f.transFatG != null ||
             f.cholesterolMg != null || f.omega3G != null || f.omega6G != null || f.omega9G != null ||
-            f.solubleFiberG != null || f.insolubleFiberG != null
+            f.solubleFiberG != null || f.insolubleFiberG != null ||
+            f.hisMg != null || f.ileMg != null || f.leuMg != null || f.lysMg != null ||
+            f.metMg != null || f.pheMg != null || f.thrMg != null || f.trpMg != null ||
+            f.valMg != null || f.cysMg != null || f.tyrMg != null ||
+            !f.ingredientsJson.isNullOrBlank()
         )
     Row(
         Modifier.fillMaxWidth().clickable(onClickLabel = "Edit", onClick = onEdit),
@@ -306,12 +310,32 @@ private fun NutritionDetail(f: FoodEntryEntity) {
         line("Ω6", f.omega6G),
         line("Ω9", f.omega9G),
     ).joinToString(" · ")
+    val aminos = listOfNotNull(
+        line("His", f.hisMg, "mg"), line("Ile", f.ileMg, "mg"), line("Leu", f.leuMg, "mg"),
+        line("Lys", f.lysMg, "mg"), line("Met", f.metMg, "mg"), line("Phe", f.pheMg, "mg"),
+        line("Thr", f.thrMg, "mg"), line("Trp", f.trpMg, "mg"), line("Val", f.valMg, "mg"),
+        line("Cys", f.cysMg, "mg"), line("Tyr", f.tyrMg, "mg"),
+    ).joinToString(" · ")
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (carbs.isNotEmpty()) {
             Text("Carbs  $carbs", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
         }
         if (fats.isNotEmpty()) {
             Text("Fats   $fats", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
+        if (aminos.isNotEmpty()) {
+            Text("Aminos $aminos", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
+        f.ingredientsJson?.let { raw ->
+            val list = app.diurna.data.fdc.IngredientsJson.decode(raw)
+            if (!list.isNullOrEmpty()) {
+                Hint(
+                    "Ingredients: " + list.joinToString("; ") { ing ->
+                        val match = ing.matchedDescription?.let { " → $it" } ?: ""
+                        "${ing.name} (${"%.0f".format(ing.grams)} g)$match"
+                    }
+                )
+            }
         }
     }
 }

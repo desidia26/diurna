@@ -1,5 +1,6 @@
 package app.diurna.ai
 
+import app.diurna.domain.FoodIngredient
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 
@@ -29,6 +30,12 @@ data class FoodEstimate(
     val omega3G: Int? = null,
     val omega6G: Int? = null,
     val omega9G: Int? = null,
+    /**
+     * Generic ingredients (name + grams) for USDA FDC amino lookup.
+     * Only requested when Detailed nutrition is on AND an FDC API key is set.
+     * The model must not guess amino milligrams — only ingredient names/weights.
+     */
+    val ingredients: List<FoodIngredient>? = null,
 )
 
 /** Behind an interface so tests use a fake and never call the real API. */
@@ -42,8 +49,14 @@ interface FoodEstimator {
     /**
      * [photo]: an optional JPEG of the food (already downscaled), sent along with the text.
      * [detailed]: when true, the prompt and schema also ask for fiber / sugars / lipid breakdown.
+     * [ingredients]: when true (implies detailed + FDC key), also ask for an ingredient list for FDC amino lookup.
      */
-    suspend fun estimate(text: String, photo: ByteArray? = null, detailed: Boolean = false): FoodEstimate
+    suspend fun estimate(
+        text: String,
+        photo: ByteArray? = null,
+        detailed: Boolean = false,
+        ingredients: Boolean = false,
+    ): FoodEstimate
 }
 
 /** Retrying won't help: bad key, refused request, unparseable reply. Shown on the entry. */
@@ -70,10 +83,23 @@ Detailed breakdown (optional integers; use null when you truly cannot estimate a
 - sat_fat_g, mono_fat_g, poly_fat_g, trans_fat_g (each ≤ fat; sum ≈ fat when all known).
 - cholesterol_mg; omega3_g, omega6_g, omega9_g (each ≤ fat)."""
 
+    private const val INGREDIENTS = """
+
+Ingredients for USDA FoodData Central lookup (do NOT invent amino-acid milligrams — the app looks those up):
+- ingredients: an array of {name, grams} covering the edible parts of this entry.
+- name: generic, FDC-friendly wording (e.g. "lentils, cooked", "tofu, firm", "chicken breast, grilled"). Prefer Foundation/SR Legacy style names; avoid brand names.
+- grams: estimated edible weight of that ingredient in this entry.
+- Omit the array (or use []) only when the entry is not food."""
+
     /** Basic system prompt (Detailed nutrition off). Kept as [SYSTEM] for existing call sites/tests. */
     val SYSTEM: String = BASE
 
-    fun system(detailed: Boolean): String = if (detailed) BASE + DETAIL else BASE
+    fun system(detailed: Boolean, ingredients: Boolean = false): String {
+        var s = BASE
+        if (detailed) s += DETAIL
+        if (ingredients) s += INGREDIENTS
+        return s
+    }
 
     private val BASE_PROPS: Map<String, Any> = mapOf(
         "kcal_low" to mapOf("type" to "integer"),
@@ -106,10 +132,29 @@ Detailed breakdown (optional integers; use null when you truly cannot estimate a
     /** JSON schema for structured output: guarantees the reply parses into [FoodEstimate]. */
     val SCHEMA: Map<String, Any> = schema(detailed = false)
 
-    fun schema(detailed: Boolean): Map<String, Any> {
-        val props = if (detailed) BASE_PROPS + DETAIL_PROPS else BASE_PROPS
+    private val INGREDIENT_PROPS: Map<String, Any> = mapOf(
+        "ingredients" to mapOf(
+            "type" to "array",
+            "items" to mapOf(
+                "type" to "object",
+                "properties" to mapOf(
+                    "name" to mapOf("type" to "string"),
+                    "grams" to mapOf("type" to "number"),
+                ),
+                "required" to listOf("name", "grams"),
+                "additionalProperties" to false,
+            ),
+        ),
+    )
+
+    fun schema(detailed: Boolean, ingredients: Boolean = false): Map<String, Any> {
+        var props: Map<String, Any> = BASE_PROPS
+        if (detailed) props = props + DETAIL_PROPS
+        if (ingredients) props = props + INGREDIENT_PROPS
         // Strict schemas (xAI) require every property listed in required; nullables cover "unknown".
-        val required = if (detailed) BASE_REQUIRED + DETAIL_PROPS.keys.toList() else BASE_REQUIRED
+        var required = BASE_REQUIRED.toList()
+        if (detailed) required = required + DETAIL_PROPS.keys.toList()
+        if (ingredients) required = required + listOf("ingredients")
         return mapOf(
             "type" to "object",
             "properties" to props,
@@ -167,6 +212,7 @@ Detailed breakdown (optional integers; use null when you truly cannot estimate a
             omega6G = optG("omega6_g"),
             omega9G = optG("omega9_g"),
         )
+        val ingredients = parseIngredients(node.get("ingredients"))
         return FoodEstimate(
             kcalLow = minOf(a, b), kcalHigh = maxOf(a, b),
             proteinG = protein, carbsG = carbs, fatG = fat,
@@ -185,7 +231,27 @@ Detailed breakdown (optional integers; use null when you truly cannot estimate a
             omega3G = detail.omega3G,
             omega6G = detail.omega6G,
             omega9G = detail.omega9G,
+            ingredients = ingredients,
         )
+    }
+
+    fun parseIngredients(node: JsonNode?): List<FoodIngredient>? {
+        if (node == null || node.isNull || !node.isArray) return null
+        val out = ArrayList<FoodIngredient>()
+        for (item in node) {
+            if (!item.isObject) continue
+            val name = item.get("name")?.asText()?.trim().orEmpty()
+            if (name.isEmpty()) continue
+            val gramsNode = item.get("grams") ?: continue
+            val grams = when {
+                gramsNode.isNumber -> gramsNode.asDouble()
+                gramsNode.isTextual -> gramsNode.asText().toDoubleOrNull() ?: continue
+                else -> continue
+            }.coerceAtLeast(0.0)
+            if (grams <= 0.0) continue
+            out += FoodIngredient(name = name, grams = grams)
+        }
+        return out.ifEmpty { null }
     }
 
     /** Consistency clamps for optional sub-macros. Pure; unit-tested. */

@@ -174,7 +174,7 @@ class SelectedFoodEstimatorTest {
     private class Named(override val model: String, override val gaveUpMessage: String) : FoodEstimator {
         var photo: ByteArray? = null
         var detailed: Boolean? = null
-        override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean): FoodEstimate {
+        override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate {
             this.photo = photo
             this.detailed = detailed
             return FoodEstimate(1, 2, 0, 0, 0, text)

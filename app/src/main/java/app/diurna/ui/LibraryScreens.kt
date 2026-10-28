@@ -159,6 +159,17 @@ fun MealDialog(
     var o3 by remember { mutableStateOf(startOpt(initial.omega3G)) }
     var o6 by remember { mutableStateOf(startOpt(initial.omega6G)) }
     var o9 by remember { mutableStateOf(startOpt(initial.omega9G)) }
+    var his by remember { mutableStateOf(startOpt(initial.hisMg)) }
+    var ile by remember { mutableStateOf(startOpt(initial.ileMg)) }
+    var leu by remember { mutableStateOf(startOpt(initial.leuMg)) }
+    var lys by remember { mutableStateOf(startOpt(initial.lysMg)) }
+    var met by remember { mutableStateOf(startOpt(initial.metMg)) }
+    var phe by remember { mutableStateOf(startOpt(initial.pheMg)) }
+    var thr by remember { mutableStateOf(startOpt(initial.thrMg)) }
+    var trp by remember { mutableStateOf(startOpt(initial.trpMg)) }
+    var valA by remember { mutableStateOf(startOpt(initial.valMg)) }
+    var cys by remember { mutableStateOf(startOpt(initial.cysMg)) }
+    var tyr by remember { mutableStateOf(startOpt(initial.tyrMg)) }
     var problem by remember { mutableStateOf<String?>(null) }
     val valid = name.isNotBlank() && kcal.toIntOrNull() != null
     fun opt(s: String): Int? = s.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
@@ -218,6 +229,18 @@ fun MealDialog(
                             OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                         }
                     }
+                    Hint("Amino acids (mg). Optional; blank = unknown.")
+                    listOf(
+                        listOf(Triple("His", his) { v: String -> his = v }, Triple("Ile", ile) { v: String -> ile = v }, Triple("Leu", leu) { v: String -> leu = v }, Triple("Lys", lys) { v: String -> lys = v }),
+                        listOf(Triple("Met", met) { v: String -> met = v }, Triple("Phe", phe) { v: String -> phe = v }, Triple("Thr", thr) { v: String -> thr = v }, Triple("Trp", trp) { v: String -> trp = v }),
+                        listOf(Triple("Val", valA) { v: String -> valA = v }, Triple("Cys", cys) { v: String -> cys = v }, Triple("Tyr", tyr) { v: String -> tyr = v }),
+                    ).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEach { (label, value, set) ->
+                                OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("mg") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                            }
+                        }
+                    }
                 }
                 problem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
             }
@@ -241,6 +264,17 @@ fun MealDialog(
                     omega3G = if (detailed) opt(o3) else initial.omega3G,
                     omega6G = if (detailed) opt(o6) else initial.omega6G,
                     omega9G = if (detailed) opt(o9) else initial.omega9G,
+                    hisMg = if (detailed) opt(his) else initial.hisMg,
+                    ileMg = if (detailed) opt(ile) else initial.ileMg,
+                    leuMg = if (detailed) opt(leu) else initial.leuMg,
+                    lysMg = if (detailed) opt(lys) else initial.lysMg,
+                    metMg = if (detailed) opt(met) else initial.metMg,
+                    pheMg = if (detailed) opt(phe) else initial.pheMg,
+                    thrMg = if (detailed) opt(thr) else initial.thrMg,
+                    trpMg = if (detailed) opt(trp) else initial.trpMg,
+                    valMg = if (detailed) opt(valA) else initial.valMg,
+                    cysMg = if (detailed) opt(cys) else initial.cysMg,
+                    tyrMg = if (detailed) opt(tyr) else initial.tyrMg,
                 )
                 scope.launch {
                     when (val r = onSave(meal)) {

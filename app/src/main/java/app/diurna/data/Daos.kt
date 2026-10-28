@@ -345,7 +345,18 @@ interface FoodDao {
               SUM(cholesterol_mg) AS cholesterolMg,
               SUM(omega3_g) AS omega3G,
               SUM(omega6_g) AS omega6G,
-              SUM(omega9_g) AS omega9G
+              SUM(omega9_g) AS omega9G,
+              SUM(his_mg) AS hisMg,
+              SUM(ile_mg) AS ileMg,
+              SUM(leu_mg) AS leuMg,
+              SUM(lys_mg) AS lysMg,
+              SUM(met_mg) AS metMg,
+              SUM(phe_mg) AS pheMg,
+              SUM(thr_mg) AS thrMg,
+              SUM(trp_mg) AS trpMg,
+              SUM(val_mg) AS valMg,
+              SUM(cys_mg) AS cysMg,
+              SUM(tyr_mg) AS tyrMg
            FROM food_entry
            WHERE date BETWEEN :from AND :to AND estimated_at IS NOT NULL
            GROUP BY date"""
@@ -376,6 +387,9 @@ interface FoodDao {
            sugars_g = :sugars, added_sugars_g = :addedSugars, starch_g = :starch,
            sat_fat_g = :satFat, mono_fat_g = :monoFat, poly_fat_g = :polyFat, trans_fat_g = :transFat,
            cholesterol_mg = :cholesterol, omega3_g = :omega3, omega6_g = :omega6, omega9_g = :omega9,
+           his_mg = :his, ile_mg = :ile, leu_mg = :leu, lys_mg = :lys, met_mg = :met,
+           phe_mg = :phe, thr_mg = :thr, trp_mg = :trp, val_mg = :valMg, cys_mg = :cys, tyr_mg = :tyr,
+           ingredients_json = :ingredientsJson,
            estimate_note = :note, estimate_model = :model, estimated_at = :at, estimate_error = NULL
            WHERE id = :id AND text = :forText AND photo IS :forPhoto"""
     )
@@ -385,6 +399,9 @@ interface FoodDao {
         sugars: Int?, addedSugars: Int?, starch: Int?,
         satFat: Int?, monoFat: Int?, polyFat: Int?, transFat: Int?,
         cholesterol: Int?, omega3: Int?, omega6: Int?, omega9: Int?,
+        his: Int?, ile: Int?, leu: Int?, lys: Int?, met: Int?,
+        phe: Int?, thr: Int?, trp: Int?, valMg: Int?, cys: Int?, tyr: Int?,
+        ingredientsJson: String?,
         note: String, model: String, at: Long,
     )
 
@@ -402,6 +419,9 @@ interface FoodDao {
            sugars_g = NULL, added_sugars_g = NULL, starch_g = NULL,
            sat_fat_g = NULL, mono_fat_g = NULL, poly_fat_g = NULL, trans_fat_g = NULL,
            cholesterol_mg = NULL, omega3_g = NULL, omega6_g = NULL, omega9_g = NULL,
+           his_mg = NULL, ile_mg = NULL, leu_mg = NULL, lys_mg = NULL, met_mg = NULL,
+           phe_mg = NULL, thr_mg = NULL, trp_mg = NULL, val_mg = NULL, cys_mg = NULL, tyr_mg = NULL,
+           ingredients_json = NULL,
            estimate_note = NULL, estimate_model = NULL, estimated_at = NULL,
            estimate_error = NULL, source = 'ai', meal_id = NULL, servings = 1.0 WHERE id = :id"""
     )
@@ -422,6 +442,9 @@ interface FoodDao {
            sugars_g = :sugars, added_sugars_g = :addedSugars, starch_g = :starch,
            sat_fat_g = :satFat, mono_fat_g = :monoFat, poly_fat_g = :polyFat, trans_fat_g = :transFat,
            cholesterol_mg = :cholesterol, omega3_g = :omega3, omega6_g = :omega6, omega9_g = :omega9,
+           his_mg = :his, ile_mg = :ile, leu_mg = :leu, lys_mg = :lys, met_mg = :met,
+           phe_mg = :phe, thr_mg = :thr, trp_mg = :trp, val_mg = :valMg, cys_mg = :cys, tyr_mg = :tyr,
+           ingredients_json = :ingredientsJson,
            estimate_note = NULL, estimate_model = NULL, estimated_at = :at, estimate_error = NULL WHERE id = :id"""
     )
     suspend fun setMeal(
@@ -430,6 +453,9 @@ interface FoodDao {
         sugars: Int?, addedSugars: Int?, starch: Int?,
         satFat: Int?, monoFat: Int?, polyFat: Int?, transFat: Int?,
         cholesterol: Int?, omega3: Int?, omega6: Int?, omega9: Int?,
+        his: Int?, ile: Int?, leu: Int?, lys: Int?, met: Int?,
+        phe: Int?, thr: Int?, trp: Int?, valMg: Int?, cys: Int?, tyr: Int?,
+        ingredientsJson: String?,
         at: Long,
     )
 
@@ -438,4 +464,13 @@ interface FoodDao {
 
     @Query("UPDATE food_entry SET estimate_error = NULL WHERE estimate_error IS NOT NULL")
     suspend fun clearEstimateErrors()
+}
+
+@Dao
+interface FdcFoodCacheDao {
+    @Query("SELECT * FROM fdc_food_cache WHERE query_key = :key")
+    suspend fun get(key: String): FdcFoodCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(row: FdcFoodCacheEntity)
 }

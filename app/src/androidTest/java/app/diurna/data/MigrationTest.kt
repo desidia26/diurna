@@ -245,4 +245,37 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v10ToV11AddsAminoColumnsAndFdcCache() {
+        helper.createDatabase(dbName + "-11", 10).use { db ->
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, fiber_g) VALUES (1, 'Tofu bowl', 400, 28, 30, 18, 6)"
+            )
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-28', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, protein_g, carbs_g, fat_g, fiber_g, source, servings) " +
+                    "VALUES (1, '2026-10-28', '12:00', 'Tofu bowl', 1, 400, 400, 28, 30, 18, 6, 'meal', 1.0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-11", 11, true)
+        db.query("SELECT his_mg, lys_mg, ingredients_json, fiber_g FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertTrue("his starts null", it.isNull(0))
+            assertTrue("lys starts null", it.isNull(1))
+            assertTrue("ingredients starts null", it.isNull(2))
+            assertEquals(6, it.getInt(3))
+        }
+        db.query("SELECT his_mg, trp_mg, ingredients_json, protein_g FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertTrue(it.isNull(0))
+            assertTrue(it.isNull(1))
+            assertTrue(it.isNull(2))
+            assertEquals(28, it.getInt(3))
+        }
+        db.query("SELECT COUNT(*) FROM fdc_food_cache").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(0, it.getInt(0))
+        }
+        db.close()
+    }
 }
