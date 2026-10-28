@@ -23,9 +23,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ExerciseSetEntity::class,
         FoodEntryEntity::class,
         MealEntity::class,
+        RecipeIngredientEntity::class,
         FdcFoodCacheEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -46,6 +47,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AutoMigration(from = 9, to = 10),
         // v11: amino acids (mg) on meals/food entries + FDC ingredient cache.
         AutoMigration(from = 10, to = 11),
+        // v12: meal.kind + servings_yield + cooked_weight_g; recipe_ingredient snapshots.
+        AutoMigration(from = 11, to = 12),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -55,6 +58,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workoutDao(): WorkoutDao
     abstract fun foodDao(): FoodDao
     abstract fun mealDao(): MealDao
+    abstract fun recipeIngredientDao(): RecipeIngredientDao
     abstract fun fdcFoodCacheDao(): FdcFoodCacheDao
 
     /** v2: food estimates, body weight, finalized-day snapshots. The v1 estimate columns were never written. */

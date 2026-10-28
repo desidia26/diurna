@@ -84,4 +84,45 @@ class FdcClientTest {
         assertEquals("cys", FdcClient.NUTRIENT_TO_FIELD[1216])
         assertEquals("his", FdcClient.NUTRIENT_TO_FIELD[1221])
     }
+
+    @Test fun parseNutritionProfileMapsMacrosAndAminos() {
+        val food = JSONObject(
+            """
+            {
+              "fdcId": 175254,
+              "description": "Lentils, cooked",
+              "foodNutrients": [
+                {"nutrient": {"id": 1008}, "amount": 116},
+                {"nutrient": {"id": 1003}, "amount": 9.02},
+                {"nutrient": {"id": 1005}, "amount": 20.1},
+                {"nutrient": {"id": 1004}, "amount": 0.38},
+                {"nutrient": {"id": 1079}, "amount": 7.9},
+                {"nutrient": {"id": 1214}, "amount": 0.624}
+              ]
+            }
+            """.trimIndent(),
+        )
+        val p = FdcClient.parseNutritionProfile(food)!!
+        assertEquals(175254, p.fdcId)
+        assertEquals(116, p.kcalPer100)
+        assertEquals(9, p.per100.proteinG)
+        assertEquals(20, p.per100.carbsG)
+        assertEquals(8, p.per100.fiberG)
+        assertEquals(624, p.per100.aminos.lysMg)
+        val half = p.forGrams(50.0)
+        assertEquals(5, half.proteinG) // 9*0.5 rounds to 5
+        assertEquals(312, half.aminos.lysMg)
+    }
+
+    @Test fun searchReturnsMultipleHits() = runBlocking {
+        val transport = FdcTransport { path, _ ->
+            if (path.startsWith("/fdc/v1/foods/search"))
+                """{"foods":[{"fdcId":1,"description":"A"},{"fdcId":2,"description":"B"}]}"""
+            else null
+        }
+        val hits = FdcClient({ "k" }, transport).search("x", pageSize = 10)
+        assertEquals(2, hits.size)
+        assertEquals(1, hits[0].fdcId)
+        assertTrue(FdcClient({ null }, transport).search("x").isEmpty())
+    }
 }
