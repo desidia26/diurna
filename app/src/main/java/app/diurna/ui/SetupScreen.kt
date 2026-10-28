@@ -81,6 +81,7 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
     val secret by vm.porchSecret.collectAsStateWithLifecycle()
     val confirmed by vm.porchConfirmed.collectAsStateWithLifecycle()
     val armed by vm.armed.collectAsStateWithLifecycle()
+    val detailed by library.detailedNutrition.collectAsStateWithLifecycle()
     var scanning by remember { mutableStateOf(false) }
     var confirmReplace by remember { mutableStateOf(false) }
 
@@ -123,6 +124,7 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
         item { TargetsCard(vm) }
         item { FoodEstimatesCard(vm) }
         item { UsdaFdcCard(vm) }
+        if (detailed) item { DetailBackfillCard(vm) }
         item { LockScreenCard(vm) }
         item {
             SectionCard("Permissions") {

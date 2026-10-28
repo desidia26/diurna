@@ -33,6 +33,10 @@ object Changelog {
             6, "2026-10-28", "Amino acids",
             "With Detailed nutrition on and a free USDA FoodData Central key added in Setup, food entries get essential amino acids, worked out from USDA's data for each ingredient rather than guessed by the AI. When only some ingredients match, the entry says which ones were missed.",
         ),
+        Entry(
+            7, "2026-10-28", "Fill in detail for past entries",
+            "With Detailed nutrition on, Setup can fill in fiber, sugars, fats and amino acids for food you logged before, over the last 30 days or everything. It shows how many AI calls that takes before you start, and never changes the calories or macros already recorded.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }

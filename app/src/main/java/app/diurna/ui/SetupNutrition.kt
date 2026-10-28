@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,6 +38,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.diurna.ai.AiProvider
+import app.diurna.ai.DetailBackfill
+import app.diurna.ai.BackfillWorkState
 import app.diurna.ai.GrokFoodEstimator
 import app.diurna.data.SettingsStore.ProfileDraft
 import app.diurna.domain.Activity
@@ -296,5 +300,93 @@ fun BackupsCard(vm: SetupViewModel) {
             fontFamily = FontFamily.Monospace,
         )
         OutlinedButton(onClick = vm::backupNow) { Text("Back up now") }
+    }
+}
+
+
+@Composable
+fun DetailBackfillCard(vm: SetupViewModel) {
+    val state by vm.backfillState.collectAsStateWithLifecycle()
+    val preview by vm.backfillPreview.collectAsStateWithLifecycle()
+    val provider by vm.aiProvider.collectAsStateWithLifecycle()
+    val usdaFour by vm.usdaKeyLastFour.collectAsStateWithLifecycle()
+    var rangeAll by remember { mutableStateOf(vm.backfillRange.from == null) }
+    LaunchedEffect(Unit) { vm.refreshBackfillPreview() }
+
+    SectionCard("Fill in detail for past entries") {
+        Hint(
+            "Re-runs detailed nutrition for entries that are missing sub-macros or amino acids. " +
+                "Existing calories and protein/carbs/fat stay exactly as they are — only null detail fields are filled. " +
+                "Uses your ${provider.company} API tokens and resends each entry's stored text and photos to that provider. " +
+                (if (usdaFour != null) "Ingredient names also go to USDA for amino lookup."
+                 else "Ingredient names go to USDA only when a USDA key is set.")
+        )
+        Label("Date range")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = !rangeAll,
+                onClick = {
+                    rangeAll = false
+                    vm.setBackfillRange(DetailBackfill.Range.lastDays(java.time.LocalDate.now()))
+                },
+                label = { Text("Last 30 days") },
+            )
+            FilterChip(
+                selected = rangeAll,
+                onClick = {
+                    rangeAll = true
+                    vm.setBackfillRange(DetailBackfill.Range.all())
+                },
+                label = { Text("All") },
+            )
+        }
+        val p = preview
+        if (p != null) {
+            Text(
+                if (p.entryCount == 0) "Nothing to fill in this range."
+                else "%d entries · ~%d AI call%s · %d from saved meals".format(
+                    p.entryCount, p.aiCalls, if (p.aiCalls == 1) "" else "s", p.mealCount,
+                ),
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        when (val s = state) {
+            is BackfillWorkState.Running -> {
+                Text(
+                    if (s.total <= 0) "Starting…" else "Progress: ${s.done} of ${s.total}",
+                    fontFamily = FontFamily.Monospace,
+                )
+                OutlinedButton(onClick = vm::cancelBackfill) { Text("Cancel") }
+            }
+            is BackfillWorkState.Finished -> {
+                val sum = s.summary
+                Text(
+                    "Done: ${sum.filled} filled · ${sum.partialAminos} partial aminos · " +
+                        "${sum.needsMealDetail} need meal detail · ${sum.failed} failed",
+                    fontFamily = FontFamily.Monospace,
+                )
+                Button(
+                    onClick = {
+                        vm.refreshBackfillPreview()
+                        vm.startBackfill()
+                    },
+                    enabled = (preview?.entryCount ?: 0) > 0,
+                ) { Text("Run again") }
+            }
+            is BackfillWorkState.Cancelled -> {
+                Text("Canceled.", fontFamily = FontFamily.Monospace)
+                Button(
+                    onClick = vm::startBackfill,
+                    enabled = (preview?.entryCount ?: 0) > 0,
+                ) { Text("Fill in detail") }
+            }
+            else -> {
+                Button(
+                    onClick = vm::startBackfill,
+                    enabled = (preview?.entryCount ?: 0) > 0,
+                ) { Text("Fill in detail") }
+            }
+        }
     }
 }

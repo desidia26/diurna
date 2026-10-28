@@ -467,6 +467,50 @@ interface FoodDao {
 
     @Query("UPDATE food_entry SET estimate_error = NULL WHERE estimate_error IS NOT NULL")
     suspend fun clearEstimateErrors()
+
+    /**
+     * Past estimated entries in an optional inclusive date range (ISO keys).
+     * Pending / never-estimated rows are excluded — the normal estimator owns those.
+     */
+    @Query(
+        """SELECT * FROM food_entry
+           WHERE estimated_at IS NOT NULL
+             AND (:from IS NULL OR date >= :from)
+             AND (:to IS NULL OR date <= :to)
+           ORDER BY date, id"""
+    )
+    suspend fun estimatedInRange(from: String?, to: String?): List<FoodEntryEntity>
+
+    /**
+     * Writes detail fields only. Guards on stored macros + estimate identity so a concurrent
+     * edit / re-estimate makes this a no-op — kcal/P/C/F/note/model/estimatedAt never change here.
+     */
+    @Query(
+        """UPDATE food_entry SET
+           fiber_g = :fiber, soluble_fiber_g = :solubleFiber, insoluble_fiber_g = :insolubleFiber,
+           sugars_g = :sugars, added_sugars_g = :addedSugars, starch_g = :starch,
+           sat_fat_g = :satFat, mono_fat_g = :monoFat, poly_fat_g = :polyFat, trans_fat_g = :transFat,
+           cholesterol_mg = :cholesterol, omega3_g = :omega3, omega6_g = :omega6, omega9_g = :omega9,
+           his_mg = :his, ile_mg = :ile, leu_mg = :leu, lys_mg = :lys, met_mg = :met,
+           phe_mg = :phe, thr_mg = :thr, trp_mg = :trp, val_mg = :valMg, cys_mg = :cys, tyr_mg = :tyr,
+           ingredients_json = :ingredientsJson, amino_matched = :aminoMatched, amino_total = :aminoTotal
+           WHERE id = :id
+             AND kcal_low IS :kcalLow AND kcal_high IS :kcalHigh
+             AND protein_g IS :protein AND carbs_g IS :carbs AND fat_g IS :fat
+             AND estimate_note IS :note AND estimate_model IS :model AND estimated_at IS :estimatedAt"""
+    )
+    suspend fun fillDetailNulls(
+        id: Long,
+        fiber: Int?, solubleFiber: Int?, insolubleFiber: Int?,
+        sugars: Int?, addedSugars: Int?, starch: Int?,
+        satFat: Int?, monoFat: Int?, polyFat: Int?, transFat: Int?,
+        cholesterol: Int?, omega3: Int?, omega6: Int?, omega9: Int?,
+        his: Int?, ile: Int?, leu: Int?, lys: Int?, met: Int?,
+        phe: Int?, thr: Int?, trp: Int?, valMg: Int?, cys: Int?, tyr: Int?,
+        ingredientsJson: String?, aminoMatched: Int?, aminoTotal: Int?,
+        kcalLow: Int?, kcalHigh: Int?, protein: Int?, carbs: Int?, fat: Int?,
+        note: String?, model: String?, estimatedAt: Long?,
+    )
 }
 
 @Dao
