@@ -21,6 +21,10 @@ object Changelog {
             3, "2026-10-28", "Detailed nutrition",
             "Turn on Detailed nutrition in Setup → Library to add fiber, sugars, starch and the kinds of fat to saved meals. Barcode scans fill them in when the label has them, and Day's food entries can expand to show them. Once fiber is logged, the Macros card shows it separately.",
         ),
+        Entry(
+            4, "2026-10-28", "Use any OpenAI-compatible AI",
+            "Setup → Food estimates has a new OpenAI-compatible option, for services like OpenRouter or a model you run yourself: enter its address, the model name and a key if it needs one. Claude and Grok can also point at a different address. Nothing changes unless you set one up.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
