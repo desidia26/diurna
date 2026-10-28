@@ -72,9 +72,23 @@ class PhotoAttacher internal constructor(
     val error: String? get() = errorState()
 }
 
+/**
+ * Camera / picker import shared by Day and Library. [captureFile] is the TakePicture destination;
+ * [importPhoto] / [importCapture] store a downscaled JPEG and return its name.
+ */
+interface PhotoImportHost {
+    val captureFile: java.io.File
+    suspend fun importPhoto(uri: Uri): String?
+    suspend fun importCapture(): String?
+}
+
 /** [onAttached] gets the stored photo's name once it's imported. */
 @Composable
-fun rememberPhotoAttacher(vm: DayViewModel, onAttached: (String) -> Unit): PhotoAttacher {
+fun rememberPhotoAttacher(vm: DayViewModel, onAttached: (String) -> Unit): PhotoAttacher =
+    rememberPhotoAttacher(vm as PhotoImportHost, onAttached)
+
+@Composable
+fun rememberPhotoAttacher(host: PhotoImportHost, onAttached: (String) -> Unit): PhotoAttacher {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
@@ -89,10 +103,10 @@ fun rememberPhotoAttacher(vm: DayViewModel, onAttached: (String) -> Unit): Photo
         }
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
-        if (saved) import { vm.importCapture() }
+        if (saved) import { host.importCapture() }
     }
     fun launchCamera() {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.photos", vm.captureFile)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.photos", host.captureFile)
         try {
             camera.launch(uri)
         } catch (e: ActivityNotFoundException) {
@@ -103,9 +117,9 @@ fun rememberPhotoAttacher(vm: DayViewModel, onAttached: (String) -> Unit): Photo
         if (granted) launchCamera() else error = "Camera permission is needed to take a photo"
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
-        if (uri != null) import { vm.importPhoto(uri) }
+        if (uri != null) import { host.importPhoto(uri) }
     }
-    return remember {
+    return remember(host) {
         PhotoAttacher(
             takePhoto = {
                 error = null
