@@ -3,6 +3,8 @@ package app.diurna.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -69,6 +71,9 @@ fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues) {
         item { WeightCardView(m.weight, m.showDots, m.from, m.to) }
         item { MoodCardView(m.mood, m.from, m.to) }
         m.macros?.let { card -> item { MacroCardView(card, m.from, m.to, vm::setMacroChartMode) } }
+        m.carbs?.let { card -> item { CarbDetailCardView(card, m.from, m.to) } }
+        m.fats?.let { card -> item { FatDetailCardView(card, m.from, m.to) } }
+        m.lipids?.let { card -> item { LipidDetailCardView(card) } }
         item { TrainingCardView(m.training) }
         // Only once cardio has been logged; lifting-only Metrics is unchanged.
         m.cardio?.let { c -> item { CardioCardView(c, onOpen = vm::openCardio) } }
@@ -225,6 +230,168 @@ private fun MacroCardView(
             else if (!card.daily) Hint("Week averages")
         }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CarbDetailCardView(card: CarbDetailCard, from: LocalDate, to: LocalDate) {
+    SectionCard("Carbs", chip = { Hint(card.coverage.label) }) {
+        val avg = card.average
+        if (avg != null) {
+            val unit = if (card.daily) "g · daily avg" else "g · weekly avg"
+            Headline(
+                value = "%.0f".format(avg.carbsG),
+                unit = unit,
+                delta = null,
+                deltaColor = null,
+            )
+            Hint(carbAvgLine(avg, card.splitFiber, card.showAdded))
+        }
+        val c = MaterialTheme.colorScheme
+        val warn = LocalStatusColors.current.warn
+        val fiberColor = c.tertiary
+        val starchColor = c.primary
+        val sugarsColor = c.secondary
+        val addedColor = warn
+        val otherColor = c.outline
+        // Bottom→top: fiber (split or total), starch, sugars, added (optional), other.
+        val colors = buildList {
+            if (card.splitFiber) { add(fiberColor.copy(alpha = 0.65f)); add(fiberColor) }
+            else add(fiberColor)
+            add(starchColor); add(sugarsColor)
+            if (card.showAdded) add(addedColor)
+            add(otherColor)
+        }
+        val bars = card.stacks.map { s ->
+            s?.let {
+                val segs = buildList {
+                    if (card.splitFiber) {
+                        if (it.splitFiber) {
+                            add(it.solubleFiberG); add(it.insolubleFiberG)
+                        } else {
+                            // Unsplit day in a split-fiber range: keep fiber visible as the solid fiber color.
+                            add(0.0)
+                            add(it.fiberUnspecifiedG + it.solubleFiberG + it.insolubleFiberG)
+                        }
+                    } else {
+                        add(it.fiberUnspecifiedG + it.solubleFiberG + it.insolubleFiberG)
+                    }
+                    add(it.starchG); add(it.sugarsG)
+                    if (card.showAdded) add(it.addedSugarsG)
+                    add(it.otherG)
+                }
+                StackBar(segs)
+            }
+        }
+        val period = if (card.daily) "daily" else "weekly"
+        StackedBarChart(
+            bars = bars,
+            colors = colors,
+            description = "Carbohydrate breakdown in grams, $period from ${from.short()} to ${to.short()}. ${card.coverage.label}.",
+            label = { v -> if (v >= 100) "${v.roundToInt()}" else "%.0f".format(v) },
+        )
+        ChartDates(from.short(), to.short())
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (card.splitFiber) {
+                Legend("Soluble fiber", fiberColor.copy(alpha = 0.65f))
+                Legend("Insoluble fiber", fiberColor)
+            } else {
+                Legend("Fiber", fiberColor)
+            }
+            Legend("Starch", starchColor)
+            Legend("Sugars", sugarsColor)
+            if (card.showAdded) Legend("Added", addedColor)
+            Legend("Other", otherColor)
+            if (!card.daily) Hint("Week averages")
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FatDetailCardView(card: FatDetailCard, from: LocalDate, to: LocalDate) {
+    SectionCard("Fats", chip = { Hint(card.coverage.label) }) {
+        val avg = card.average
+        if (avg != null) {
+            val unit = if (card.daily) "g · daily avg" else "g · weekly avg"
+            Headline(
+                value = "%.0f".format(avg.fatG),
+                unit = unit,
+                delta = null,
+                deltaColor = null,
+            )
+            Hint(
+                "Sat %.0f · Mono %.0f · Poly %.0f · Trans %.0f · Other %.0f g".format(
+                    avg.satG, avg.monoG, avg.polyG, avg.transG, avg.otherG,
+                ),
+            )
+        }
+        val c = MaterialTheme.colorScheme
+        val warn = LocalStatusColors.current.warn
+        val colors = listOf(warn, c.primary, c.secondary, c.error, c.outline)
+        val bars = card.stacks.map { s ->
+            s?.let { StackBar(listOf(it.satG, it.monoG, it.polyG, it.transG, it.otherG)) }
+        }
+        val period = if (card.daily) "daily" else "weekly"
+        StackedBarChart(
+            bars = bars,
+            colors = colors,
+            description = "Fat breakdown in grams, $period from ${from.short()} to ${to.short()}. ${card.coverage.label}.",
+            label = { v -> if (v >= 100) "${v.roundToInt()}" else "%.0f".format(v) },
+        )
+        ChartDates(from.short(), to.short())
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Legend("Saturated", warn)
+            Legend("Mono", c.primary)
+            Legend("Poly", c.secondary)
+            Legend("Trans", c.error)
+            Legend("Other", c.outline)
+            if (!card.daily) Hint("Week averages")
+        }
+    }
+}
+
+@Composable
+private fun LipidDetailCardView(card: LipidDetailCard) {
+    val s = card.summary
+    val chip = when {
+        s.daysWithOmega > 0 && s.daysWithChol > 0 ->
+            "Detail on ${maxOf(s.daysWithOmega, s.daysWithChol)} of ${s.daysWithFood} days"
+        s.daysWithOmega > 0 -> "Omega on ${s.daysWithOmega} of ${s.daysWithFood} days"
+        else -> "Cholesterol on ${s.daysWithChol} of ${s.daysWithFood} days"
+    }
+    SectionCard("Omegas & cholesterol", chip = { Hint(chip) }) {
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            s.omega6to3?.let { Stat("%.1f".format(it), "ω6:3 avg") }
+            s.avgCholesterolMg?.let { Stat("%.0f".format(it), "mg chol · avg") }
+            s.avgOmega3G?.let { Stat("%.1f".format(it), "g ω3 · avg") }
+            s.avgOmega6G?.let { Stat("%.1f".format(it), "g ω6 · avg") }
+            s.avgOmega9G?.let { Stat("%.1f".format(it), "g ω9 · avg") }
+        }
+    }
+}
+
+private fun carbAvgLine(avg: Metrics.CarbStack, splitFiber: Boolean, showAdded: Boolean): String {
+    val parts = buildList {
+        if (splitFiber) {
+            add("Sol %.0f".format(avg.solubleFiberG))
+            add("Insol %.0f".format(avg.insolubleFiberG))
+        } else {
+            val fiber = avg.fiberUnspecifiedG + avg.solubleFiberG + avg.insolubleFiberG
+            if (fiber > 0) add("Fiber %.0f".format(fiber))
+        }
+        if (avg.starchG > 0) add("Starch %.0f".format(avg.starchG))
+        if (avg.sugarsG > 0 || showAdded) add("Sugars %.0f".format(avg.sugarsG + avg.addedSugarsG))
+        if (showAdded && avg.addedSugarsG > 0) add("Added %.0f".format(avg.addedSugarsG))
+        if (avg.otherG > 0) add("Other %.0f".format(avg.otherG))
+    }
+    return parts.joinToString(" · ") + " g"
 }
 
 @Composable

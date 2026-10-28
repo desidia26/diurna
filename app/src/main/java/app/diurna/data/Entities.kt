@@ -293,7 +293,7 @@ data class DateName(
 
 data class DateKcal(val date: String, val kcal: Int)
 
-/** Per-day macro grams from estimated food entries (P/C/F nulls summed as 0; fiber nulls stay null via SUM). */
+/** Per-day macro grams from estimated food entries (P/C/F nulls summed as 0; optional sub-macros stay null via SUM). */
 data class DateMacros(
     val date: String,
     val proteinG: Int,
@@ -302,6 +302,17 @@ data class DateMacros(
     val fiberG: Int? = null,
     val solubleFiberG: Int? = null,
     val insolubleFiberG: Int? = null,
+    val sugarsG: Int? = null,
+    val addedSugarsG: Int? = null,
+    val starchG: Int? = null,
+    val satFatG: Int? = null,
+    val monoFatG: Int? = null,
+    val polyFatG: Int? = null,
+    val transFatG: Int? = null,
+    val cholesterolMg: Int? = null,
+    val omega3G: Int? = null,
+    val omega6G: Int? = null,
+    val omega9G: Int? = null,
 )
 
 data class CatalogExercise(
