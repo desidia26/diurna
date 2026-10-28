@@ -41,6 +41,10 @@ object Changelog {
             8, "2026-10-28", "Recipes",
             "Saved meals can now be recipes: add ingredients by hand, from a barcode, from another saved item or from USDA's database, and the totals per serving add up as you go. Log a recipe by servings, or by grams if you weighed the cooked dish. Library can show meals and recipes separately.",
         ),
+        Entry(
+            9, "2026-10-28", "Fill a meal from its label",
+            "When adding or editing a saved meal, Fill from label photo reads a Nutrition Facts panel with the AI you picked and fills in the name, serving and numbers for you to check. Nothing is saved until you tap Save, and the photo is deleted after reading.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
