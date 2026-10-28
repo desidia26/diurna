@@ -13,6 +13,10 @@ object Changelog {
             1, "2026-10-27", "View metrics from Day",
             "An exercise's ⋮ menu on Day now has View metrics, which opens its chart and records. Back returns to Day.",
         ),
+        Entry(
+            2, "2026-10-28", "Macros on Metrics",
+            "A Macros card shows your calories over time, split into protein, carbs and fat. Switch between calories and percentages; in calories, a dashed line marks your target.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
