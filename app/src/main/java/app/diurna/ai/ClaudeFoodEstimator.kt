@@ -29,8 +29,12 @@ class ClaudeFoodEstimator(
     override val model: String = "claude-haiku-5-5",
 ) : FoodEstimator {
 
-    override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate = withContext(Dispatchers.IO) {
-        EstimatePrompt.parse(ClaudeCall.json(apiKey, model, ClaudeRequest.params(model, text, photo)))
+    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean): FoodEstimate = withContext(Dispatchers.IO) {
+        EstimatePrompt.parse(ClaudeCall.json(apiKey, model, ClaudeRequest.params(
+            model, text, photo,
+            system = EstimatePrompt.system(detailed),
+            schema = EstimatePrompt.schema(detailed),
+        )))
     }
 }
 

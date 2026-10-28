@@ -73,7 +73,7 @@ class GrokFoodEstimatorTest {
 
     @Test fun estimatorSendsThePhotoItIsGiven() = runTest {
         val t = FakeTransport { XaiReply(200, reply(estimateJson)) }
-        GrokFoodEstimator({ "xai-key" }, "grok-test", t).estimate("salad", byteArrayOf(9, 9))
+        GrokFoodEstimator({ "xai-key" }, "grok-test", t).estimate("salad", byteArrayOf(9, 9), detailed = false)
         val user = JSONObject(t.sent.single().second).getJSONArray("messages").getJSONObject(1)
         assertEquals("image_url", user.getJSONArray("content").getJSONObject(0).getString("type"))
     }
@@ -99,7 +99,7 @@ class GrokFoodEstimatorTest {
 
     @Test fun estimateSendsKeyAndParsesReply() = runTest {
         val t = FakeTransport { XaiReply(200, reply(estimateJson)) }
-        val e = GrokFoodEstimator({ "xai-secret" }, transport = t).estimate("rice")
+        val e = GrokFoodEstimator({ "xai-secret" }, transport = t).estimate("rice", photo = null, detailed = false)
         assertEquals(FoodEstimate(650, 950, 45, 80, 28, "1 cup rice"), e)
         assertEquals("xai-secret", t.sent.single().first)
         assertEquals(GrokFoodEstimator.DEFAULT_MODEL, JSONObject(t.sent.single().second).getString("model"))
@@ -108,14 +108,14 @@ class GrokFoodEstimatorTest {
     @Test fun modelIsConfigurable() = runTest {
         val t = FakeTransport { XaiReply(200, reply(estimateJson)) }
         val g = GrokFoodEstimator({ "k" }, model = "grok-4.3", transport = t)
-        g.estimate("rice")
+        g.estimate("rice", photo = null, detailed = false)
         assertEquals("grok-4.3", g.model)
         assertEquals("grok-4.3", JSONObject(t.sent.single().second).getString("model"))
     }
 
     @Test fun noKeyAsksForAnXaiKeyWithoutCalling() = runTest {
         val t = FakeTransport { error("should not be called") }
-        val e = runCatching { GrokFoodEstimator({ null }, transport = t).estimate("rice") }.exceptionOrNull()
+        val e = runCatching { GrokFoodEstimator({ null }, transport = t).estimate("rice", photo = null, detailed = false) }.exceptionOrNull()
         assertTrue(e is NoApiKey)
         assertEquals(GrokFoodEstimator.NO_KEY, e!!.message)
         assertTrue(t.sent.isEmpty())
@@ -124,17 +124,17 @@ class GrokFoodEstimatorTest {
     @Test fun networkErrorsAndRateLimitsRetry() = runTest {
         val t = FakeTransport { throw IOException("offline") }
         val g = GrokFoodEstimator({ "k" }, transport = t)
-        assertTrue(runCatching { g.estimate("x") }.exceptionOrNull() is EstimateRetryable)
+        assertTrue(runCatching { g.estimate("x", photo = null, detailed = false) }.exceptionOrNull() is EstimateRetryable)
         t.answer = { XaiReply(429, """{"error":"rate limited"}""") }
-        assertTrue(runCatching { g.estimate("x") }.exceptionOrNull() is EstimateRetryable)
+        assertTrue(runCatching { g.estimate("x", photo = null, detailed = false) }.exceptionOrNull() is EstimateRetryable)
         t.answer = { XaiReply(503, "") }
-        assertTrue(runCatching { g.estimate("x") }.exceptionOrNull() is EstimateRetryable)
+        assertTrue(runCatching { g.estimate("x", photo = null, detailed = false) }.exceptionOrNull() is EstimateRetryable)
     }
 
     @Test fun badKeyFailsWithFriendlyTextNotRawApiText() = runTest {
         val raw = """{"code":"Client specified an invalid argument","error":"Incorrect API key provided: xa***cd."}"""
         val t = FakeTransport { XaiReply(400, raw) }
-        val e = runCatching { GrokFoodEstimator({ "k" }, transport = t).estimate("x") }.exceptionOrNull()
+        val e = runCatching { GrokFoodEstimator({ "k" }, transport = t).estimate("x", photo = null, detailed = false) }.exceptionOrNull()
         assertTrue(e is EstimateFailed)
         assertEquals(GrokErrors.BAD_KEY, e!!.message)
     }
@@ -173,8 +173,10 @@ class GrokErrorsTest {
 class SelectedFoodEstimatorTest {
     private class Named(override val model: String, override val gaveUpMessage: String) : FoodEstimator {
         var photo: ByteArray? = null
-        override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
+        var detailed: Boolean? = null
+        override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean): FoodEstimate {
             this.photo = photo
+            this.detailed = detailed
             return FoodEstimate(1, 2, 0, 0, 0, text)
         }
     }
@@ -185,10 +187,10 @@ class SelectedFoodEstimatorTest {
             AiProvider.ANTHROPIC to Named("claude-m", "claude gave up"),
             AiProvider.XAI to Named("grok-m", "grok gave up"),
         ))
-        assertEquals("claude-m", s.estimate("a").model)
+        assertEquals("claude-m", s.estimate("a", photo = null, detailed = false).model)
         assertEquals("claude gave up", s.gaveUpMessage)
         selected = AiProvider.XAI
-        assertEquals("grok-m", s.estimate("a").model)
+        assertEquals("grok-m", s.estimate("a", photo = null, detailed = false).model)
         assertEquals("grok-m", s.model)
         assertEquals("grok gave up", s.gaveUpMessage)
     }
@@ -197,7 +199,7 @@ class SelectedFoodEstimatorTest {
         val grok = Named("grok-m", "")
         val s = SelectedFoodEstimator({ AiProvider.XAI }, mapOf(AiProvider.ANTHROPIC to Named("c", ""), AiProvider.XAI to grok))
         val jpeg = byteArrayOf(1, 2, 3)
-        s.estimate("a", jpeg)
+        s.estimate("a", jpeg, detailed = false)
         assertArrayEquals(jpeg, grok.photo)
     }
 

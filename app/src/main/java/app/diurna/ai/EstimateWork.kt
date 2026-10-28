@@ -28,6 +28,8 @@ class EstimateRunner(
     private val db: AppDatabase,
     private val estimator: FoodEstimator,
     private val photo: (String) -> ByteArray? = { null },
+    /** When true, the model is asked for fiber / sugars / lipid breakdown (Detailed nutrition). */
+    private val detailed: suspend () -> Boolean = { false },
 ) {
     enum class Outcome { DONE, RETRY }
 
@@ -40,12 +42,17 @@ class EstimateRunner(
             for (entry in batch) {
                 try {
                     val jpeg = entry.photo?.let { name -> withContext(Dispatchers.IO) { photo(name) } }
-                    val e = estimator.estimate(entry.text, jpeg)
+                    val wantDetail = detailed()
+                    val e = estimator.estimate(entry.text, jpeg, detailed = wantDetail)
                     // Guarded on the text and photo: if either was edited mid-call this no-ops, and
                     // the edit has already queued the entry for the next pass.
                     food.setEstimate(
-                        entry.id, entry.text, entry.photo, e.kcalLow, e.kcalHigh, e.proteinG, e.carbsG, e.fatG, e.note,
-                        e.model ?: estimator.model, System.currentTimeMillis(),
+                        entry.id, entry.text, entry.photo, e.kcalLow, e.kcalHigh, e.proteinG, e.carbsG, e.fatG,
+                        e.fiberG, e.solubleFiberG, e.insolubleFiberG,
+                        e.sugarsG, e.addedSugarsG, e.starchG,
+                        e.satFatG, e.monoFatG, e.polyFatG, e.transFatG,
+                        e.cholesterolMg, e.omega3G, e.omega6G, e.omega9G,
+                        e.note, e.model ?: estimator.model, System.currentTimeMillis(),
                     )
                 } catch (e: CancellationException) {
                     throw e
