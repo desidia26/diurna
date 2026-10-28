@@ -14,6 +14,9 @@ zxing = "3.5.3"
 anthropic = "2.34.0"
 # The Anthropic SDK brings Jackson 2.18.2, which has known DoS advisories; held at a patched 2.18.x.
 jackson = "2.18.12"
+# Anthropic SDK brings older httpclient5/httpcore5; hold at patched releases.
+httpclient5 = "5.6.5"
+httpcore5 = "5.4.4"
 work = "2.10.2"
 junit = "4.13.2"
 orgJson = "20240303"
@@ -43,6 +46,9 @@ mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning"
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 anthropic-java = { group = "com.anthropic", name = "anthropic-java", version.ref = "anthropic" }
 jackson-bom = { group = "com.fasterxml.jackson", name = "jackson-bom", version.ref = "jackson" }
+httpclient5 = { group = "org.apache.httpcomponents.client5", name = "httpclient5", version.ref = "httpclient5" }
+httpcore5 = { group = "org.apache.httpcomponents.core5", name = "httpcore5", version.ref = "httpcore5" }
+httpcore5-h2 = { group = "org.apache.httpcomponents.core5", name = "httpcore5-h2", version.ref = "httpcore5" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }

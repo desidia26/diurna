@@ -72,7 +72,7 @@ class OpenFoodFacts : ProductSource {
                 try {
                     conn.instanceFollowRedirects = false
                     // Open Food Facts asks every app to identify itself. Nothing about the user is sent.
-                    conn.setRequestProperty("User-Agent", "Diurna/1.0 (personal Android app)")
+                    conn.setRequestProperty("User-Agent", "Diurna/1.0 (https://github.com/desidia26/diurna)")
                     conn.connectTimeout = 10_000
                     conn.readTimeout = 10_000
                     when (conn.responseCode) {

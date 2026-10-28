@@ -15,8 +15,14 @@ dest="$ROOT/backups/$(date +%Y%m%d-%H%M%S)"
 newest() { { adb shell "ls $remote/daybook-*.db 2>/dev/null" || true; } | tr -d '\r' | sort | tail -1; }
 
 before="$(newest)"
-# single-top: if the app is already open, hand the request to that screen instead of just showing it.
-adb shell am start --activity-single-top -n "$(main_activity)" --ez backup true >/dev/null 2>&1 || true
+# BackupTriggerActivity needs DUMP to start: adb shell has it, other apps on the phone don't.
+started="$(adb shell am start -n "$PKG/app.diurna.BackupTriggerActivity" --ez backup true 2>&1 || true)"
+# Builds up to release 47 don't have it and took the request on MainActivity instead. scripts/release
+# backs up the installed (older) build before updating it, so keep asking the old way when needed.
+# am's exit code differs between Android versions, so go by its output: any error means ask the old way.
+if [[ "$started" == *Error* || "$started" == *Exception* ]]; then
+  adb shell am start --activity-single-top -n "$(main_activity)" --ez backup true >/dev/null 2>&1 || true
+fi
 latest=""
 for _ in $(seq 1 20); do
   sleep 1

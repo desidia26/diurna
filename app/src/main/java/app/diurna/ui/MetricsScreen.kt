@@ -45,18 +45,18 @@ import kotlin.math.roundToInt
 private const val TOP_LIFTS = 5
 
 @Composable
-fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues) {
+fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues, onClose: () -> Unit) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val detail by vm.detail.collectAsStateWithLifecycle()
     val cardioDetail by vm.cardioDetail.collectAsStateWithLifecycle()
     val m = ui ?: return
-    BackHandler(enabled = detail != null || cardioDetail != null) { vm.closeExercise() }
+    BackHandler(enabled = detail != null || cardioDetail != null, onBack = onClose)
     val padding = PaddingValues(
         start = 16.dp, end = 16.dp, top = contentPadding.calculateTopPadding() + 16.dp,
         bottom = contentPadding.calculateBottomPadding() + 16.dp,
     )
-    detail?.let { ExerciseScreen(it, m.range, padding, vm); return }
-    cardioDetail?.let { CardioScreen(it, m.range, padding, vm); return }
+    detail?.let { ExerciseScreen(it, m.range, padding, vm, onClose); return }
+    cardioDetail?.let { CardioScreen(it, m.range, padding, vm, onClose); return }
     var allLifts by rememberSaveable { mutableStateOf(false) }
     LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -286,12 +286,12 @@ private fun CardioCardView(c: CardioCard, onOpen: (Long) -> Unit) {
 }
 
 @Composable
-private fun CardioScreen(d: CardioDetail, range: Metrics.Range, padding: PaddingValues, vm: MetricsViewModel) {
+private fun CardioScreen(d: CardioDetail, range: Metrics.Range, padding: PaddingValues, vm: MetricsViewModel, onClose: () -> Unit) {
     val label = d.metric.label(d.style)
     LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(vm::closeExercise) {
+                IconButton(onClose) {
                     Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = "Back")
                 }
                 Text(d.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
@@ -413,11 +413,11 @@ private fun LiftRowView(r: LiftRow, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ExerciseScreen(d: ExerciseDetail, range: Metrics.Range, padding: PaddingValues, vm: MetricsViewModel) {
+private fun ExerciseScreen(d: ExerciseDetail, range: Metrics.Range, padding: PaddingValues, vm: MetricsViewModel, onClose: () -> Unit) {
     LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(vm::closeExercise) {
+                IconButton(onClose) {
                     Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = "Back")
                 }
                 Text(d.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
