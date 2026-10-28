@@ -2,6 +2,13 @@ package app.diurna.ui
 
 import app.diurna.AppContainer
 import app.diurna.ai.AiProvider
+import app.diurna.ai.BackfillWorkState
+import app.diurna.ai.DetailBackfill
+import app.diurna.ai.DetailBackfillRunner
+import app.diurna.ai.DetailBackfillWorker
+import app.diurna.ai.SelectedFoodEstimator
+import app.diurna.ai.ClaudeFoodEstimator
+import app.diurna.ai.GrokFoodEstimator
 import app.diurna.data.SettingsStore
 import app.diurna.wallpaper.LockStyle
 import kotlinx.coroutines.Dispatchers
@@ -11,6 +18,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 val TEST_FAILED: LocalDateTime = LocalDateTime.MIN
@@ -88,5 +96,38 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
     fun setLockWallpaper(enabled: Boolean) = io {
         c.settings.setLockWallpaper(enabled) // turning on: the wallpaper's own collector redraws
         if (!enabled) c.lockWallpaper.disable()
+    }
+
+    // Detail backfill (sub-macros / aminos for past entries)
+    val backfillState = DetailBackfillWorker.observe(c.appContext).state(BackfillWorkState.Idle as BackfillWorkState)
+    val backfillPreview = MutableStateFlow<DetailBackfill.Preview?>(null)
+    var backfillRange: DetailBackfill.Range = DetailBackfill.Range.lastDays(LocalDate.now())
+        private set
+
+    fun setBackfillRange(range: DetailBackfill.Range) {
+        backfillRange = range
+        refreshBackfillPreview()
+    }
+
+    fun refreshBackfillPreview() = io {
+        val runner = DetailBackfillRunner(
+            db = c.db,
+            estimator = SelectedFoodEstimator({ c.aiProvider.get() }, mapOf(
+                AiProvider.ANTHROPIC to ClaudeFoodEstimator({ c.apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
+                AiProvider.XAI to GrokFoodEstimator({ c.apiKeys.getValue(AiProvider.XAI).get() }),
+            )),
+            photo = c.foodPhotos::read,
+            fdcKeyPresent = { c.usdaKey.get()?.isNotBlank() == true },
+            aminoResolver = c.aminoResolver,
+        )
+        backfillPreview.value = runner.preview(backfillRange.fromKey(), backfillRange.toKey())
+    }
+
+    fun startBackfill() {
+        DetailBackfillWorker.enqueue(c.appContext, backfillRange.fromKey(), backfillRange.toKey())
+    }
+
+    fun cancelBackfill() {
+        DetailBackfillWorker.cancel(c.appContext)
     }
 }

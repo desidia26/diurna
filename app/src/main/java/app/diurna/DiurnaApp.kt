@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 class AppContainer(context: Context) {
+    val appContext = context.applicationContext
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val db = AppDatabase.build(context)
     val settings = SettingsStore(context)
