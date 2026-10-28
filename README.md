@@ -1,6 +1,6 @@
 # Diurna
 
-> A personal Android app, built for one person and one phone, and shared as-is. There's no support and no roadmap beyond [BACKLOG.md](BACKLOG.md). You're welcome to read it, fork it or borrow from it ([MIT](LICENSE)).
+> An Android app for getting up on time, getting outside and keeping an honest record of each day. Open source under [MIT](LICENSE); the work list is [BACKLOG.md](BACKLOG.md).
 
 *Diurna* is Latin for "daily things": Rome's *Acta Diurna* were public notices of each day's events. The app was called Daybook at first. The code package is now `app.diurna`, but the app id stays `app.daybook` (changing it would make Android treat it as a different app, with none of the old one's data), as do the database and backup file names.
 
@@ -16,7 +16,7 @@ Diurna treats a *day* as the basic unit: each day has a morning, the food eaten,
 - **Hard to cheat, easy to plan.** You can change or turn off an alarm until 10pm the night before; after that it's locked. There's no snooze and no emergency exit. Turning the alarm off ahead of time is fine, and those days don't count against you.
 - **Honest data.** Manual mornings are marked as manual. Backfilled food is tagged. A day with the alarm off is excluded from scoring instead of counting as missed.
 - **Low-friction logging.** Food is free text, a saved meal or a barcode scan. Sets are pre-filled from last time, and the keyboard's Next key walks through them.
-- **Local and private.** No account and no server of its own; everything lives on the phone. It makes exactly two kinds of network call: food text you log goes to the Claude API with *your own* API key, and barcode numbers you scan go to [Open Food Facts](https://world.openfoodfacts.org).
+- **Local and private.** No account and no server of its own; everything lives on the phone. It makes exactly two kinds of network call: food you log goes to the AI provider you pick (Claude or Grok) with *your own* API key, and barcode numbers you scan go to [Open Food Facts](https://world.openfoodfacts.org).
 
 ## Screenshots
 
@@ -60,10 +60,11 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Steps: counted from the phone's hardware step sensor (running total since boot), checked every 15 minutes, at 23:59 and at boot; the rules for reboots and midnight are in `domain/StepMath.kt`; shown against a goal and frozen per day | `steps/`, `data/StepCounter.kt` |
 | Evening check-in: mood and energy (1–5) per day, with a 9pm reminder that skips rated days | `checkin/`, `domain/Ratings.kt` |
 | Week view: each day's morning, workout, steps and calories | `ui/WeekScreen.kt` |
-| Metrics: weight with a 7-day average, mood and energy, a Macros card once any food is estimated (stacked kcal from protein/carbs/fat, kcal/% toggle, optional target line), weekly training volume and PRs, lifts by estimated 1RM (Epley, sets of up to 12 reps) with a per-exercise screen; a Cardio card once any cardio is logged: weekly distance (or minutes) and per-exercise distance and pace or speed, power, or time and calories, PRs only against earlier sessions of the same length (rounded minutes, else distance). Worked out from current data on the fly; nothing extra is stored. Charts are drawn with Compose `Canvas` | `domain/Metrics.kt`, `data/MetricsRepository.kt`, `ui/MetricsScreen.kt`, `ui/Charts.kt` |
+| Metrics: weight with a 7-day average, mood and energy, a Macros card once any food is estimated (stacked kcal from protein/carbs/fat, kcal/% toggle, optional target line), weekly training volume and PRs, lifts by estimated 1RM (Epley, sets of up to 12 reps) with a per-exercise screen (also opened from an exercise's ⋮ menu on Day, where back returns to Day); a Cardio card once any cardio is logged: weekly distance (or minutes) and per-exercise distance and pace or speed, power, or time and calories, PRs only against earlier sessions of the same length (rounded minutes, else distance). Worked out from current data on the fly; nothing extra is stored. Charts are drawn with Compose `Canvas` | `domain/Metrics.kt`, `data/MetricsRepository.kt`, `ui/MetricsScreen.kt`, `ui/Charts.kt` |
 | Finalizing days: once a day ends, its alarm, planned workout, targets and steps are frozen so later routine or profile edits don't rewrite history | `data/DayFinalizer.kt` |
 | Self-backups: a consistent copy of the database and settings daily (keeps 14) in the app's shared-storage folder, readable over `adb`; meal photos mirrored once into `backups/food-photos` | `data/Backups.kt` |
 | Shared one-line summaries for the Day screen and lock screen | `domain/DayText.kt` |
+| What's new: user-facing notes in `Changelog.kt` (numbered entries, not versions), shown once as a dialog on the first launcher open after an update (not from the check-in notification or the alarm); a fresh install starts caught up. The last seen id lives in settings; Setup lists recent entries | `domain/Changelog.kt`, `ui/WhatsNew.kt` |
 | UI: Compose, five tabs (Day, Week, Metrics, Routine, Setup), one ViewModel per screen | `ui/` |
 
 Key data rules:
@@ -95,7 +96,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 
 | Command | What it does |
 |---|---|
-| `scripts/release` | **Ship to the phone:** tests, release build, backup, install as an update, check no data was lost, check the alarm, tag `release-N`. Needs a clean working tree. |
+| `scripts/release` | **Ship to the phone:** tests, release build, backup, install as an update, check no data was lost, check the alarm, tag `release-N` and push the tag. Warns if the app changed but `Changelog.kt` didn't. Needs a clean working tree. |
 | `scripts/install` | Build, install and open a **debug** build (`--no-launch` to skip opening) |
 | `scripts/test` | Unit tests, plus device tests if an emulator is running (`unit` or `device` for just one) |
 | `scripts/emulator` | Start the emulator and wait until it's ready (`--headless` for no window, `--stop` to shut it down) |
