@@ -117,6 +117,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         }
         AttachedPhoto(vm.photos, photo, attacher, onRemove = { vm.discardPhoto(photo); photo = null })
         if (photo != null && text.isBlank()) Hint("Add a few words too, e.g. \"chicken burrito\"; the photo helps with portions.")
+        if (photo != null && !vm.supportsImages()) Hint("This model can't read photos; the estimate will use the text only.")
         // Saved meals matching what's typed: a tap logs exact numbers, no AI.
         if (matches.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

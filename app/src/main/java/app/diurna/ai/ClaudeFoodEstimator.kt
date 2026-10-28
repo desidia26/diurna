@@ -22,23 +22,56 @@ import java.util.Base64
  * Estimates one entry with a single Messages API call. Structured output guarantees a reply that
  * matches [EstimatePrompt.SCHEMA]. Temporary trouble becomes [EstimateRetryable]; everything else
  * becomes [EstimateFailed] with a message from [EstimateErrors].
+ *
+ * Optional [baseUrl] overrides the Anthropic origin (SDK [AnthropicOkHttpClient.Builder.baseUrl]);
+ * empty means the SDK default. Used for Anthropic-compatible gateways.
  */
 class ClaudeFoodEstimator(
     private val apiKey: () -> String?,
     // A lookup-style estimate doesn't need a big model; Haiku is far cheaper and quick.
     override val model: String = "claude-haiku-5-5",
+    private val baseUrl: () -> String? = { null },
+    private val supportsImages: () -> Boolean = { true },
 ) : FoodEstimator {
 
     override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate = withContext(Dispatchers.IO) {
-        EstimatePrompt.parse(ClaudeCall.json(apiKey, model, ClaudeRequest.params(model, text, photo)))
+        val sendPhoto = photo.takeIf { supportsImages() }
+        val estimate = EstimatePrompt.parse(
+            ClaudeCall.json(apiKey, model, ClaudeRequest.params(model, text, sendPhoto), baseUrl = baseUrl)
+        )
+        if (photo != null && sendPhoto == null) {
+            estimate.copy(note = VisionSupport.noteWithoutPhoto(estimate.note))
+        } else {
+            estimate
+        }
     }
 }
 
 /** One structured-output Messages call with the app's error mapping; shared by food and cardio-screen reading. */
 internal object ClaudeCall {
-    suspend fun json(apiKey: () -> String?, model: String, params: MessageCreateParams, declined: String = "The model declined to estimate this entry"): String = withContext(Dispatchers.IO) {
+    suspend fun json(
+        apiKey: () -> String?,
+        model: String,
+        params: MessageCreateParams,
+        declined: String = "The model declined to estimate this entry",
+        baseUrl: () -> String? = { null },
+    ): String = withContext(Dispatchers.IO) {
         val key = apiKey() ?: throw NoApiKey()
-        val client = AnthropicOkHttpClient.builder().apiKey(key).build()
+        val builder = AnthropicOkHttpClient.builder().apiKey(key)
+        baseUrl()?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
+            val normalized = try {
+                GatewayUrl.normalizeAnthropicBase(raw)
+            } catch (e: GatewayUrlException) {
+                throw EstimateFailed(e.message ?: "Invalid Anthropic base URL")
+            }
+            try {
+                GatewayUrl.assertAllowed(normalized)
+            } catch (e: GatewayUrlException) {
+                throw EstimateFailed(e.message ?: "Invalid Anthropic base URL")
+            }
+            builder.baseUrl(normalized)
+        }
+        val client = builder.build()
         try {
             val response = client.messages().create(params)
             if (response.stopReason().orElse(null) == StopReason.REFUSAL) {

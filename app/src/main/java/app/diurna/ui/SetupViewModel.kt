@@ -2,6 +2,7 @@ package app.diurna.ui
 
 import app.diurna.AppContainer
 import app.diurna.ai.AiProvider
+import app.diurna.ai.GatewaySettings
 import app.diurna.data.SettingsStore
 import app.diurna.wallpaper.LockStyle
 import kotlinx.coroutines.Dispatchers
@@ -59,12 +60,13 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
 
     // Food estimates
     val aiProvider = c.aiProvider.selected
+    val gateway = c.gateway.snapshot
     fun apiKeyLastFour(provider: AiProvider) = c.apiKeys.getValue(provider).lastFour
     fun setAiProvider(provider: AiProvider) = io {
         if (provider == c.aiProvider.get()) return@io
         c.aiProvider.set(provider)
         // Entries that failed on the old provider (e.g. no key) get a try on the new one.
-        if (c.apiKeys.getValue(provider).get() != null) c.food.retryFailedEstimates()
+        if (providerReady(provider)) c.food.retryFailedEstimates()
     }
     fun setApiKey(provider: AiProvider, key: String) = io {
         if (key.isBlank()) return@io
@@ -72,6 +74,19 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
         if (provider == c.aiProvider.get()) c.food.retryFailedEstimates() // entries that failed for lack of a key
     }
     fun clearApiKey(provider: AiProvider) = io { c.apiKeys.getValue(provider).clear() }
+
+    fun saveGateway(transform: (GatewaySettings) -> GatewaySettings) = io {
+        c.gateway.update(transform)
+        if (providerReady(c.aiProvider.get())) c.food.retryFailedEstimates()
+    }
+
+    private fun providerReady(provider: AiProvider): Boolean = when (provider) {
+        AiProvider.OPENAI_COMPAT -> {
+            val g = c.gateway.get()
+            g.openAiBaseUrl.isNotBlank() && g.openAiModel.isNotBlank()
+        }
+        else -> c.apiKeys.getValue(provider).get() != null
+    }
 
     val lockStyle = c.settings.lockStyle.state(LockStyle.AUTO)
     fun setLockStyle(style: LockStyle) = io { c.settings.setLockStyle(style) } // the wallpaper's collector redraws

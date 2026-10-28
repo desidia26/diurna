@@ -7,7 +7,8 @@ import kotlinx.coroutines.flow.StateFlow
 /**
  * Which AI service food estimates go to. Each has its own key; switching keeps both, so going
  * back doesn't mean re-entering one. Anthropic is the default, so a phone that only ever had a
- * Claude key behaves exactly as before.
+ * Claude key behaves exactly as before. OpenAI-compatible is bring-your-own-gateway: a base URL,
+ * model name, and optional key for any /v1/chat/completions endpoint.
  */
 enum class AiProvider(
     /** Stored in prefs; never rename. */
@@ -15,9 +16,12 @@ enum class AiProvider(
     val label: String,
     val company: String,
     val keyPlaceholder: String,
+    /** Local / gateway servers often need no key. */
+    val keyOptional: Boolean = false,
 ) {
     ANTHROPIC("anthropic", "Claude", "Anthropic", "sk-ant-…"),
-    XAI("xai", "Grok", "xAI", "xai-…");
+    XAI("xai", "Grok", "xAI", "xai-…"),
+    OPENAI_COMPAT("openai_compat", "OpenAI-compatible", "OpenAI-compatible", "sk-… (optional)", keyOptional = true);
 
     companion object {
         val DEFAULT = ANTHROPIC
