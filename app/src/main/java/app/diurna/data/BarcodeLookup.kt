@@ -217,8 +217,14 @@ private fun parseOrThrow(json: String): MealEntity? {
 data class OffSnapshot(
     val productName: String? = null,
     val servingSize: String? = null,
-    /** Per-100g nutrients as parsed from OFF (`_100g` keys), JSON object string. */
+    /**
+     * Nutrients for [basisGrams] of product (usually 100 g from OFF `_100g` keys).
+     * When OFF only had per-serving numbers and no quantity, those values are stored here with
+     * [basisGrams] = 100 so [toMacros]/[basisGrams]) yields one serving.
+     */
     val per100Json: String? = null,
+    /** Grams the [per100Json] values correspond to (default 100). */
+    val basisGrams: Double = 100.0,
     val lookedUpAt: Long,
     val lookupOk: Boolean,
     /** Capped raw OFF response; null when omitted or too large. */
@@ -228,6 +234,7 @@ data class OffSnapshot(
         val o = JSONObject()
         o.put("lookedUpAt", lookedUpAt)
         o.put("lookupOk", lookupOk)
+        o.put("basisG", basisGrams)
         if (productName != null) o.put("productName", productName)
         if (servingSize != null) o.put("servingSize", servingSize)
         if (per100Json != null) o.put("per100", JSONObject(per100Json))
@@ -248,6 +255,7 @@ data class OffSnapshot(
                     productName = o.optString("productName").ifEmpty { null },
                     servingSize = o.optString("servingSize").ifEmpty { null },
                     per100Json = o.optJSONObject("per100")?.toString(),
+                    basisGrams = o.optDouble("basisG", 100.0).takeIf { it.isFinite() && it > 0 } ?: 100.0,
                     lookedUpAt = o.getLong("lookedUpAt"),
                     lookupOk = o.optBoolean("lookupOk", false),
                     rawJson = o.optString("raw").ifEmpty { null },
@@ -263,8 +271,10 @@ data class OffSnapshot(
 }
 
 /**
- * Parses per-100g nutrients and product name/serving from an OFF response without scaling to a
- * serving. Null when the payload has no usable `_100g` energy.
+ * Parses nutrients and product name/serving from an OFF response into an [OffSnapshot].
+ * Prefers true per-100g; otherwise converts per-serving using `serving_quantity`, or stores
+ * per-serving values with [OffSnapshot.basisGrams] = 100 (one serving ≡ that basis).
+ * Null when there is no usable energy.
  */
 fun parseOffSnapshot(json: String, lookedUpAt: Long = System.currentTimeMillis()): OffSnapshot? {
     return try {
@@ -274,38 +284,50 @@ fun parseOffSnapshot(json: String, lookedUpAt: Long = System.currentTimeMillis()
         val n = p.optJSONObject("nutriments") ?: return null
         fun num(key: String): Double? =
             n.opt(key)?.toString()?.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }
-        fun kcal100(): Double? =
-            num("energy-kcal_100g") ?: num("energy_100g")?.let { it / 4.184 }
-        val kcal = kcal100() ?: return null
-        if (kcal > MAX_KCAL) return null
+        fun kcal(suffix: String): Double? =
+            num("energy-kcal$suffix") ?: num("energy$suffix")?.let { it / 4.184 }
+        val qty = p.opt("serving_quantity")?.toString()?.toDoubleOrNull()
+            ?.takeIf { it.isFinite() && it > 0 && it <= MAX_GRAMS }
+        // Scale factors to store nutrients for [basisG] grams in per100Json.
+        val (suffix, toBasis, basisG) = when {
+            kcal("_100g") != null -> Triple("_100g", 1.0, 100.0)
+            qty != null && kcal("_serving") != null -> Triple("_serving", 100.0 / qty, 100.0)
+            kcal("_serving") != null -> Triple("_serving", 1.0, 100.0) // one serving as basis
+            else -> return null
+        }
+        val kcalVal = kcal(suffix)!! * toBasis
+        if (kcalVal > MAX_KCAL) return null
         val per100 = JSONObject()
-        per100.put("kcal", kcal.roundToInt())
+        per100.put("kcal", kcalVal.coerceAtMost(MAX_KCAL).roundToInt())
         fun putG(outKey: String, vararg keys: String) {
-            val v = keys.firstNotNullOfOrNull { num(it) } ?: return
-            per100.put(outKey, v.coerceAtMost(MAX_GRAMS))
+            val v = keys.firstNotNullOfOrNull { num("$it$suffix") } ?: return
+            per100.put(outKey, (v * toBasis).coerceAtMost(MAX_GRAMS))
         }
-        putG("protein_g", "proteins_100g")
-        val avail = num("carbohydrates_100g")
-        val fiber = num("fiber_100g")
+        putG("protein_g", "proteins")
+        val avail = num("carbohydrates$suffix")
+        val fiber = num("fiber$suffix")
         when {
-            avail != null && fiber != null -> per100.put("carbs_g", (avail + fiber).coerceAtMost(MAX_GRAMS))
-            avail != null -> per100.put("carbs_g", avail.coerceAtMost(MAX_GRAMS))
+            avail != null && fiber != null ->
+                per100.put("carbs_g", ((avail + fiber) * toBasis).coerceAtMost(MAX_GRAMS))
+            avail != null -> per100.put("carbs_g", (avail * toBasis).coerceAtMost(MAX_GRAMS))
         }
-        putG("fat_g", "fat_100g")
-        putG("fiber_g", "fiber_100g")
-        putG("sugars_g", "sugars_100g")
-        putG("added_sugars_g", "added-sugars_100g")
-        putG("starch_g", "starch_100g")
-        putG("sat_fat_g", "saturated-fat_100g")
-        putG("mono_fat_g", "monounsaturated-fat_100g")
-        putG("poly_fat_g", "polyunsaturated-fat_100g")
-        putG("trans_fat_g", "trans-fat_100g")
-        num("cholesterol_100g")?.let { per100.put("cholesterol_mg", (it * 1000.0).coerceAtMost(MAX_CHOL_MG)) }
-        putG("omega3_g", "omega-3-fat_100g")
-        putG("omega6_g", "omega-6-fat_100g")
-        putG("omega9_g", "omega-9-fat_100g")
-        putG("soluble_fiber_g", "soluble-fiber_100g", "fiber-soluble_100g")
-        putG("insoluble_fiber_g", "insoluble-fiber_100g", "fiber-insoluble_100g")
+        putG("fat_g", "fat")
+        putG("fiber_g", "fiber")
+        putG("sugars_g", "sugars")
+        putG("added_sugars_g", "added-sugars")
+        putG("starch_g", "starch")
+        putG("sat_fat_g", "saturated-fat")
+        putG("mono_fat_g", "monounsaturated-fat")
+        putG("poly_fat_g", "polyunsaturated-fat")
+        putG("trans_fat_g", "trans-fat")
+        num("cholesterol$suffix")?.let {
+            per100.put("cholesterol_mg", (it * 1000.0 * toBasis).coerceAtMost(MAX_CHOL_MG))
+        }
+        putG("omega3_g", "omega-3-fat")
+        putG("omega6_g", "omega-6-fat")
+        putG("omega9_g", "omega-9-fat")
+        putG("soluble_fiber_g", "soluble-fiber", "fiber-soluble")
+        putG("insoluble_fiber_g", "insoluble-fiber", "fiber-insoluble")
 
         val name = cleanText(p.optString("product_name"), MAX_NAME).ifEmpty { null }
         val serving = cleanText(p.optString("serving_size"), MAX_NOTE).ifEmpty { null }
@@ -314,6 +336,7 @@ fun parseOffSnapshot(json: String, lookedUpAt: Long = System.currentTimeMillis()
             productName = name,
             servingSize = serving,
             per100Json = per100.toString(),
+            basisGrams = basisG,
             lookedUpAt = lookedUpAt,
             lookupOk = true,
             rawJson = raw,
@@ -325,9 +348,9 @@ fun parseOffSnapshot(json: String, lookedUpAt: Long = System.currentTimeMillis()
 
 /** Macros (kcal / P / C / F) from per-100g snapshot scaled by grams; null if snapshot unusable. */
 fun OffSnapshot.toMacros(grams: Double): OffMacros? {
-    if (!lookupOk || per100Json == null || grams <= 0) return null
+    if (!lookupOk || per100Json == null || grams <= 0 || basisGrams <= 0) return null
     val n = try { JSONObject(per100Json) } catch (_: JSONException) { return null }
-    val scale = grams / 100.0
+    val scale = grams / basisGrams
     fun req(key: String): Int {
         val v = n.optDouble(key, 0.0).takeIf { it.isFinite() && it >= 0 } ?: 0.0
         return (v * scale).coerceAtMost(if (key == "kcal") MAX_KCAL else MAX_GRAMS).roundToInt()
@@ -338,7 +361,7 @@ fun OffSnapshot.toMacros(grams: Double): OffMacros? {
 
 data class OffMacros(val kcal: Int, val proteinG: Int, val carbsG: Int, val fatG: Int)
 
-/** Grams for one serving from the snapshot; defaults to 100 g when unknown. */
+/** Grams for one serving from the snapshot; defaults to [OffSnapshot.basisGrams]. */
 fun OffSnapshot.servingGrams(): Double {
     rawJson?.let { raw ->
         try {
@@ -352,5 +375,5 @@ fun OffSnapshot.servingGrams(): Double {
         val g = m?.groupValues?.get(1)?.toDoubleOrNull()
         if (g != null && g.isFinite() && g > 0 && g <= MAX_GRAMS) return g
     }
-    return 100.0
+    return basisGrams
 }

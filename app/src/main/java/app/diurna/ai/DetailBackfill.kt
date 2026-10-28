@@ -139,9 +139,9 @@ object DetailBackfill {
      * Null when the snapshot is unusable.
      */
     fun fromOffSnapshot(snap: OffSnapshot, grams: Double): Detail? {
-        if (!snap.lookupOk || snap.per100Json == null || grams <= 0) return null
+        if (!snap.lookupOk || snap.per100Json == null || grams <= 0 || snap.basisGrams <= 0) return null
         val n = try { JSONObject(snap.per100Json) } catch (_: JSONException) { return null }
-        val scale = grams / 100.0
+        val scale = grams / snap.basisGrams
         fun g(key: String): Int? {
             if (!n.has(key)) return null
             val v = n.optDouble(key).takeIf { it.isFinite() && it >= 0 } ?: return null

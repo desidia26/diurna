@@ -190,4 +190,14 @@ class BarcodeLookupTest {
         assertNull(OffSnapshot.decode(snap.encode())!!.rawJson)
     }
 
+
+    @Test fun servingOnlySnapshotStoresOneServingAsBasis() {
+        val json = off("""{"product_name":"Protein shake","serving_size":"1 bottle",
+            "nutriments":{"energy-kcal_serving":160,"proteins_serving":30,"carbohydrates_serving":5,"fat_serving":3}}""")
+        val snap = parseOffSnapshot(json)!!
+        assertTrue(snap.lookupOk)
+        assertEquals(160, snap.toMacros(snap.basisGrams)!!.kcal)
+        assertEquals(30, snap.toMacros(snap.basisGrams)!!.proteinG)
+    }
+
 }
