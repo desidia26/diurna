@@ -72,7 +72,7 @@ class OpenFoodFacts : ProductSource {
                 try {
                     conn.instanceFollowRedirects = false
                     // Open Food Facts asks every app to identify itself. Nothing about the user is sent.
-                    conn.setRequestProperty("User-Agent", "Diurna/1.0 (personal Android app)")
+                    conn.setRequestProperty("User-Agent", "Diurna/1.0 (https://github.com/desidia26/diurna)")
                     conn.connectTimeout = 10_000
                     conn.readTimeout = 10_000
                     when (conn.responseCode) {
@@ -112,6 +112,7 @@ class OpenFoodFacts : ProductSource {
 // Sanity limits for numbers from Open Food Facts; beyond them a value is a typo or vandalism.
 private const val MAX_KCAL = 5_000.0 // per serving
 private const val MAX_GRAMS = 1_000.0 // per serving, for macros and the serving weight
+private const val MAX_CHOL_MG = 5_000.0 // per serving; OFF stores cholesterol in grams
 private const val MAX_NAME = 80
 private const val MAX_NOTE = 60
 
@@ -154,7 +155,26 @@ private fun parseOrThrow(json: String): MealEntity? {
     }
     val kcal = kcal(suffix)!! * scale
     if (kcal > MAX_KCAL) return null
+    /** Required macros: missing counts as 0 (meal columns are non-null). */
     fun amount(x: Double?) = ((x ?: 0.0) * scale).coerceAtMost(MAX_GRAMS).roundToInt()
+    /** Optional detail: missing stays null, distinct from a real 0. */
+    fun optGrams(vararg keys: String): Int? {
+        val v = keys.firstNotNullOfOrNull { num("$it$suffix") } ?: return null
+        return (v * scale).coerceAtMost(MAX_GRAMS).roundToInt()
+    }
+    fun optCholMg(): Int? {
+        val g = num("cholesterol$suffix") ?: return null
+        return (g * 1000.0 * scale).coerceAtMost(MAX_CHOL_MG).roundToInt()
+    }
+
+    // OFF carbohydrates exclude fiber (available carbs). Store US-style total carbs when fiber is known.
+    val availCarbs = num("carbohydrates$suffix")
+    val fiberRaw = num("fiber$suffix")
+    val carbsG = when {
+        availCarbs != null && fiberRaw != null -> amount(availCarbs + fiberRaw)
+        availCarbs != null -> amount(availCarbs)
+        else -> 0
+    }
 
     val name = cleanText(p.optString("product_name"), MAX_NAME)
     val brand = cleanText(p.optString("brands").split(",").first(), MAX_NAME)
@@ -166,8 +186,22 @@ private fun parseOrThrow(json: String): MealEntity? {
         },
         kcal = kcal.roundToInt(),
         proteinG = amount(num("proteins$suffix")),
-        carbsG = amount(num("carbohydrates$suffix")),
+        carbsG = carbsG,
         fatG = amount(num("fat$suffix")),
         note = note,
+        fiberG = fiberRaw?.let { amount(it) },
+        solubleFiberG = optGrams("soluble-fiber", "fiber-soluble"),
+        insolubleFiberG = optGrams("insoluble-fiber", "fiber-insoluble"),
+        sugarsG = optGrams("sugars"),
+        addedSugarsG = optGrams("added-sugars"),
+        starchG = optGrams("starch"),
+        satFatG = optGrams("saturated-fat"),
+        monoFatG = optGrams("monounsaturated-fat"),
+        polyFatG = optGrams("polyunsaturated-fat"),
+        transFatG = optGrams("trans-fat"),
+        cholesterolMg = optCholMg(),
+        omega3G = optGrams("omega-3-fat"),
+        omega6G = optGrams("omega-6-fat"),
+        omega9G = optGrams("omega-9-fat"),
     )
 }

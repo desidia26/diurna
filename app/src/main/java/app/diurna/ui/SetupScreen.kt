@@ -66,6 +66,7 @@ fun SetupScreen(vm: SetupViewModel, library: LibraryViewModel, contentPadding: P
     when (page) {
         "meals" -> MealsPage(library) { page = null }
         "exercises" -> ExercisesPage(library) { page = null }
+        "changes" -> ChangesPage { page = null }
         else -> SetupMain(vm, library, contentPadding, onOpen = { page = it })
     }
 }
@@ -110,8 +111,10 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
             val meals by library.meals.collectAsStateWithLifecycle()
             val catalog by library.catalog.collectAsStateWithLifecycle()
             val cardio by library.cardio.collectAsStateWithLifecycle()
+            val detailed by library.detailedNutrition.collectAsStateWithLifecycle()
             LibraryCard(
                 meals.size, catalog.size, cardio, onCardio = library::setCardio,
+                detailed, onDetailedNutrition = library::setDetailedNutrition,
                 onMeals = { onOpen("meals") }, onExercises = { onOpen("exercises") },
             )
         }
@@ -149,6 +152,7 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
                 }
             }
         }
+        item { WhatsNewCard(onAll = { onOpen("changes") }) }
     }
 
     if (scanning) PorchScanDialog(vm, onDone = { scanning = false })

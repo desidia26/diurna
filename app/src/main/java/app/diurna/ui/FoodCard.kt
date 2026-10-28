@@ -95,6 +95,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
     val chip = if (s.targets != null && totals.estimated > 0) "%,d / %,d".format(totals.kcal, s.targets.kcal)
         else "$n ${if (n == 1) "entry" else "entries"}"
     val meals by vm.meals.collectAsStateWithLifecycle()
+    val detailed by vm.detailedNutrition.collectAsStateWithLifecycle()
     val matches = remember(text, meals) {
         suggest(text, meals.map { it.name }, limit = 4).mapNotNull { n -> meals.find { it.name == n } }
     }
@@ -146,7 +147,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         val online by vm.online.collectAsStateWithLifecycle()
         s.food.forEach { f ->
             FoodRow(
-                f, s.date, online, vm.photos,
+                f, s.date, online, vm.photos, detailed,
                 onEdit = { editing = f }, onDelete = { vm.deleteFood(f.id) },
                 onServings = { servingsFor = f }, onSaveAsMeal = { savingAsMeal = f },
             )
@@ -161,7 +162,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         )
     }
     scannedDraft?.let { draft ->
-        MealDialog("Add from barcode", draft, onDismiss = { scannedDraft = null }) { meal ->
+        MealDialog("Add from barcode", draft, detailed = detailed, onDismiss = { scannedDraft = null }) { meal ->
             vm.saveMeal(meal).also { r ->
                 if (r == LibraryRepository.Result.Ok) servingsOf = vm.mealByBarcode(draft.barcode!!)
             }
@@ -180,8 +181,12 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         val seed = MealEntity(
             name = f.text.lines().first().trim().replaceFirstChar { it.uppercase() },
             kcal = f.kcalMid ?: 0, proteinG = f.proteinG ?: 0, carbsG = f.carbsG ?: 0, fatG = f.fatG ?: 0,
+            fiberG = f.fiberG, solubleFiberG = f.solubleFiberG, insolubleFiberG = f.insolubleFiberG,
+            sugarsG = f.sugarsG, addedSugarsG = f.addedSugarsG, starchG = f.starchG,
+            satFatG = f.satFatG, monoFatG = f.monoFatG, polyFatG = f.polyFatG, transFatG = f.transFatG,
+            cholesterolMg = f.cholesterolMg, omega3G = f.omega3G, omega6G = f.omega6G, omega9G = f.omega9G,
         )
-        MealDialog("Save as meal", seed, onDismiss = { savingAsMeal = null }) { vm.saveEntryAsMeal(f.id, it) }
+        MealDialog("Save as meal", seed, detailed = detailed, onDismiss = { savingAsMeal = null }) { vm.saveEntryAsMeal(f.id, it) }
     }
     editing?.let { f ->
         FoodEditDialog(f, vm, onDismiss = { editing = null }) { newText, newTime, newPhoto ->
@@ -222,10 +227,17 @@ private fun MacroBars(t: NutritionTotals, targets: Targets) {
 
 @Composable
 private fun FoodRow(
-    f: FoodEntryEntity, date: LocalDate, online: Boolean, photos: FoodPhotos,
+    f: FoodEntryEntity, date: LocalDate, online: Boolean, photos: FoodPhotos, detailed: Boolean,
     onEdit: () -> Unit, onDelete: () -> Unit, onServings: () -> Unit, onSaveAsMeal: () -> Unit,
 ) {
     val loggedOn = Instant.ofEpochMilli(f.loggedAt).atZone(ZoneId.systemDefault()).toLocalDate()
+    var expanded by remember { mutableStateOf(false) }
+    val hasDetail = detailed && f.estimatedAt != null && (
+        f.fiberG != null || f.sugarsG != null || f.addedSugarsG != null || f.starchG != null ||
+            f.satFatG != null || f.monoFatG != null || f.polyFatG != null || f.transFatG != null ||
+            f.cholesterolMg != null || f.omega3G != null || f.omega6G != null || f.omega9G != null ||
+            f.solubleFiberG != null || f.insolubleFiberG != null
+        )
     Row(
         Modifier.fillMaxWidth().clickable(onClickLabel = "Edit", onClick = onEdit),
         verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -256,6 +268,12 @@ private fun FoodRow(
                 f.estimateError != null -> Text(f.estimateError, style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
                 else -> Hint(if (online) "Estimating…" else "Estimating when you're back online")
             }
+            if (hasDetail) {
+                TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp)) {
+                    Text(if (expanded) "Hide detail" else "Show detail")
+                }
+                if (expanded) NutritionDetail(f)
+            }
             if (loggedOn != date) Chip("Backfilled ${loggedOn.short()}", Tone.Accent)
         }
         f.photo?.let { name ->
@@ -264,6 +282,38 @@ private fun FoodRow(
             if (viewing) PhotoViewDialog(photos, name) { viewing = false }
         }
         TextButton(onClick = onDelete, contentPadding = PaddingValues(4.dp)) { Text("×") }
+    }
+}
+
+@Composable
+private fun NutritionDetail(f: FoodEntryEntity) {
+    fun line(label: String, v: Int?, unit: String = "g") =
+        v?.let { "$label $it$unit" }
+    val carbs = listOfNotNull(
+        line("Fiber", f.fiberG),
+        line("Soluble", f.solubleFiberG),
+        line("Insoluble", f.insolubleFiberG),
+        line("Sugars", f.sugarsG),
+        line("Added sugars", f.addedSugarsG),
+        line("Starch", f.starchG),
+    ).joinToString(" · ")
+    val fats = listOfNotNull(
+        line("Sat", f.satFatG),
+        line("Mono", f.monoFatG),
+        line("Poly", f.polyFatG),
+        line("Trans", f.transFatG),
+        line("Chol", f.cholesterolMg, "mg"),
+        line("Ω3", f.omega3G),
+        line("Ω6", f.omega6G),
+        line("Ω9", f.omega9G),
+    ).joinToString(" · ")
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (carbs.isNotEmpty()) {
+            Text("Carbs  $carbs", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
+        if (fats.isNotEmpty()) {
+            Text("Fats   $fats", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
     }
 }
 

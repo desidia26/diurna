@@ -70,6 +70,25 @@ class SettingsStore(private val context: Context) : StepStateStore {
         context.dataStore.edit { it[cardioKey] = enabled }
     }
 
+    // ---- Detailed nutrition ----
+    // Off by default: basic P/C/F users see no change. When on, meal form and Day food rows show fiber, sugars, lipids.
+    private val detailedNutritionKey = booleanPreferencesKey("detailed_nutrition")
+    val detailedNutrition: Flow<Boolean> =
+        context.dataStore.data.map { it[detailedNutritionKey] ?: false }.distinctUntilChanged()
+
+    suspend fun setDetailedNutrition(enabled: Boolean) {
+        context.dataStore.edit { it[detailedNutritionKey] = enabled }
+    }
+
+    // ---- What's new ----
+    // The newest Changelog entry already shown. Null until the first launch that has a changelog.
+    private val changelogSeenKey = intPreferencesKey("changelog_seen")
+    val changelogSeen: Flow<Int?> = context.dataStore.data.map { it[changelogSeenKey] }.distinctUntilChanged()
+
+    suspend fun setChangelogSeen(id: Int) {
+        context.dataStore.edit { it[changelogSeenKey] = id }
+    }
+
     // ---- Steps ----
     private val stepGoalKey = intPreferencesKey("step_goal")
     val stepGoal: Flow<Int> = context.dataStore.data.map { it[stepGoalKey] ?: 10_000 }.distinctUntilChanged()
@@ -86,6 +105,15 @@ class SettingsStore(private val context: Context) : StepStateStore {
 
     suspend fun setMetricsRange(range: Metrics.Range) {
         context.dataStore.edit { it[metricsRangeKey] = range.name }
+    }
+
+    private val macroChartModeKey = stringPreferencesKey("macro_chart_mode")
+    val macroChartMode: Flow<Metrics.MacroChartMode> = context.dataStore.data
+        .map { p -> Metrics.MacroChartMode.entries.find { it.name == p[macroChartModeKey] } ?: Metrics.MacroChartMode.KCAL }
+        .distinctUntilChanged()
+
+    suspend fun setMacroChartMode(mode: Metrics.MacroChartMode) {
+        context.dataStore.edit { it[macroChartModeKey] = mode.name }
     }
 
     private val stepCounterKey = longPreferencesKey("step_last_counter")

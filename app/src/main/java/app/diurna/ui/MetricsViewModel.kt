@@ -36,6 +36,24 @@ data class MoodCard(
     val smoothed: Boolean,
 )
 
+data class MacroCard(
+    /** One stack per day (4w) or per week (longer); null = gap (no food). Absolute kcal. */
+    val stacks: List<Metrics.MacroStack?>,
+    /** Same shape as [stacks], each bar scaled to 100; null when total is 0. */
+    val percentStacks: List<Metrics.MacroStack?>,
+    val mode: Metrics.MacroChartMode,
+    /** Mean daily (or weekly-average) total macro kcal over non-gap bars. */
+    val averageKcal: Double?,
+    /** Mean split used for the headline percentages. */
+    val average: Metrics.MacroStack?,
+    val daysWithFood: Int,
+    val periods: Int,
+    /** Target kcal for the dashed line in kcal mode; null when no profile/weight. */
+    val targetKcal: Int?,
+    /** True when bars are days; false when they're week averages. */
+    val daily: Boolean,
+)
+
 data class TrainingCard(
     val weeks: List<Metrics.WeekVolume>,
     val thisWeek: Double,
@@ -112,6 +130,8 @@ data class MetricsUi(
     val showDots: Boolean,
     val weight: WeightCard,
     val mood: MoodCard,
+    /** Null until any food has ever been estimated, so people who don't log food never see it. */
+    val macros: MacroCard?,
     val training: TrainingCard,
     /** Null until any cardio has ever been logged, so people who only lift never see the card. */
     val cardio: CardioCard?,
@@ -148,7 +168,17 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
     private val snapshot = combine(c.settings.metricsRange, today, ::Pair)
         .flatMapLatest { (range, day) -> c.metrics.observe(range, day).map { range to it } }
 
-    val ui: StateFlow<MetricsUi?> = snapshot.map { (range, s) -> build(range, s) }.state(null)
+    private val targets = today.flatMapLatest { c.nutrition.observeTargets(it) }
+
+    val ui: StateFlow<MetricsUi?> = combine(snapshot, targets, c.settings.macroChartMode) { snap, t, mode ->
+        val (range, s) = snap
+        build(range, s, t?.kcal, mode)
+    }.state(null)
+
+    /** Exercises with at least one session, so other screens can offer to open their detail. */
+    val tracked: StateFlow<Set<Long>> = c.metrics.training
+        .map { t -> (t.lifting.map { it.exerciseId } + t.cardio.map { it.exerciseId }).toSet() }
+        .state(emptySet())
 
     private val openExercise = MutableStateFlow<Long?>(null)
     private val metric = MutableStateFlow(LiftMetric.E1RM)
@@ -169,11 +199,17 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
     fun setCardioMetric(m: CardioMetric) { cardioMetric.value = m }
 
     fun setRange(range: Metrics.Range) = io { c.settings.setMetricsRange(range) }
+    fun setMacroChartMode(mode: Metrics.MacroChartMode) = io { c.settings.setMacroChartMode(mode) }
     fun openExercise(id: Long) { metric.value = LiftMetric.E1RM; openExercise.value = id }
     fun closeExercise() { openExercise.value = null; openCardio.value = null }
     fun setMetric(m: LiftMetric) { metric.value = m }
 
-    private fun build(range: Metrics.Range, s: MetricsRepository.Snapshot): MetricsUi {
+    private fun build(
+        range: Metrics.Range,
+        s: MetricsRepository.Snapshot,
+        targetKcal: Int?,
+        mode: Metrics.MacroChartMode,
+    ): MetricsUi {
         val dates = Metrics.days(s.from, s.to)
         val byDate = s.days.associateBy { LocalDate.parse(it.date) }
         val inRange = dates.map { byDate[it] }
@@ -230,7 +266,35 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
                 change = Metrics.change(spark),
             )
         }
-        return MetricsUi(range, s.from, s.to, (range.days ?: Long.MAX_VALUE) <= 84, weight, mood, training, cardioCard(s).takeIf { s.cardio.isNotEmpty() }, lifts)
+        val macros = macroCard(range, s, targetKcal, mode).takeIf { s.hasEstimatedFood }
+
+        return MetricsUi(
+            range, s.from, s.to, (range.days ?: Long.MAX_VALUE) <= 84,
+            weight, mood, macros, training,
+            cardioCard(s).takeIf { s.cardio.isNotEmpty() }, lifts,
+        )
+    }
+
+    private fun macroCard(
+        range: Metrics.Range,
+        s: MetricsRepository.Snapshot,
+        targetKcal: Int?,
+        mode: Metrics.MacroChartMode,
+    ): MacroCard {
+        val daily = range == Metrics.Range.W4
+        val stacks = if (daily) Metrics.dailyMacroStacks(s.macros, s.from, s.to)
+        else Metrics.weeklyMacroAverages(s.macros, s.from, s.to)
+        return MacroCard(
+            stacks = stacks,
+            percentStacks = stacks.map(Metrics::macroPercent),
+            mode = mode,
+            averageKcal = Metrics.averageMacroTotal(stacks),
+            average = Metrics.averageMacroStack(stacks),
+            daysWithFood = s.macros.size,
+            periods = stacks.size,
+            targetKcal = targetKcal,
+            daily = daily,
+        )
     }
 
     private fun cardioCard(s: MetricsRepository.Snapshot): CardioCard {

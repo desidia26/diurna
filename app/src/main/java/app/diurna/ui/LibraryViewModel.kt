@@ -10,6 +10,8 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel() {
     val meals = c.library.observeMeals().state(emptyList())
     /** Setup's Cardio switch. Off: Library looks as it did before cardio existed. */
     val cardio = c.settings.cardio.state(false)
+    /** Setup's Detailed nutrition switch. Off: meal form and Day food stay basic P/C/F. */
+    val detailedNutrition = c.settings.detailedNutrition.state(false)
 
     /** With cardio off, unlogged cardio (the seeded machines) is left out; anything with history stays. */
     val catalog = combine(c.library.observeCatalog(), c.settings.cardio) { all, on ->
@@ -17,6 +19,7 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel() {
     }.state(emptyList())
 
     fun setCardio(on: Boolean) = io { c.settings.setCardio(on) }
+    fun setDetailedNutrition(on: Boolean) = io { c.settings.setDetailedNutrition(on) }
 
     // Suspend so dialogs can show a problem (e.g. a duplicate name) instead of closing.
     suspend fun saveMeal(meal: MealEntity): Result = c.library.saveMeal(meal)

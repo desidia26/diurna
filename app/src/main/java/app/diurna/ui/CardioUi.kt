@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -86,6 +87,8 @@ fun CardioPieces(ex: ExerciseUi, vm: DayViewModel, collapsed: Boolean) {
 
 @Composable
 private fun PieceRow(n: Int, set: ExerciseSetEntity, style: Cardio.Style, showNumber: Boolean, vm: DayViewModel, onDelete: () -> Unit) {
+    val provider by vm.aiProvider.collectAsStateWithLifecycle()
+    val providerLabel = provider.label
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf<CardioEdit?>(null) }
     var reading by remember { mutableStateOf(false) }
@@ -123,6 +126,8 @@ private fun PieceRow(n: Int, set: ExerciseSetEntity, style: Cardio.Style, showNu
                     }
                 }
             }
+            // Matches the food-estimate disclosure in Setup: name the provider and what leaves the phone.
+            Hint("The photo is sent once to $providerLabel to read the numbers; nothing else.")
         }
         IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
             Text("×", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -1,0 +1,34 @@
+# Version updates, monthly and grouped. Security updates are separate and open right away.
+# The cooldown skips releases younger than a week, so a hijacked or broken release has time to be
+# pulled before it's proposed.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    # A dependency goes to the first group that matches it.
+    groups:
+      # Kotlin, KSP and the Compose compiler plugin only build when their versions match.
+      kotlin:
+        patterns: ["org.jetbrains.kotlin*", "com.google.devtools.ksp*"]
+      # The Android Gradle plugin breaks builds most often, so it gets its own PR.
+      agp:
+        patterns: ["com.android*"]
+      androidx:
+        patterns: ["androidx.*"]
+      other:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]

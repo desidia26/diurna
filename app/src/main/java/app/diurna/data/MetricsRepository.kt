@@ -14,6 +14,7 @@ import java.time.LocalDate
 class MetricsRepository(db: AppDatabase) {
     private val days = db.dayDao()
     private val workouts = db.workoutDao()
+    private val food = db.foodDao()
 
     /** The range's days, plus the 6 before [from] so the first 7-day averages have a full window. */
     data class Snapshot(
@@ -22,6 +23,10 @@ class MetricsRepository(db: AppDatabase) {
         val days: List<DayEntity>,
         val sessions: List<Metrics.Session>,
         val cardio: List<Cardio.Session> = emptyList(),
+        /** Estimated food macros in the range, keyed by day. Empty when nothing was logged. */
+        val macros: Map<LocalDate, Metrics.MacroStack> = emptyMap(),
+        /** True once any food entry has ever been estimated; hides the macros card until then. */
+        val hasEstimatedFood: Boolean = false,
     )
 
     data class Training(val lifting: List<Metrics.Session>, val cardio: List<Cardio.Session>)
@@ -36,8 +41,23 @@ class MetricsRepository(db: AppDatabase) {
     fun observe(range: Metrics.Range, today: LocalDate): Flow<Snapshot> =
         days.observeFirstDate().map { it?.let(LocalDate::parse) }.distinctUntilChanged().flatMapLatest { first ->
             val from = range.start(today, first)
-            combine(days.observeRange(from.minusDays(6).key(), today.key()), training) { rows, t ->
-                Snapshot(from, today, rows, t.lifting, t.cardio)
+            combine(
+                days.observeRange(from.minusDays(6).key(), today.key()),
+                training,
+                food.observeMacros(from.key(), today.key()),
+                food.observeEstimatedFoodCount(),
+            ) { rows, t, macros, foodCount ->
+                Snapshot(
+                    from, today, rows, t.lifting, t.cardio,
+                    macros = macros.associate { row ->
+                        val d = LocalDate.parse(row.date)
+                        d to Metrics.macroKcal(
+                            d, row.proteinG, row.carbsG, row.fatG,
+                            row.fiberG, row.solubleFiberG, row.insolubleFiberG,
+                        )
+                    },
+                    hasEstimatedFood = foodCount > 0,
+                )
             }
         }
 

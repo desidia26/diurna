@@ -51,7 +51,9 @@ fun MealEntity.macroLine(): String = "%,d kcal · P %d · C %d · F %d".format(k
 
 @Composable
 fun LibraryCard(
-    mealCount: Int, exerciseCount: Int, cardio: Boolean, onCardio: (Boolean) -> Unit, onMeals: () -> Unit, onExercises: () -> Unit,
+    mealCount: Int, exerciseCount: Int, cardio: Boolean, onCardio: (Boolean) -> Unit,
+    detailedNutrition: Boolean, onDetailedNutrition: (Boolean) -> Unit,
+    onMeals: () -> Unit, onExercises: () -> Unit,
 ) {
     SectionCard("Library") {
         Hint("Saved meals log with exact numbers and no AI call. Exercises are the names workouts and suggestions draw from.")
@@ -66,11 +68,18 @@ fun LibraryCard(
             }
             Switch(checked = cardio, onCheckedChange = onCardio)
         }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Detailed nutrition", fontWeight = FontWeight.SemiBold)
+                Hint("Fiber, sugars, starch and fat breakdown on meals and Day food rows. Off keeps the basic protein / carbs / fat view.")
+            }
+            Switch(checked = detailedNutrition, onCheckedChange = onDetailedNutrition)
+        }
     }
 }
 
 @Composable
-private fun PageHeader(title: String, onBack: () -> Unit) {
+fun PageHeader(title: String, onBack: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = onBack, contentPadding = PaddingValues(start = 10.dp, end = 16.dp)) {
             Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = null, Modifier.size(22.dp))
@@ -83,6 +92,7 @@ private fun PageHeader(title: String, onBack: () -> Unit) {
 @Composable
 fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
     val meals by vm.meals.collectAsStateWithLifecycle()
+    val detailed by vm.detailedNutrition.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<MealEntity?>(null) }
     var confirmDelete by remember { mutableStateOf<MealEntity?>(null) }
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -105,7 +115,7 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
         }
     }
     editing?.let { m ->
-        MealDialog(if (m.id == 0L) "Add meal" else "Edit meal", m, onDismiss = { editing = null }, onSave = vm::saveMeal)
+        MealDialog(if (m.id == 0L) "Add meal" else "Edit meal", m, detailed = detailed, onDismiss = { editing = null }, onSave = vm::saveMeal)
     }
     confirmDelete?.let { m ->
         ConfirmDialog(
@@ -115,20 +125,43 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
     }
 }
 
-/** Add/edit a saved meal. Also used by "Save as meal" on a food entry. Stays open to show problems. */
+/** Add/edit a saved meal. Also used by "Save as meal" on a food entry. Stays open to show problems.
+ *  [detailed] shows the opt-in fiber / sugars / lipid fields (Setup → Detailed nutrition). */
 @Composable
-fun MealDialog(title: String, initial: MealEntity, onDismiss: () -> Unit, onSave: suspend (MealEntity) -> Result) {
+fun MealDialog(
+    title: String,
+    initial: MealEntity,
+    detailed: Boolean = false,
+    onDismiss: () -> Unit,
+    onSave: suspend (MealEntity) -> Result,
+) {
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(initial.name) }
     var kcal by remember { mutableStateOf(initial.kcal.takeIf { it > 0 }?.toString() ?: "") }
     // Blank rather than "0" for a new meal, so there's nothing to delete before typing.
     fun start(x: Int) = if (x == 0 && initial.kcal == 0) "" else x.toString()
+    fun startOpt(x: Int?) = x?.toString() ?: ""
     var p by remember { mutableStateOf(start(initial.proteinG)) }
     var c by remember { mutableStateOf(start(initial.carbsG)) }
     var f by remember { mutableStateOf(start(initial.fatG)) }
     var note by remember { mutableStateOf(initial.note ?: "") }
+    var fiber by remember { mutableStateOf(startOpt(initial.fiberG)) }
+    var solFiber by remember { mutableStateOf(startOpt(initial.solubleFiberG)) }
+    var insolFiber by remember { mutableStateOf(startOpt(initial.insolubleFiberG)) }
+    var sugars by remember { mutableStateOf(startOpt(initial.sugarsG)) }
+    var addedSugars by remember { mutableStateOf(startOpt(initial.addedSugarsG)) }
+    var starch by remember { mutableStateOf(startOpt(initial.starchG)) }
+    var sat by remember { mutableStateOf(startOpt(initial.satFatG)) }
+    var mono by remember { mutableStateOf(startOpt(initial.monoFatG)) }
+    var poly by remember { mutableStateOf(startOpt(initial.polyFatG)) }
+    var trans by remember { mutableStateOf(startOpt(initial.transFatG)) }
+    var chol by remember { mutableStateOf(startOpt(initial.cholesterolMg)) }
+    var o3 by remember { mutableStateOf(startOpt(initial.omega3G)) }
+    var o6 by remember { mutableStateOf(startOpt(initial.omega6G)) }
+    var o9 by remember { mutableStateOf(startOpt(initial.omega9G)) }
     var problem by remember { mutableStateOf<String?>(null) }
     val valid = name.isNotBlank() && kcal.toIntOrNull() != null
+    fun opt(s: String): Int? = s.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -145,6 +178,47 @@ fun MealDialog(title: String, initial: MealEntity, onDismiss: () -> Unit, onSave
                     }
                 }
                 OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), label = { Text("Serving (optional)") }, placeholder = { Text("1 bottle, 11 oz") }, singleLine = true)
+                if (detailed) {
+                    Hint("Leave a field blank when unknown (distinct from 0). Carbs are total carbs including fiber.")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            Triple("Fiber", fiber) { v: String -> fiber = v },
+                            Triple("Soluble", solFiber) { v: String -> solFiber = v },
+                            Triple("Insoluble", insolFiber) { v: String -> insolFiber = v },
+                        ).forEach { (label, value, set) ->
+                            OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            Triple("Sugars", sugars) { v: String -> sugars = v },
+                            Triple("Added", addedSugars) { v: String -> addedSugars = v },
+                            Triple("Starch", starch) { v: String -> starch = v },
+                        ).forEach { (label, value, set) ->
+                            OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            Triple("Sat", sat) { v: String -> sat = v },
+                            Triple("Mono", mono) { v: String -> mono = v },
+                            Triple("Poly", poly) { v: String -> poly = v },
+                            Triple("Trans", trans) { v: String -> trans = v },
+                        ).forEach { (label, value, set) ->
+                            OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(chol, { chol = it }, Modifier.weight(1f), label = { Text("Chol") }, suffix = { Text("mg") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        listOf(
+                            Triple("Ω3", o3) { v: String -> o3 = v },
+                            Triple("Ω6", o6) { v: String -> o6 = v },
+                            Triple("Ω9", o9) { v: String -> o9 = v },
+                        ).forEach { (label, value, set) ->
+                            OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        }
+                    }
+                }
                 problem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
             }
         },
@@ -152,7 +226,21 @@ fun MealDialog(title: String, initial: MealEntity, onDismiss: () -> Unit, onSave
             TextButton(enabled = valid, onClick = {
                 val meal = initial.copy(
                     name = name, kcal = kcal.toIntOrNull() ?: 0, proteinG = p.toIntOrNull() ?: 0,
-                    carbsG = c.toIntOrNull() ?: 0, fatG = f.toIntOrNull() ?: 0, note = note,
+                    carbsG = c.toIntOrNull() ?: 0, fatG = f.toIntOrNull() ?: 0, note = note.ifBlank { null },
+                    fiberG = if (detailed) opt(fiber) else initial.fiberG,
+                    solubleFiberG = if (detailed) opt(solFiber) else initial.solubleFiberG,
+                    insolubleFiberG = if (detailed) opt(insolFiber) else initial.insolubleFiberG,
+                    sugarsG = if (detailed) opt(sugars) else initial.sugarsG,
+                    addedSugarsG = if (detailed) opt(addedSugars) else initial.addedSugarsG,
+                    starchG = if (detailed) opt(starch) else initial.starchG,
+                    satFatG = if (detailed) opt(sat) else initial.satFatG,
+                    monoFatG = if (detailed) opt(mono) else initial.monoFatG,
+                    polyFatG = if (detailed) opt(poly) else initial.polyFatG,
+                    transFatG = if (detailed) opt(trans) else initial.transFatG,
+                    cholesterolMg = if (detailed) opt(chol) else initial.cholesterolMg,
+                    omega3G = if (detailed) opt(o3) else initial.omega3G,
+                    omega6G = if (detailed) opt(o6) else initial.omega6G,
+                    omega9G = if (detailed) opt(o9) else initial.omega9G,
                 )
                 scope.launch {
                     when (val r = onSave(meal)) {

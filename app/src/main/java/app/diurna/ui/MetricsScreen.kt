@@ -45,18 +45,18 @@ import kotlin.math.roundToInt
 private const val TOP_LIFTS = 5
 
 @Composable
-fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues) {
+fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues, onClose: () -> Unit) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val detail by vm.detail.collectAsStateWithLifecycle()
     val cardioDetail by vm.cardioDetail.collectAsStateWithLifecycle()
     val m = ui ?: return
-    BackHandler(enabled = detail != null || cardioDetail != null) { vm.closeExercise() }
+    BackHandler(enabled = detail != null || cardioDetail != null, onBack = onClose)
     val padding = PaddingValues(
         start = 16.dp, end = 16.dp, top = contentPadding.calculateTopPadding() + 16.dp,
         bottom = contentPadding.calculateBottomPadding() + 16.dp,
     )
-    detail?.let { ExerciseScreen(it, m.range, padding, vm); return }
-    cardioDetail?.let { CardioScreen(it, m.range, padding, vm); return }
+    detail?.let { ExerciseScreen(it, m.range, padding, vm, onClose); return }
+    cardioDetail?.let { CardioScreen(it, m.range, padding, vm, onClose); return }
     var allLifts by rememberSaveable { mutableStateOf(false) }
     LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -68,6 +68,7 @@ fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues) {
         item { RangeChips(m.range, vm::setRange) }
         item { WeightCardView(m.weight, m.showDots, m.from, m.to) }
         item { MoodCardView(m.mood, m.from, m.to) }
+        m.macros?.let { card -> item { MacroCardView(card, m.from, m.to, vm::setMacroChartMode) } }
         item { TrainingCardView(m.training) }
         // Only once cardio has been logged; lifting-only Metrics is unchanged.
         m.cardio?.let { c -> item { CardioCardView(c, onOpen = vm::openCardio) } }
@@ -148,6 +149,85 @@ private fun MoodCardView(card: MoodCard, from: LocalDate, to: LocalDate) {
 }
 
 @Composable
+private fun MacroCardView(
+    card: MacroCard,
+    from: LocalDate,
+    to: LocalDate,
+    onMode: (Metrics.MacroChartMode) -> Unit,
+) {
+    val chip = if (card.daysWithFood == 1) "1 day" else "${card.daysWithFood} days"
+    SectionCard("Macros", chip = { Hint(chip) }) {
+        if (card.daysWithFood == 0) {
+            Hint("No food logged in this range.")
+            return@SectionCard
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Metrics.MacroChartMode.entries.forEach { mode ->
+                    FilterChip(mode == card.mode, { onMode(mode) }, label = { Text(mode.label) })
+                }
+            }
+        }
+        val avg = card.average
+        val avgTotal = card.averageKcal
+        if (avg != null && avgTotal != null) {
+            val unit = if (card.daily) "kcal · daily avg" else "kcal · weekly avg"
+            Headline(
+                value = "%,d".format(avgTotal.roundToInt()),
+                unit = unit,
+                delta = null,
+                deltaColor = null,
+            )
+            val pct = Metrics.macroPercent(avg)
+            if (pct != null) {
+                val fiberBit = if (avg.fiberKcal > 0) " · Fiber ${pct.fiberKcal.roundToInt()}%" else ""
+                Hint(
+                    "P ${pct.proteinKcal.roundToInt()}% · C ${pct.carbsKcal.roundToInt()}%$fiberBit · F ${pct.fatKcal.roundToInt()}%",
+                )
+            }
+        }
+        val c = MaterialTheme.colorScheme
+        val fatColor = LocalStatusColors.current.warn
+        // Fourth fiber segment only when any bar has fiber kcal, so basic P/C/F users see the same 3-segment chart.
+        val showFiber = card.stacks.any { (it?.fiberKcal ?: 0.0) > 0.0 }
+        val fiberColor = c.tertiary
+        val colors = if (showFiber) listOf(c.primary, c.secondary, fiberColor, fatColor)
+        else listOf(c.primary, c.secondary, fatColor)
+        val shown = if (card.mode == Metrics.MacroChartMode.PERCENT) card.percentStacks else card.stacks
+        val bars = shown.map { s ->
+            s?.let {
+                if (showFiber) StackBar(listOf(it.proteinKcal, it.carbsKcal, it.fiberKcal, it.fatKcal))
+                else StackBar(listOf(it.proteinKcal, it.carbsKcal, it.fatKcal))
+            }
+        }
+        val isPct = card.mode == Metrics.MacroChartMode.PERCENT
+        val ref = card.targetKcal?.toDouble()?.takeIf { !isPct }
+        val period = if (card.daily) "daily" else "weekly"
+        val modeWord = if (isPct) "percent" else "calories"
+        StackedBarChart(
+            bars = bars,
+            colors = colors,
+            description = "Calories by macro, $period $modeWord from ${from.short()} to ${to.short()}" +
+                (ref?.let { ", target %,d kcal".format(it.roundToInt()) } ?: ""),
+            yMax = if (isPct) 100.0 else null,
+            reference = ref,
+            label = if (isPct) { v -> "${v.roundToInt()}%" } else { v ->
+                if (v >= 1000) "%.1fk".format(v / 1000) else "${v.roundToInt()}"
+            },
+        )
+        ChartDates(from.short(), to.short())
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Legend("Protein", c.primary)
+            Legend("Carbs", c.secondary)
+            if (showFiber) Legend("Fiber", fiberColor)
+            Legend("Fat", fatColor)
+            if (ref != null) Hint("Dashed = target")
+            else if (!card.daily) Hint("Week averages")
+        }
+    }
+}
+
+@Composable
 private fun TrainingCardView(t: TrainingCard) {
     SectionCard("Training", chip = { Hint("${t.workouts} workouts") }) {
         if (t.workouts == 0) {
@@ -206,12 +286,12 @@ private fun CardioCardView(c: CardioCard, onOpen: (Long) -> Unit) {
 }
 
 @Composable
-private fun CardioScreen(d: CardioDetail, range: Metrics.Range, padding: PaddingValues, vm: MetricsViewModel) {
+private fun CardioScreen(d: CardioDetail, range: Metrics.Range, padding: PaddingValues, vm: MetricsViewModel, onClose: () -> Unit) {
     val label = d.metric.label(d.style)
     LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(vm::closeExercise) {
+                IconButton(onClose) {
                     Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = "Back")
                 }
                 Text(d.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
@@ -333,11 +413,11 @@ private fun LiftRowView(r: LiftRow, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ExerciseScreen(d: ExerciseDetail, range: Metrics.Range, padding: PaddingValues, vm: MetricsViewModel) {
+private fun ExerciseScreen(d: ExerciseDetail, range: Metrics.Range, padding: PaddingValues, vm: MetricsViewModel, onClose: () -> Unit) {
     LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(vm::closeExercise) {
+                IconButton(onClose) {
                     Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = "Back")
                 }
                 Text(d.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)

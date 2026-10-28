@@ -146,4 +146,96 @@ object Metrics {
 
     fun days(from: LocalDate, to: LocalDate): List<LocalDate> =
         generateSequence(from) { it.plusDays(1) }.takeWhile { it <= to }.toList()
+
+    // ---- Macros (kcal from protein / carbs / fat) ----
+
+    /** Absolute stacked kcal, or each bar scaled to 100%. Remembered like [Range]. */
+    enum class MacroChartMode(val label: String) { KCAL("kcal"), PERCENT("%") }
+
+    /**
+     * One day's (or week's average) calories from each macro. [carbsKcal] is available-carb energy
+     * after the fiber adjustment; [fiberKcal] is 0 when fiber is unknown (plain 4/4/9).
+     */
+    data class MacroStack(
+        val date: LocalDate,
+        val proteinKcal: Double,
+        val carbsKcal: Double,
+        val fatKcal: Double,
+        val fiberKcal: Double = 0.0,
+    ) {
+        val total: Double get() = proteinKcal + carbsKcal + fiberKcal + fatKcal
+    }
+
+    /** Grams → kcal via [MacroEnergy]. Missing P/C/F count as 0; unknown fiber means no adjustment. */
+    fun macroKcal(
+        date: LocalDate,
+        proteinG: Int?,
+        carbsG: Int?,
+        fatG: Int?,
+        fiberG: Int? = null,
+        solubleFiberG: Int? = null,
+        insolubleFiberG: Int? = null,
+    ): MacroStack {
+        val e = MacroEnergy.kcal(proteinG, carbsG, fatG, fiberG, solubleFiberG, insolubleFiberG)
+        return MacroStack(date, e.proteinKcal, e.carbsKcal, e.fatKcal, e.fiberKcal)
+    }
+
+    /**
+     * One stack per day in [from]..[to]. Days with no entry in [byDate] are null (a chart gap).
+     * A day present with all-zero macros still counts as a bar (food was logged).
+     */
+    fun dailyMacroStacks(byDate: Map<LocalDate, MacroStack>, from: LocalDate, to: LocalDate): List<MacroStack?> =
+        days(from, to).map { byDate[it] }
+
+    /**
+     * Monday-week averages of days that have food. Weeks with no food days are null (gap).
+     * Every week touching [from]..[to] is included, same shape as [weeklyVolume].
+     */
+    fun weeklyMacroAverages(byDate: Map<LocalDate, MacroStack>, from: LocalDate, to: LocalDate): List<MacroStack?> {
+        val inWindow = byDate.filterKeys { it in weekOf(from)..to }
+        return generateSequence(weekOf(from)) { it.plusWeeks(1) }.takeWhile { it <= to }.map { monday ->
+            val days = inWindow.filterKeys { weekOf(it) == monday }.values
+            if (days.isEmpty()) null
+            else MacroStack(
+                date = monday,
+                proteinKcal = days.map { it.proteinKcal }.average(),
+                carbsKcal = days.map { it.carbsKcal }.average(),
+                fatKcal = days.map { it.fatKcal }.average(),
+                fiberKcal = days.map { it.fiberKcal }.average(),
+            )
+        }.toList()
+    }
+
+    /**
+     * Share of each macro as 0–100. Null input or a zero total → null (gap; no divide-by-zero).
+     */
+    fun macroPercent(stack: MacroStack?): MacroStack? {
+        if (stack == null) return null
+        val t = stack.total
+        if (t <= 0.0) return null
+        return MacroStack(
+            date = stack.date,
+            proteinKcal = 100.0 * stack.proteinKcal / t,
+            carbsKcal = 100.0 * stack.carbsKcal / t,
+            fatKcal = 100.0 * stack.fatKcal / t,
+            fiberKcal = 100.0 * stack.fiberKcal / t,
+        )
+    }
+
+    /** Mean of non-null stacks' totals; null when none. */
+    fun averageMacroTotal(stacks: List<MacroStack?>): Double? =
+        stacks.mapNotNull { it?.total }.takeIf { it.isNotEmpty() }?.average()
+
+    /** Mean of each macro across non-null stacks; null when none. */
+    fun averageMacroStack(stacks: List<MacroStack?>): MacroStack? {
+        val known = stacks.filterNotNull()
+        if (known.isEmpty()) return null
+        return MacroStack(
+            date = known.last().date,
+            proteinKcal = known.map { it.proteinKcal }.average(),
+            carbsKcal = known.map { it.carbsKcal }.average(),
+            fatKcal = known.map { it.fatKcal }.average(),
+            fiberKcal = known.map { it.fiberKcal }.average(),
+        )
+    }
 }

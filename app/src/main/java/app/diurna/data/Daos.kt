@@ -326,6 +326,25 @@ interface FoodDao {
     )
     fun observeKcal(from: String, to: String): Flow<List<DateKcal>>
 
+    /** Each day's protein/carbs/fat grams from estimated entries. Missing P/C/F count as 0; fiber SUM stays null if all null. */
+    @Query(
+        """SELECT date,
+              SUM(COALESCE(protein_g, 0)) AS proteinG,
+              SUM(COALESCE(carbs_g, 0)) AS carbsG,
+              SUM(COALESCE(fat_g, 0)) AS fatG,
+              SUM(fiber_g) AS fiberG,
+              SUM(soluble_fiber_g) AS solubleFiberG,
+              SUM(insoluble_fiber_g) AS insolubleFiberG
+           FROM food_entry
+           WHERE date BETWEEN :from AND :to AND estimated_at IS NOT NULL
+           GROUP BY date"""
+    )
+    fun observeMacros(from: String, to: String): Flow<List<DateMacros>>
+
+    /** How many food entries have ever been estimated; Metrics hides the macros card while 0. */
+    @Query("SELECT COUNT(*) FROM food_entry WHERE estimated_at IS NOT NULL")
+    fun observeEstimatedFoodCount(): Flow<Int>
+
     @Insert
     suspend fun insert(entry: FoodEntryEntity): Long
 
@@ -356,7 +375,11 @@ interface FoodDao {
     /** New text or photo means new food: the entry becomes an AI entry and is re-estimated. */
     @Query(
         """UPDATE food_entry SET text = :text, time = :time, photo = :photo, kcal_low = NULL, kcal_high = NULL, protein_g = NULL,
-           carbs_g = NULL, fat_g = NULL, estimate_note = NULL, estimate_model = NULL, estimated_at = NULL,
+           carbs_g = NULL, fat_g = NULL, fiber_g = NULL, soluble_fiber_g = NULL, insoluble_fiber_g = NULL,
+           sugars_g = NULL, added_sugars_g = NULL, starch_g = NULL,
+           sat_fat_g = NULL, mono_fat_g = NULL, poly_fat_g = NULL, trans_fat_g = NULL,
+           cholesterol_mg = NULL, omega3_g = NULL, omega6_g = NULL, omega9_g = NULL,
+           estimate_note = NULL, estimate_model = NULL, estimated_at = NULL,
            estimate_error = NULL, source = 'ai', meal_id = NULL, servings = 1.0 WHERE id = :id"""
     )
     suspend fun edit(id: Long, text: String, time: String, photo: String?)
@@ -372,9 +395,20 @@ interface FoodDao {
     @Query(
         """UPDATE food_entry SET source = 'meal', meal_id = :mealId, servings = :servings, text = :text,
            kcal_low = :kcal, kcal_high = :kcal, protein_g = :protein, carbs_g = :carbs, fat_g = :fat,
+           fiber_g = :fiber, soluble_fiber_g = :solubleFiber, insoluble_fiber_g = :insolubleFiber,
+           sugars_g = :sugars, added_sugars_g = :addedSugars, starch_g = :starch,
+           sat_fat_g = :satFat, mono_fat_g = :monoFat, poly_fat_g = :polyFat, trans_fat_g = :transFat,
+           cholesterol_mg = :cholesterol, omega3_g = :omega3, omega6_g = :omega6, omega9_g = :omega9,
            estimate_note = NULL, estimate_model = NULL, estimated_at = :at, estimate_error = NULL WHERE id = :id"""
     )
-    suspend fun setMeal(id: Long, mealId: Long?, servings: Double, text: String, kcal: Int, protein: Int, carbs: Int, fat: Int, at: Long)
+    suspend fun setMeal(
+        id: Long, mealId: Long?, servings: Double, text: String, kcal: Int, protein: Int, carbs: Int, fat: Int,
+        fiber: Int?, solubleFiber: Int?, insolubleFiber: Int?,
+        sugars: Int?, addedSugars: Int?, starch: Int?,
+        satFat: Int?, monoFat: Int?, polyFat: Int?, transFat: Int?,
+        cholesterol: Int?, omega3: Int?, omega6: Int?, omega9: Int?,
+        at: Long,
+    )
 
     @Query("UPDATE food_entry SET time = :time WHERE id = :id")
     suspend fun setTime(id: Long, time: String)

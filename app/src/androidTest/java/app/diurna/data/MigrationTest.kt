@@ -220,4 +220,29 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v9ToV10AddsDetailedNutritionColumns() {
+        helper.createDatabase(dbName + "-10", 9).use { db ->
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g) VALUES (1, 'Oats', 150, 5, 27, 3)"
+            )
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-28', 0)")
+            db.execSQL(
+                "INSERT INTO food_entry (id, date, time, text, logged_at, kcal_low, kcal_high, protein_g, carbs_g, fat_g, source, servings) " +
+                    "VALUES (1, '2026-10-28', '08:00', 'Oats', 1, 150, 150, 5, 27, 3, 'meal', 1.0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-10", 10, true)
+        db.query("SELECT fiber_g, sugars_g, sat_fat_g, omega3_g, cholesterol_mg FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            for (i in 0..4) assertTrue("meal detail col $i starts null", it.isNull(i))
+        }
+        db.query("SELECT fiber_g, sugars_g, sat_fat_g, omega3_g, cholesterol_mg, protein_g, carbs_g FROM food_entry WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            for (i in 0..4) assertTrue("food detail col $i starts null", it.isNull(i))
+            assertEquals(5, it.getInt(5))
+            assertEquals(27, it.getInt(6))
+        }
+        db.close()
+    }
 }

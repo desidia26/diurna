@@ -24,7 +24,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FoodEntryEntity::class,
         MealEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -41,6 +41,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AutoMigration(from = 7, to = 8),
         // v9: cardio exercises (exercise.kind) and their pieces' distance, time, split, power, energy, HR.
         AutoMigration(from = 8, to = 9),
+        // v10: detailed nutrition on meals and food entries (fiber, sugars, starch, lipid breakdown).
+        AutoMigration(from = 9, to = 10),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
