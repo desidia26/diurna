@@ -18,7 +18,7 @@ class EvalRunner(
         val claudeModel: String? = null,
         val ollamaModel: String? = null,
         val ollamaBaseUrl: String? = null,
-        /** When true, ollama skips cardio/vision cases (default for CPU smoke). */
+        /** When true, ollama skips cardio/vision/label cases (default for CPU smoke). */
         val ollamaTextOnly: Boolean = true,
     )
 
@@ -91,7 +91,12 @@ class EvalRunner(
                             skipReason = "ollama smoke skips vision cases by default",
                         )
                     }
-                    val est = clients.food.estimate(case.input.text.orEmpty(), photo)
+                    val est = clients.food.estimate(
+                        case.input.text.orEmpty(),
+                        photo,
+                        detailed = case.input.detailed || case.input.ingredients,
+                        ingredients = case.input.ingredients,
+                    )
                     EvalScoring.scoreFood(case, est, clients.scoringMode).copy(provider = pid.id)
                 }
                 "cardio" -> {
@@ -112,6 +117,24 @@ class EvalRunner(
                     val reading = reader.read(photo)
                     EvalScoring.scoreCardio(case, reading, clients.scoringMode).copy(provider = pid.id)
                 }
+                "label" -> {
+                    if (pid == EvalProviderId.OLLAMA && config.ollamaTextOnly) {
+                        return CaseScore(
+                            case.id, pid.id, case.prompt, passed = true, skipped = true,
+                            skipReason = "ollama smoke skips label/vision by default",
+                        )
+                    }
+                    val reader = clients.label
+                        ?: return CaseScore(
+                            case.id, pid.id, case.prompt, passed = true, skipped = true,
+                            skipReason = "no label client",
+                        )
+                    if (photo == null) {
+                        return CaseScore(case.id, pid.id, case.prompt, passed = false, error = "label case needs image")
+                    }
+                    val reading = reader.read(photo)
+                    EvalScoring.scoreLabel(case, reading, clients.scoringMode).copy(provider = pid.id)
+                }
                 else -> CaseScore(case.id, pid.id, case.prompt, passed = false, error = "unknown prompt ${case.prompt}")
             }
         } catch (e: ProviderSkip) {
@@ -124,6 +147,7 @@ class EvalRunner(
             when (case.prompt) {
                 "food" -> EvalScoring.scoreFoodFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "cardio" -> EvalScoring.scoreCardioFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
+                "label" -> EvalScoring.scoreLabelFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 else -> CaseScore(case.id, pid.id, case.prompt, passed = false, error = e.message)
             }
         } catch (e: Exception) {

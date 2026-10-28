@@ -2,6 +2,7 @@ package app.diurna.eval
 
 import app.diurna.ai.CardioReading
 import app.diurna.ai.FoodEstimate
+import app.diurna.ai.NutritionLabelReading
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -107,6 +108,30 @@ object EvalScoring {
                 e.noteMaxLen?.let {
                     checks += CheckResult("note_len", estimate.note.length <= it, "len=${estimate.note.length} max=$it")
                 }
+                if (e.requireDetail) {
+                    val hasDetail = listOf(
+                        estimate.fiberG, estimate.solubleFiberG, estimate.insolubleFiberG,
+                        estimate.sugarsG, estimate.addedSugarsG, estimate.starchG,
+                        estimate.satFatG, estimate.monoFatG, estimate.polyFatG, estimate.transFatG,
+                        estimate.cholesterolMg, estimate.omega3G, estimate.omega6G, estimate.omega9G,
+                    ).any { it != null }
+                    checks += CheckResult(
+                        "has_detail",
+                        hasDetail,
+                        "fiber=${estimate.fiberG} sugars=${estimate.sugarsG} sat=${estimate.satFatG}",
+                        // Weak smoke models often omit optional detail; informational for parse-health.
+                        required = bandsRequired,
+                    )
+                }
+                if (e.requireIngredients) {
+                    val n = estimate.ingredients?.size ?: 0
+                    checks += CheckResult(
+                        "has_ingredients",
+                        n > 0,
+                        "count=$n",
+                        required = bandsRequired,
+                    )
+                }
                 checks += CheckResult("range_ordered", estimate.kcalLow <= estimate.kcalHigh, "${estimate.kcalLow}<=${estimate.kcalHigh}")
                 checks += CheckResult(
                     "non_negative",
@@ -164,6 +189,49 @@ object EvalScoring {
         )
     }
 
+    fun scoreLabel(
+        case: EvalCase,
+        reading: NutritionLabelReading,
+        mode: ScoringMode = ScoringMode.ACCURACY,
+    ): CaseScore {
+        val bandsRequired = mode == ScoringMode.ACCURACY
+        val e = case.expect
+        val checks = mutableListOf<CheckResult>()
+        when (e.outcome) {
+            "reject" -> checks += CheckResult(
+                "should_have_rejected",
+                false,
+                "got a reading: ${reading.productName} ${reading.kcal} kcal",
+            )
+            "reading" -> {
+                checks += CheckResult("parsed", true, "NutritionLabelReading")
+                checks += CheckResult("kcal_positive", reading.kcal > 0, "kcal=${reading.kcal}")
+                e.kcal?.let { r ->
+                    checks += CheckResult(
+                        "kcal",
+                        r.contains(reading.kcal),
+                        "got ${reading.kcal} want ${r.min}-${r.max}",
+                        required = bandsRequired,
+                    )
+                }
+                e.proteinG?.let { checks += band("protein_g", reading.proteinG, it, bandsRequired) }
+                e.carbsG?.let { checks += band("carbs_g", reading.carbsG, it, bandsRequired) }
+                e.fatG?.let { checks += band("fat_g", reading.fatG, it, bandsRequired) }
+                checks += CheckResult(
+                    "non_negative",
+                    listOf(reading.kcal, reading.proteinG, reading.carbsG, reading.fatG).all { it >= 0 },
+                    "ok",
+                )
+            }
+            else -> checks += CheckResult("unknown_outcome", false, e.outcome)
+        }
+        return CaseScore(
+            case.id, "", case.prompt,
+            passed = checks.filter { it.required }.all { it.passed },
+            checks = checks,
+        )
+    }
+
     fun scoreFoodFailure(case: EvalCase, error: String): CaseScore {
         val wantReject = case.expect.outcome == "reject"
         return CaseScore(
@@ -177,6 +245,18 @@ object EvalScoring {
     }
 
     fun scoreCardioFailure(case: EvalCase, error: String): CaseScore {
+        val wantReject = case.expect.outcome == "reject"
+        return CaseScore(
+            caseId = case.id,
+            provider = "",
+            prompt = case.prompt,
+            passed = wantReject,
+            error = error,
+            checks = listOf(CheckResult("failure_as_reject", wantReject, error)),
+        )
+    }
+
+    fun scoreLabelFailure(case: EvalCase, error: String): CaseScore {
         val wantReject = case.expect.outcome == "reject"
         return CaseScore(
             caseId = case.id,

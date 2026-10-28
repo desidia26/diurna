@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Tiny smoke set for Ollama CI (no secrets). Text-only food cases. Scores parse health; accuracy bands are informational for ollama.",
+  "description": "Tiny smoke set for Ollama CI (no secrets). Text-only food cases (basic, detailed, ingredients). Scores parse health; accuracy bands are informational for ollama.",
   "passThreshold": 0.5,
   "cases": [
     {
@@ -40,6 +40,45 @@
         "carbsG": { "min": 0, "max": 20 },
         "fatG": { "min": 5, "max": 40 },
         "macrosConsistentWithKcal": true
+      }
+    },
+    {
+      "id": "smoke-detailed-oatmeal",
+      "prompt": "food",
+      "tags": ["smoke", "detailed"],
+      "input": {
+        "text": "bowl of oatmeal with milk and banana",
+        "detailed": true
+      },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 300,
+        "kcalTolPct": 100,
+        "proteinG": { "min": 0, "max": 30 },
+        "carbsG": { "min": 20, "max": 90 },
+        "fatG": { "min": 0, "max": 25 },
+        "macrosConsistentWithKcal": true,
+        "requireDetail": true
+      }
+    },
+    {
+      "id": "smoke-ingredients-chicken",
+      "prompt": "food",
+      "tags": ["smoke", "ingredients"],
+      "input": {
+        "text": "grilled chicken breast with rice and broccoli",
+        "detailed": true,
+        "ingredients": true
+      },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 450,
+        "kcalTolPct": 100,
+        "proteinG": { "min": 10, "max": 80 },
+        "carbsG": { "min": 10, "max": 100 },
+        "fatG": { "min": 0, "max": 40 },
+        "macrosConsistentWithKcal": true,
+        "requireIngredients": true
       }
     }
   ]
