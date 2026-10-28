@@ -262,10 +262,7 @@ class DetailBackfillWorker(context: Context, params: WorkerParameters) : Corouti
         notifyProgress(0, 0)
         val runner = DetailBackfillRunner(
             db = c.db,
-            estimator = SelectedFoodEstimator({ c.aiProvider.get() }, mapOf(
-                AiProvider.ANTHROPIC to ClaudeFoodEstimator({ c.apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
-                AiProvider.XAI to GrokFoodEstimator({ c.apiKeys.getValue(AiProvider.XAI).get() }),
-            )),
+            estimator = c.foodEstimator,
             photo = c.foodPhotos::read,
             fdcKeyPresent = { c.usdaKey.get()?.isNotBlank() == true },
             aminoResolver = c.aminoResolver,
