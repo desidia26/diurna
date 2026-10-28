@@ -72,7 +72,13 @@ object EstimatePrompt {
         return FoodEstimate(
             kcalLow = minOf(a, b), kcalHigh = maxOf(a, b),
             proteinG = int("protein_g"), carbsG = int("carbs_g"), fatG = int("fat_g"),
-            note = node.get("note")?.asText().orEmpty().trim(),
+            note = sanitizeNote(node.get("note")?.asText().orEmpty()),
         )
     }
+    /** Keeps the note short and free of control characters; the model is asked for under 80. */
+    fun sanitizeNote(raw: String, maxLen: Int = NOTE_MAX): String =
+        raw.filterNot { it.isISOControl() }.trim().take(maxLen)
+
+    const val NOTE_MAX = 120
+
 }

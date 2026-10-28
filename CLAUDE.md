@@ -1,6 +1,6 @@
 # Diurna
 
-Personal Android app (Kotlin, Jetpack Compose, Room) for one person's phone: a porch-QR alarm, food logging with AI estimates and barcodes, workouts from a weekly routine (lifting, plus optional cardio), steps and an evening check-in. Read [README.md](README.md) for the mission, principles and architecture map, and [BACKLOG.md](BACKLOG.md) for the work list.
+Android app (Kotlin, Jetpack Compose, Room): a porch-QR alarm, food logging with AI estimates and barcodes, workouts from a weekly routine (lifting, plus optional cardio), steps and an evening check-in. Read [README.md](README.md) for the mission, principles and architecture map, and [BACKLOG.md](BACKLOG.md) for the work list.
 
 ## Commands
 
@@ -18,8 +18,9 @@ Check a build by its exit code, not by filtered output.
 - **Never run device tests on the real phone.** `connectedDebugAndroidTest` uninstalls the app afterwards and wipes its data. Use `scripts/test`, which only targets the emulator.
 - **Install to the phone only through `scripts/release`.** It backs up first and checks that no rows were lost. Don't uninstall the app, clear its data, reboot the phone or change its settings without asking.
 - **Never change `applicationId app.daybook` or the signing key**. The app was renamed from Daybook to Diurna; the code package is `app.diurna`, but the app id, `daybook.db` and backup file names keep the old name on purpose (`signing/`, git-ignored). Either change makes in-place updates impossible.
-- **Never commit secrets or personal data:** API keys, `signing/`, `local.properties`, `backups/`, databases. The Claude API key is entered in the app and stored encrypted on the phone; never put one in code, tests or chat.
-- **Every schema change ships with a migration and a `MigrationTest` case.** Prefer `AutoMigration`; data-only changes use a `Migration`. Never a destructive fallback.
+- **Never rewrite `main`'s history** (no force-push, rebase or amend of pushed commits). `versionCode` is the commit count, so dropping commits makes the next build older than the installed one, and Android won't downgrade without wiping data.
+- **Never commit secrets or personal data:** API keys, `signing/`, `local.properties`, `backups/`, databases. AI provider keys are entered in the app and stored encrypted on the phone; never put one in code, tests or chat.
+- **Every schema change ships with a migration and a `MigrationTest` case.** Prefer `AutoMigration`; data-only changes use a `Migration`. Never a destructive fallback. Other people run the app too, on phones with no backup script, so a bad migration there can't be undone.
 
 ## Conventions
 
@@ -30,4 +31,4 @@ Check a build by its exit code, not by filtered output.
 - Match the surrounding code's comment density and naming. Comments explain why, not what.
 - UI is dark only: grey, black, purple, white.
 - New features start with a discussion of the data shape before code, unless asked to just build.
-- When something ships, add it to BACKLOG.md's Done table, and keep README's "How it works" table current.
+- When something ships, add it to BACKLOG.md's Done table, and keep README's "How it works" table current. Anything the user would notice also gets a `domain/Changelog.kt` entry (next id, plain words), shown once as What's new after the update.
