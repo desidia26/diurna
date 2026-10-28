@@ -105,4 +105,51 @@ class BarcodeLookupTest {
         assertTrue(m.note!!.startsWith("1 cup AAA"))
         assertEquals(60, m.note!!.length)
     }
+
+    @Test fun addsFiberBackIntoTotalCarbsUsStyle() {
+        // OFF carbs are available (exclude fiber). We store total = available + fiber.
+        val m = parseOffProduct(off("""{"product_name":"Beans","nutriments":{
+            "energy-kcal_100g":100,"carbohydrates_100g":20,"fiber_100g":8,"proteins_100g":5,"fat_100g":1}}"""))!!
+        assertEquals(28, m.carbsG) // 20 + 8
+        assertEquals(8, m.fiberG)
+    }
+
+    @Test fun optionalMacrosNullWhenMissingZeroWhenPresent() {
+        val missing = parseOffProduct(off("""{"product_name":"X","nutriments":{"energy-kcal_100g":100}}"""))!!
+        assertNull(missing.fiberG)
+        assertNull(missing.sugarsG)
+        assertNull(missing.satFatG)
+        assertNull(missing.omega3G)
+        assertNull(missing.cholesterolMg)
+        val zero = parseOffProduct(off("""{"product_name":"Y","nutriments":{
+            "energy-kcal_100g":100,"fiber_100g":0,"sugars_100g":0,"saturated-fat_100g":0,
+            "omega-3-fat_100g":0,"cholesterol_100g":0}}"""))!!
+        assertEquals(0, zero.fiberG)
+        assertEquals(0, zero.sugarsG)
+        assertEquals(0, zero.satFatG)
+        assertEquals(0, zero.omega3G)
+        assertEquals(0, zero.cholesterolMg) // 0 g → 0 mg
+    }
+
+    @Test fun scalesDetailAndCholesterolToServing() {
+        val m = parseOffProduct(off("""{"product_name":"Oil","serving_quantity":"50",
+            "nutriments":{"energy-kcal_100g":800,"fat_100g":90,"fiber_100g":2,"carbohydrates_100g":0,
+            "omega-3-fat_100g":10,"omega-6-fat_100g":20,"omega-9-fat_100g":30,
+            "soluble-fiber_100g":1,"insoluble-fiber_100g":1,"cholesterol_100g":0.2}}"""))!!
+        assertEquals(1, m.fiberG) // 2 * 0.5
+        assertEquals(1, m.carbsG) // available 0 + fiber 2, scaled → 1
+        assertEquals(5, m.omega3G)
+        assertEquals(10, m.omega6G)
+        assertEquals(15, m.omega9G)
+        assertEquals(1, m.solubleFiberG)
+        assertEquals(1, m.insolubleFiberG)
+        assertEquals(100, m.cholesterolMg) // 0.2 g/100g * 50/100 * 1000 = 100 mg
+    }
+
+    @Test fun carbsWithoutFiberStayAvailableCarbs() {
+        val m = parseOffProduct(off("""{"product_name":"Rice","nutriments":{
+            "energy-kcal_100g":130,"carbohydrates_100g":28,"proteins_100g":2,"fat_100g":0}}"""))!!
+        assertEquals(28, m.carbsG)
+        assertNull(m.fiberG)
+    }
 }

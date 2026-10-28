@@ -51,7 +51,10 @@ class MetricsRepository(db: AppDatabase) {
                     from, today, rows, t.lifting, t.cardio,
                     macros = macros.associate { row ->
                         val d = LocalDate.parse(row.date)
-                        d to Metrics.macroKcal(d, row.proteinG, row.carbsG, row.fatG)
+                        d to Metrics.macroKcal(
+                            d, row.proteinG, row.carbsG, row.fatG,
+                            row.fiberG, row.solubleFiberG, row.insolubleFiberG,
+                        )
                     },
                     hasEstimatedFood = foodCount > 0,
                 )
