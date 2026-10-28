@@ -326,7 +326,7 @@ interface FoodDao {
     )
     fun observeKcal(from: String, to: String): Flow<List<DateKcal>>
 
-    /** Each day's protein/carbs/fat grams from estimated entries. Missing P/C/F count as 0; fiber SUM stays null if all null. */
+    /** Each day's protein/carbs/fat grams from estimated entries. Missing P/C/F count as 0; optional sub-macros stay null if all null. */
     @Query(
         """SELECT date,
               SUM(COALESCE(protein_g, 0)) AS proteinG,
@@ -334,7 +334,18 @@ interface FoodDao {
               SUM(COALESCE(fat_g, 0)) AS fatG,
               SUM(fiber_g) AS fiberG,
               SUM(soluble_fiber_g) AS solubleFiberG,
-              SUM(insoluble_fiber_g) AS insolubleFiberG
+              SUM(insoluble_fiber_g) AS insolubleFiberG,
+              SUM(sugars_g) AS sugarsG,
+              SUM(added_sugars_g) AS addedSugarsG,
+              SUM(starch_g) AS starchG,
+              SUM(sat_fat_g) AS satFatG,
+              SUM(mono_fat_g) AS monoFatG,
+              SUM(poly_fat_g) AS polyFatG,
+              SUM(trans_fat_g) AS transFatG,
+              SUM(cholesterol_mg) AS cholesterolMg,
+              SUM(omega3_g) AS omega3G,
+              SUM(omega6_g) AS omega6G,
+              SUM(omega9_g) AS omega9G
            FROM food_entry
            WHERE date BETWEEN :from AND :to AND estimated_at IS NOT NULL
            GROUP BY date"""

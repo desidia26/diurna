@@ -25,6 +25,10 @@ object Changelog {
             4, "2026-10-28", "Detailed nutrition from AI estimates",
             "With Detailed nutrition on, food you describe or photograph is now estimated for fiber, sugars, starch and the kinds of fat too, not just calories and macros. Anything the AI can't judge is left blank instead of guessed as zero.",
         ),
+        Entry(
+            5, "2026-10-28", "Carbs and fats on Metrics",
+            "With Detailed nutrition on, Metrics adds a Carbs card (fiber, starch, sugars), a Fats card (saturated, mono, poly, trans) and a summary of omegas and cholesterol. Days without that detail show as gaps, and each card says how many days it covers.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
