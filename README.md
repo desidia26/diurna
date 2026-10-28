@@ -1,6 +1,6 @@
 # Diurna
 
-> A personal Android app, built for one person and one phone, and shared as-is. There's no support and no roadmap beyond [BACKLOG.md](BACKLOG.md). You're welcome to read it, fork it or borrow from it ([MIT](LICENSE)).
+> An Android app for getting up on time, getting outside and keeping an honest record of each day. Open source under [MIT](LICENSE); the work list is [BACKLOG.md](BACKLOG.md).
 
 *Diurna* is Latin for "daily things": Rome's *Acta Diurna* were public notices of each day's events. The app was called Daybook at first. The code package is now `app.diurna`, but the app id stays `app.daybook` (changing it would make Android treat it as a different app, with none of the old one's data), as do the database and backup file names.
 
@@ -16,7 +16,7 @@ Diurna treats a *day* as the basic unit: each day has a morning, the food eaten,
 - **Hard to cheat, easy to plan.** You can change or turn off an alarm until 10pm the night before; after that it's locked. There's no snooze and no emergency exit. Turning the alarm off ahead of time is fine, and those days don't count against you.
 - **Honest data.** Manual mornings are marked as manual. Backfilled food is tagged. A day with the alarm off is excluded from scoring instead of counting as missed.
 - **Low-friction logging.** Food is free text, a saved meal or a barcode scan. Sets are pre-filled from last time, and the keyboard's Next key walks through them.
-- **Local and private.** No account and no server of its own; everything lives on the phone. It makes exactly two kinds of network call: food text you log goes to the Claude API with *your own* API key, and barcode numbers you scan go to [Open Food Facts](https://world.openfoodfacts.org).
+- **Local and private.** No account and no server of its own; everything lives on the phone. It makes exactly two kinds of network call: food you log goes to the AI provider you pick (Claude or Grok) with *your own* API key, and barcode numbers you scan go to [Open Food Facts](https://world.openfoodfacts.org).
 
 ## Screenshots
 
@@ -96,7 +96,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 
 | Command | What it does |
 |---|---|
-| `scripts/release` | **Ship to the phone:** tests, release build, backup, install as an update, check no data was lost, check the alarm, tag `release-N`. Warns if the app changed but `Changelog.kt` didn't. Needs a clean working tree. |
+| `scripts/release` | **Ship to the phone:** tests, release build, backup, install as an update, check no data was lost, check the alarm, tag `release-N` and push the tag. Warns if the app changed but `Changelog.kt` didn't. Needs a clean working tree. |
 | `scripts/install` | Build, install and open a **debug** build (`--no-launch` to skip opening) |
 | `scripts/test` | Unit tests, plus device tests if an emulator is running (`unit` or `device` for just one) |
 | `scripts/emulator` | Start the emulator and wait until it's ready (`--headless` for no window, `--stop` to shut it down) |

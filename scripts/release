@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build a release and install it on the phone as an update, keeping all data.
-#   scripts/release                 tests, build, backup, install, verify, tag
+#   scripts/release                 tests, build, backup, install, verify, tag and push the tag
 #   scripts/release --skip-tests    same, without running tests first
 #
 # Stops at the first problem. Nothing is installed unless a fresh backup succeeded, and the
@@ -130,5 +130,7 @@ else
   git tag -a "$tag" -m "Release $version_new installed on the phone"
   echo "tagged $tag"
 fi
+# Pushed so GitHub records which commit each release came from; offline is fine, push it later.
+git push -q origin "$tag" 2>/dev/null && echo "pushed $tag" || echo "WARNING: couldn't push $tag; run: git push origin $tag"
 outcome="released"
 echo; echo "Released version $version_new."
