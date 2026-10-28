@@ -20,8 +20,10 @@
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- allowBackup true matches the previous default; data_extraction_rules / backup_rules still decide what is included. -->
     <application
         android:name=".DiurnaApp"
+        android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -48,6 +50,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- scripts/backup-db only; not exported so other apps cannot trigger a backup. -->
+        <activity
+            android:name=".BackupTriggerActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay" />
 
         <activity
             android:name=".alarm.AlarmActivity"

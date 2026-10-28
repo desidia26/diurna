@@ -23,7 +23,13 @@ class AlarmReceiver : BroadcastReceiver() {
 /** Alarms don't survive reboots, and clock changes shift them, so re-arm on both. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        rescheduleAsync(context, alsoWallpaper = true)
+        // Exported for the system broadcasts below; ignore anything else another app might send.
+        when (intent.action) {
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED,
+            Intent.ACTION_MY_PACKAGE_REPLACED -> rescheduleAsync(context, alsoWallpaper = true)
+        }
     }
 }
 
