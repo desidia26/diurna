@@ -1,0 +1,10 @@
+* text=auto
+
+# Shell scripts must keep LF endings to run, wherever they were checked out.
+gradlew text eol=lf
+scripts/* text eol=lf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jar binary
