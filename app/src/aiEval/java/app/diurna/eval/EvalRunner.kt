@@ -55,11 +55,11 @@ class EvalRunner(
                 }
                 val score = runCase(pid, clients, case, config)
                 scores += score
-                val reason = score.skipReason
-                if (score.skipped && reason != null && (
+                val reason = score.skipReason ?: score.error
+                if (reason != null && (
                         "not reachable" in reason || "HTTP 404" in reason ||
                             "HTTP 401" in reason || "HTTP 403" in reason
-                        )
+                        ) && (score.skipped || score.parseFailure)
                 ) {
                     providerDead = reason
                 }
@@ -137,21 +137,49 @@ class EvalRunner(
                 }
                 else -> CaseScore(case.id, pid.id, case.prompt, passed = false, error = "unknown prompt ${case.prompt}")
             }
-        } catch (e: ProviderSkip) {
-            CaseScore(case.id, pid.id, case.prompt, passed = true, skipped = true, skipReason = e.message)
         } catch (e: NoApiKey) {
             CaseScore(case.id, pid.id, case.prompt, passed = true, skipped = true, skipReason = e.message)
+        } catch (e: MissingKeySkip) {
+            // Missing key mid-case (should be rare; resolve usually catches this) — skip, not fail.
+            CaseScore(case.id, pid.id, case.prompt, passed = true, skipped = true, skipReason = e.message)
+        } catch (e: ProviderSkip) {
+            // Mid-case transport/HTTP/unavailable after the provider was resolved: no parseable
+            // output for this case → parse failure (not a skip). Initial probe UnavailableSkip
+            // is thrown from resolve() and handled above as a full-provider skip.
+            CaseScore(
+                case.id, pid.id, case.prompt,
+                passed = false,
+                error = e.message,
+                parseFailure = true,
+                checks = listOf(CheckResult("parse", false, e.message ?: "provider skip")),
+            )
         } catch (e: EstimateRetryable) {
-            CaseScore(case.id, pid.id, case.prompt, passed = true, skipped = true, skipReason = "retryable: ${e.cause?.message ?: e.message}")
+            // HTTP/transport trouble with no parseable body — hard parse failure.
+            CaseScore(
+                case.id, pid.id, case.prompt,
+                passed = false,
+                error = "retryable: ${e.cause?.message ?: e.message}",
+                parseFailure = true,
+                checks = listOf(CheckResult("parse", false, e.cause?.message ?: e.message ?: "EstimateRetryable")),
+            )
         } catch (e: EstimateFailed) {
             when (case.prompt) {
                 "food" -> EvalScoring.scoreFoodFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "cardio" -> EvalScoring.scoreCardioFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "label" -> EvalScoring.scoreLabelFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
-                else -> CaseScore(case.id, pid.id, case.prompt, passed = false, error = e.message)
+                else -> CaseScore(
+                    case.id, pid.id, case.prompt,
+                    passed = false, error = e.message, parseFailure = true,
+                )
             }
         } catch (e: Exception) {
-            CaseScore(case.id, pid.id, case.prompt, passed = false, error = "${e.javaClass.simpleName}: ${e.message}")
+            CaseScore(
+                case.id, pid.id, case.prompt,
+                passed = false,
+                error = "${e.javaClass.simpleName}: ${e.message}",
+                parseFailure = true,
+                checks = listOf(CheckResult("parse", false, "${e.javaClass.simpleName}: ${e.message}")),
+            )
         }
     }
 }

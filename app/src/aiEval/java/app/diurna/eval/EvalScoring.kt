@@ -23,6 +23,13 @@ data class CaseScore(
     val skipReason: String? = null,
     val error: String? = null,
     val checks: List<CheckResult> = emptyList(),
+    /**
+     * True when the case produced no usable structured model output (malformed/unparseable JSON,
+     * missing required fields, parser exception, empty response, or HTTP/transport error with no
+     * parseable body). Any parse failure fails the eval run regardless of pass-rate threshold.
+     * Accuracy/scoring misses are not parse failures.
+     */
+    val parseFailure: Boolean = false,
 ) {
     val failedChecks: List<CheckResult> get() = checks.filter { !it.passed && it.required }
     val infoMisses: List<CheckResult> get() = checks.filter { !it.passed && !it.required }
@@ -76,7 +83,13 @@ object EvalScoring {
                 )
             }
             "estimate" -> {
-                checks += CheckResult("not_marked_not_food", !looksNotFood, "note=${estimate.note}")
+                // Semantic "not food" label is accuracy-like; informational under PARSE_HEALTH (Ollama).
+                checks += CheckResult(
+                    "not_marked_not_food",
+                    !looksNotFood,
+                    "note=${estimate.note}",
+                    required = bandsRequired,
+                )
                 e.kcalMid?.let { mid ->
                     val tol = ((e.kcalTolPct ?: 40.0) / 100.0)
                     val lo = (mid * (1 - tol)).roundToInt()
@@ -241,6 +254,8 @@ object EvalScoring {
             passed = wantReject,
             error = error,
             checks = listOf(CheckResult("failure", wantReject, error)),
+            // Unexpected inability to produce a FoodEstimate is a parse failure.
+            parseFailure = !wantReject,
         )
     }
 
@@ -253,6 +268,7 @@ object EvalScoring {
             passed = wantReject,
             error = error,
             checks = listOf(CheckResult("failure_as_reject", wantReject, error)),
+            parseFailure = !wantReject,
         )
     }
 
@@ -265,6 +281,7 @@ object EvalScoring {
             passed = wantReject,
             error = error,
             checks = listOf(CheckResult("failure_as_reject", wantReject, error)),
+            parseFailure = !wantReject,
         )
     }
 

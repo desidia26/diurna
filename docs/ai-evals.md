@@ -30,7 +30,17 @@ A provider with a missing key (or unreachable Ollama) is **skipped** (clear mess
 
 CI installs a **checksum-verified** Ollama binary on `ubuntu-latest`, caches the model blobs (key pinned by model layer SHA-256), pulls a small instruct model, and runs the `smoke` case set. No repo secret is required. Permissions are `contents: read` only.
 
-This checks that prompts still produce **parseable** structured replies on a generic OpenAI-compatible chat API. It is **not** a measure of Grok/Claude estimate quality. For `ollama`, nutrition accuracy bands and optional detail/ingredient presence are **informational** (recorded in the report, do not fail the build); required checks are parse/structure health (successful parse, range ordered, non-negative).
+This checks that prompts still produce **parseable** structured replies on a generic OpenAI-compatible chat API. It is **not** a measure of Grok/Claude estimate quality. For `ollama`, nutrition accuracy bands, semantic not-food labeling misses, and optional detail/ingredient presence are **informational** (recorded in the report, do not fail the build); required checks are parse/structure health (successful parse, range ordered, non-negative).
+
+### Pass / fail rules (all providers)
+
+| Result | Ollama | Grok / Claude | Effect on run / CI |
+|--------|--------|---------------|--------------------|
+| **Parse failure** — malformed/unparseable JSON, missing required fields, parser exception, empty response, or HTTP/transport error with no parseable body | **Fails** the case and the run | **Fails** the case and the run | Exit non-zero; listed under **Parse failures (block the build)** in the summary. Ignores pass-rate threshold. |
+| **Accuracy / score miss** — kcal/macro bands, not-food labeling, optional detail/ingredients | Warning / informational (PARSE_HEALTH); does **not** fail the case | Counts against the provider pass-rate vs `passThreshold` (unchanged; do not loosen) | Ollama: reported under Informational. Grok/Claude: under Accuracy / score failures; overall uses existing threshold. |
+| **Skipped** — missing API key, unreachable Ollama at probe, image/vision/cardio/label cases on Ollama text-only smoke | Skip | Skip | Not a failure. |
+
+`CaseScore.parseFailure` distinguishes parse failures from score misses. `EvalReport.anyParseFailure` forces `overallPassed = false` even when every provider’s pass rate still meets `passThreshold` (e.g. 4/5 passed with one unparseable reply).
 
 **Model choice:** `qwen2.5:1.5b-instruct` (~986 MB). On CPU-only boxes it passes JSON structured-output smoke tests where the 0.5B sibling does not, while staying small enough for Actions runners and the daily CI budget. Ollama stays **text-only** (no vision input in CI; `-PollamaTextOnly=true`). Photo / cardio / label coverage belongs on Grok and Claude when their keys are present.
 
@@ -64,7 +74,7 @@ Reports: `ai-evals/out/summary.md` and `ai-evals/out/results.json` (gitignored).
 | `default` | `ai-evals/cases/default.json` | ~16 cases: typical food, detailed/ingredients, edges, menu photo, label OCR, cardio |
 | `full` | `ai-evals/cases/full.json` | default + more food variety |
 
-Expectations are **bands and tolerances**, not exact values (kcal ±%, macro ranges, parse success, not-food / reject, macro↔kcal consistency, optional `requireDetail` / `requireIngredients`). For `ollama`, bands and detail/ingredient presence are informational.
+Expectations are **bands and tolerances**, not exact values (kcal ±%, macro ranges, parse success, not-food / reject, macro↔kcal consistency, optional `requireDetail` / `requireIngredients`). For `ollama`, bands, not-food labeling, and detail/ingredient presence are informational; **parse failures still fail the run** on every provider.
 
 ### Adding a case
 

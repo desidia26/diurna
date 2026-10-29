@@ -166,4 +166,32 @@ class EvalScoringTest {
         assertTrue(missing.failedChecks.any { it.name == "has_detail" })
         assertTrue(missing.failedChecks.any { it.name == "has_ingredients" })
     }
+
+    @Test fun parseHealthOatmealMarkedNotFoodIsWarningNotFailure() {
+        // Small Ollama models sometimes label real food as "not food"; that is an accuracy miss,
+        // not a parse failure, and must not fail PARSE_HEALTH scoring.
+        val s = EvalScoring.scoreFood(
+            foodCase("estimate", mid = 300, tol = 100.0),
+            FoodEstimate(250, 350, 10, 50, 8, "not food"),
+            ScoringMode.PARSE_HEALTH,
+        )
+        assertTrue("case should pass under PARSE_HEALTH", s.passed)
+        assertFalse(s.parseFailure)
+        assertTrue(s.infoMisses.any { it.name == "not_marked_not_food" })
+    }
+
+    @Test fun unexpectedFoodFailureIsParseFailure() {
+        val c = foodCase("estimate")
+        val s = EvalScoring.scoreFoodFailure(c, "Couldn't read the estimate")
+        assertFalse(s.passed)
+        assertTrue(s.parseFailure)
+    }
+
+    @Test fun expectedRejectFailureIsNotParseFailure() {
+        val c = EvalCase("l", "label", input = CaseInput(image = "x.jpg"), expect = CaseExpect(outcome = "reject"))
+        val s = EvalScoring.scoreLabelFailure(c, "No calories found (not a nutrition label).")
+        assertTrue(s.passed)
+        assertFalse(s.parseFailure)
+    }
+
 }
