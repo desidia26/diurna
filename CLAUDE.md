@@ -6,7 +6,7 @@ Android app (Kotlin, Jetpack Compose, Room): a porch-QR alarm, food logging with
 
 - `scripts/test`: unit tests, plus device tests on a running emulator (`scripts/emulator --headless` starts one)
 - `scripts/install`: debug build onto the connected device
-- `scripts/release`: tests, release build, backup, install as an update, data check, alarm check, tag
+- `scripts/release`: tests, release build, backup, install as an update, data check, alarm check, tag. The release build's R8 step needs about 4 GB; it warns when memory is short, usually because Gradle or Kotlin daemons from an older version are still running
 - `scripts/backup-db`, `scripts/logs`, `scripts/screenshot`, `scripts/alarm-check`, `scripts/demo-data` (emulator only: replaces app data with made-up history)
 - `./gradlew assembleDebug` / `testDebugUnitTest` for a build or unit tests without a device
 - `./gradlew aiEval -Pprovider=grok|claude|ollama|all` — live AI prompt evals (see [docs/ai-evals.md](docs/ai-evals.md))

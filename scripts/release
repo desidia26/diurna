@@ -62,6 +62,17 @@ if ! $skip_tests; then
 fi
 
 step "Build release"
+# R8 runs inside Gradle's daemon with a 4 GB heap (gradle.properties). Daemons left from an older
+# Gradle or Kotlin, e.g. after an upgrade, sit on several GB each; short of memory, R8 swaps and a
+# 4-minute build takes half an hour (release 128). A warning, since other projects may use them.
+avail_gb="$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo 2>/dev/null || echo 99)"
+if (( avail_gb < 8 )); then
+  echo "WARNING: ${avail_gb} GB of memory available; R8 may be very slow. Gradle/Kotlin daemons running:"
+  ps -eo pid=,etime=,rss=,args= | awk '/GradleDaemon|kotlin.daemon/ && !/awk/ {
+    v = "?"; if (match($0, /gradle-[0-9.]+[0-9]|kotlin-compiler-embeddable-[0-9.]+[0-9]/)) v = substr($0, RSTART, RLENGTH)
+    printf "  pid %s, up %s, %.1f GB, %s\n", $1, $2, $3 / 1048576, v }'
+  echo "  Stop the ones from other versions (kill <pid>) if nothing else needs them."
+fi
 gradle assembleRelease
 version_new="$("$build_tools/aapt2" dump badging "$apk" | grep -o "versionCode='[0-9]*'" | grep -o '[0-9]*')"
 echo "built version $version_new ($(du -h "$apk" | cut -f1))"
