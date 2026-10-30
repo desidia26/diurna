@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Encrypt signing/ (both keys and their passwords) into one file to keep off this machine.
+#   scripts/backup-signing-keys            writes ~/diurna-signing-keys-<date>.tar.gz.gpg
+#   scripts/backup-signing-keys <file>     writes there instead
+#
+# gpg asks for a passphrase (AES-256). Nothing unencrypted is written to disk: tar streams straight
+# into gpg. Then the archive is opened again and its file list checked, so a typo'd passphrase or
+# a broken file shows up now rather than the day it's needed. Copy the result to a USB stick or
+# cloud storage, and keep the passphrase somewhere you won't lose it.
+#
+# Restore: gpg -d <file> | tar xzf - -C <repo>
+source "$(dirname "$0")/_lib.sh"
+
+out="${1:-$HOME/diurna-signing-keys-$(date +%Y%m%d).tar.gz.gpg}"
+[[ -d "$ROOT/signing" ]] || die "no signing/ folder in $ROOT"
+[[ -e "$out" ]] && die "$out already exists"
+command -v gpg >/dev/null || die "needs gpg"
+
+umask 077
+tar czf - -C "$ROOT" signing | gpg --symmetric --cipher-algo AES256 --output "$out"
+
+# Opening it again proves the passphrase works; --no-symkey-cache makes gpg ask for it, not reuse
+# the one it just cached.
+expected="$(cd "$ROOT" && find signing -type f | sort)"
+actual="$(gpg --quiet --no-symkey-cache --decrypt "$out" | tar tzf - | grep -v '/$' | sort)"
+[[ "$actual" == "$expected" ]] || die "the archive didn't open back up as expected; delete $out and try again"
+
+echo "wrote $out ($(du -h "$out" | cut -f1)), containing:"
+sed 's/^/  /' <<<"$actual"
+echo "Copy it somewhere off this machine, and keep the passphrase safe."
