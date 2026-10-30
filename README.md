@@ -51,7 +51,7 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Porch QR: generate (ZXing) and scan (CameraX + ML Kit, offline) | `scan/Qr.kt` |
 | Lock-screen summary: drawn as a lock-only wallpaper, centred and split around the fingerprint sensor (the day's lines just above it, the week's dots below), lines wrapping, position and text size adjustable in Setup with a live preview, redrawn when its content or settings change, at 10pm and at midnight | `wallpaper/`, `ui/SetupLockScreen.kt` |
 | Targets: Mifflin–St Jeor × activity + goal, macros from body weight and fat % | `domain/Targets.kt` |
-| Food estimates: one AI call per entry (structured JSON) when logged or its text changes, to the provider picked in Setup: Claude (`claude-haiku-5-5`, the default) or Grok (`grok-4.20-non-reasoning` via xAI's chat completions); retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); one key per provider, encrypted with the Android Keystore | `ai/` |
+| Food estimates: one AI call per entry (structured JSON) when logged or its text changes, to the provider picked in Setup: Claude (`claude-haiku-5-5`, the default), Grok (`grok-4.20-non-reasoning` via xAI's chat completions), or an OpenAI-compatible gateway (user base URL + model + optional key); optional Anthropic/xAI endpoint overrides; retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); keys encrypted with the Android Keystore | `ai/` |
 | Meal photos: optional photo on a food entry from the camera (`TakePicture` into a FileProvider scratch file) or the system photo picker, so no storage permission; decoded straight to at most 1568 px, saved as JPEG under 3.5 MB in `files/food-photos`, sent with the text as a base64 image (Claude image block, xAI `image_url` data URI). Kept out of cloud backup (its 25 MB cap), mirrored into self-backups; unused files swept at startup | `data/FoodPhotos.kt`, `data/PhotoImporter.kt`, `domain/PhotoSizing.kt`, `ui/FoodPhotoUi.kt` |
 | Barcode scanning: EAN/UPC codes looked up on Open Food Facts and checked in the meal form before saving; rescans come from the library and work offline. Answers are treated as untrusted: HTTPS only, no redirects, size and time caps, sanity limits on numbers, plain short text | `data/BarcodeLookup.kt`, `ui/BarcodeScanDialog.kt` |
 | Library: saved meals (exact numbers, tap to log, servings, optional barcode) and the exercise catalog (seeded with common lifts and a typical Planet Fitness lineup; rename, hide, delete if unused), under Setup | `data/LibraryRepository.kt`, `data/ExerciseSeed.kt`, `ui/LibraryScreens.kt` |
@@ -89,6 +89,14 @@ Requires JDK 17 and the Android SDK at `~/Android/Sdk` (platform 36), or `sdk.di
   ```
   Back the keystore up somewhere safe: Android only installs updates signed with the same key, so losing it means uninstalling (and losing the app's data) to install a new build.
 - **In the app:** open **Setup**, clear the permission checklist, add a Claude API key for food estimates, or pick Grok and add an xAI key (a separate workspace or team with a spend limit is a good idea), print the porch code and scan it once to arm alarms, then try **Test alarm in 1 minute**.
+
+
+## Local or LAN model servers
+
+Setup → Food estimates → **OpenAI-compatible** can point at a server you run (Ollama, LM Studio, llama.cpp, LiteLLM, and similar `/v1/chat/completions` hosts).
+
+- **On the phone or emulator:** plain `http` is allowed for `localhost`, `127.0.0.1`, and the emulator’s host alias `10.0.2.2` (traffic to the machine running the emulator).
+- **On another machine on your LAN:** use **HTTPS**. Plain `http` to a LAN address is rejected (platform cleartext stays off outside those localhost aliases). Practical options include Tailscale HTTPS certificates via [`tailscale serve`](https://tailscale.com/kb/1242/tailscale-serve), or a reverse proxy such as [Caddy](https://caddyserver.com/) that terminates TLS in front of the model server.
 
 ## Scripts
 

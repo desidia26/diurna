@@ -6,9 +6,7 @@ import app.diurna.ai.BackfillWorkState
 import app.diurna.ai.DetailBackfill
 import app.diurna.ai.DetailBackfillRunner
 import app.diurna.ai.DetailBackfillWorker
-import app.diurna.ai.SelectedFoodEstimator
-import app.diurna.ai.ClaudeFoodEstimator
-import app.diurna.ai.GrokFoodEstimator
+import app.diurna.ai.GatewaySettings
 import app.diurna.data.SettingsStore
 import app.diurna.wallpaper.LockStyle
 import kotlinx.coroutines.Dispatchers
@@ -67,12 +65,13 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
 
     // Food estimates
     val aiProvider = c.aiProvider.selected
+    val gateway = c.gateway.snapshot
     fun apiKeyLastFour(provider: AiProvider) = c.apiKeys.getValue(provider).lastFour
     fun setAiProvider(provider: AiProvider) = io {
         if (provider == c.aiProvider.get()) return@io
         c.aiProvider.set(provider)
         // Entries that failed on the old provider (e.g. no key) get a try on the new one.
-        if (c.apiKeys.getValue(provider).get() != null) c.food.retryFailedEstimates()
+        if (providerReady(provider)) c.food.retryFailedEstimates()
     }
     fun setApiKey(provider: AiProvider, key: String) = io {
         if (key.isBlank()) return@io
@@ -88,6 +87,19 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
         c.usdaKey.set(key)
     }
     fun clearUsdaKey() = io { c.usdaKey.clear() }
+
+    fun saveGateway(transform: (GatewaySettings) -> GatewaySettings) = io {
+        c.gateway.update(transform)
+        if (providerReady(c.aiProvider.get())) c.food.retryFailedEstimates()
+    }
+
+    private fun providerReady(provider: AiProvider): Boolean = when (provider) {
+        AiProvider.OPENAI_COMPAT -> {
+            val g = c.gateway.get()
+            g.openAiBaseUrl.isNotBlank() && g.openAiModel.isNotBlank()
+        }
+        else -> c.apiKeys.getValue(provider).get() != null
+    }
 
     val lockStyle = c.settings.lockStyle.state(LockStyle.AUTO)
     fun setLockStyle(style: LockStyle) = io { c.settings.setLockStyle(style) } // the wallpaper's collector redraws
@@ -112,10 +124,7 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
     fun refreshBackfillPreview() = io {
         val runner = DetailBackfillRunner(
             db = c.db,
-            estimator = SelectedFoodEstimator({ c.aiProvider.get() }, mapOf(
-                AiProvider.ANTHROPIC to ClaudeFoodEstimator({ c.apiKeys.getValue(AiProvider.ANTHROPIC).get() }),
-                AiProvider.XAI to GrokFoodEstimator({ c.apiKeys.getValue(AiProvider.XAI).get() }),
-            )),
+            estimator = c.foodEstimator,
             photo = c.foodPhotos::read,
             fdcKeyPresent = { c.usdaKey.get()?.isNotBlank() == true },
             aminoResolver = c.aminoResolver,

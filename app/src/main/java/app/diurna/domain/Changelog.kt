@@ -61,6 +61,10 @@ object Changelog {
             13, "2026-10-28", "Import a recipe from a link",
             "Import URL on the Meals page reads a recipe from a web page and opens the recipe editor with its name, servings and ingredients filled in. Nutrition is left for you to look up per ingredient, and nothing is saved until you tap Save.",
         ),
+        Entry(
+            14, "2026-10-28", "Use any OpenAI-compatible AI",
+            "Setup → Food estimates has a new OpenAI-compatible option, for services like OpenRouter or a model you run yourself: enter its address, the model name and a key if it needs one. Claude and Grok can also point at a different address. Nothing changes unless you set one up.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }

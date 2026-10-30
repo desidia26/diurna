@@ -123,23 +123,37 @@ class ClaudeCardioReader(
     private val apiKey: () -> String?,
     // Reading printed numbers off a screen is easy for a small vision model.
     override val model: String = "claude-haiku-5-5",
+    private val baseUrl: () -> String? = { null },
+    private val supportsImages: () -> Boolean = { true },
 ) : CardioReader {
     override suspend fun read(photo: ByteArray): CardioReading = withContext(Dispatchers.IO) {
+        if (!supportsImages()) throw EstimateFailed(VisionSupport.PHOTO_FEATURES_DISABLED)
         if (apiKey() == null) throw NoApiKey("Add an Anthropic API key in Setup to read photos")
         val params = ClaudeRequest.params(model, CardioPrompt.USER_TEXT, photo, CardioPrompt.SYSTEM, CardioPrompt.SCHEMA)
-        CardioPrompt.parse(ClaudeCall.json(apiKey, model, params, declined = "The model declined to read this photo"))
+        CardioPrompt.parse(ClaudeCall.json(apiKey, model, params, declined = "The model declined to read this photo", baseUrl = baseUrl))
     }
 }
 
 class GrokCardioReader(
     private val apiKey: () -> String?,
-    override val model: String = GrokFoodEstimator.DEFAULT_MODEL,
-    private val transport: XaiTransport = HttpXaiTransport(),
+    private val modelProvider: () -> String = { GrokFoodEstimator.DEFAULT_MODEL },
+    private val transportProvider: () -> XaiTransport = { HttpXaiTransport() },
+    private val supportsImages: () -> Boolean = { true },
 ) : CardioReader {
+    constructor(
+        apiKey: () -> String?,
+        model: String = GrokFoodEstimator.DEFAULT_MODEL,
+        transport: XaiTransport,
+        supportsImages: () -> Boolean = { true },
+    ) : this(apiKey, { model }, { transport }, supportsImages)
+
+    override val model: String get() = modelProvider()
+
     override suspend fun read(photo: ByteArray): CardioReading {
+        if (!supportsImages()) throw EstimateFailed(VisionSupport.PHOTO_FEATURES_DISABLED)
         val key = apiKey() ?: throw NoApiKey(NO_KEY)
         val request = XaiChat.request(model, CardioPrompt.SYSTEM, CardioPrompt.USER_TEXT, photo, schemaName = "cardio_summary", schema = CardioPrompt.SCHEMA)
-        return CardioPrompt.parse(XaiChat.call(transport, key, model, request))
+        return CardioPrompt.parse(XaiChat.call(transportProvider(), key, model, request))
     }
 
     companion object {

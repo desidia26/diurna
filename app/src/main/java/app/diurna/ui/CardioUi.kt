@@ -93,6 +93,7 @@ private fun PieceRow(n: Int, set: ExerciseSetEntity, style: Cardio.Style, showNu
     var editing by remember { mutableStateOf<CardioEdit?>(null) }
     var reading by remember { mutableStateOf(false) }
     var photoMenu by remember { mutableStateOf(false) }
+    val vision = vm.supportsImages()
     val attacher = rememberPhotoAttacher(vm) { name ->
         reading = true
         scope.launch {
@@ -114,10 +115,11 @@ private fun PieceRow(n: Int, set: ExerciseSetEntity, style: Cardio.Style, showNu
                 else -> Hint("Not logged yet")
             }
             attacher.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn) }
+            if (!vision) Hint("This model can't read photos. Enter the numbers by hand, or pick a vision model in Setup.")
             Row {
                 TextButton(onClick = { editing = CardioEdit(set.piece()) }, enabled = !reading) { Text(if (set.isDone) "Edit" else "Enter") }
                 Box {
-                    TextButton(onClick = { photoMenu = true }, enabled = !reading && !attacher.busy) { Text("Log from photo") }
+                    TextButton(onClick = { photoMenu = true }, enabled = vision && !reading && !attacher.busy) { Text("Log from photo") }
                     DropdownMenu(expanded = photoMenu, onDismissRequest = { photoMenu = false }) {
                         DropdownMenuItem(text = { Text("Take photo") }, onClick = { photoMenu = false; attacher.takePhoto() })
                         DropdownMenuItem(text = { Text("Choose photo") }, onClick = { photoMenu = false; attacher.choosePhoto() })

@@ -24,21 +24,37 @@ import java.util.Base64
  */
 class GrokFoodEstimator(
     private val apiKey: () -> String?,
-    override val model: String = DEFAULT_MODEL,
-    private val transport: XaiTransport = HttpXaiTransport(),
+    private val modelProvider: () -> String = { DEFAULT_MODEL },
+    private val transportProvider: () -> XaiTransport = { HttpXaiTransport() },
+    private val supportsImages: () -> Boolean = { true },
 ) : FoodEstimator {
 
+    /** Convenience for tests and call sites that pass a fixed model and transport. */
+    constructor(
+        apiKey: () -> String?,
+        model: String = DEFAULT_MODEL,
+        transport: XaiTransport,
+        supportsImages: () -> Boolean = { true },
+    ) : this(apiKey, { model }, { transport }, supportsImages)
+
+    override val model: String get() = modelProvider()
     override val gaveUpMessage: String get() = GrokErrors.GAVE_UP
 
     override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate {
         val key = apiKey() ?: throw NoApiKey(NO_KEY)
+        val sendPhoto = photo.takeIf { supportsImages() }
         // Detailed / ingredient replies need a bit more room for the nullable fields + list.
         val maxTok = if (detailed || ingredients) XaiChat.MAX_COMPLETION_TOKENS_DETAILED else XaiChat.MAX_COMPLETION_TOKENS
-        return EstimatePrompt.parse(XaiChat.call(transport, key, model, XaiChat.request(
-            model, EstimatePrompt.system(detailed, ingredients), text, photo,
+        val estimate = EstimatePrompt.parse(XaiChat.call(transportProvider(), key, model, XaiChat.request(
+            model, EstimatePrompt.system(detailed, ingredients), text, sendPhoto,
             schema = EstimatePrompt.schema(detailed, ingredients),
             maxCompletionTokens = maxTok,
         )))
+        return if (photo != null && sendPhoto == null) {
+            estimate.copy(note = VisionSupport.noteWithoutPhoto(estimate.note))
+        } else {
+            estimate
+        }
     }
 
     companion object {
@@ -52,7 +68,7 @@ class GrokFoodEstimator(
     }
 }
 
-/** Builds requests and reads replies for xAI's chat completions. Plain functions, unit tested. */
+/** Builds requests and reads replies for OpenAI-style chat completions. Plain functions, unit tested. */
 object XaiChat {
     const val ENDPOINT = "https://api.x.ai/v1/chat/completions"
 
@@ -61,21 +77,31 @@ object XaiChat {
     /** Extra headroom when Detailed nutrition asks for the full sub-macro breakdown. */
     const val MAX_COMPLETION_TOKENS_DETAILED = 1536
 
-    /** [photoJpeg]: an optional JPEG sent with the text as a base64 data URI (xAI takes jpg/png up to 20 MiB). */
     /**
      * Posts [request] and returns the structured JSON text. Offline and temporary trouble become
-     * [EstimateRetryable]; errors map through [GrokErrors]. Shared by food and cardio-screen reading.
+     * [EstimateRetryable]; errors map through [classify]. Shared by food and cardio-screen reading.
      */
-    suspend fun call(transport: XaiTransport, key: String, model: String, request: String): String {
+    suspend fun call(
+        transport: XaiTransport,
+        key: String,
+        model: String,
+        request: String,
+        classify: (Int, String?, String) -> EstimateErrors.Outcome = GrokErrors::classify,
+    ): String {
         val reply = try {
             transport.post(key, request)
         } catch (e: CancellationException) {
             throw e
+        } catch (e: GatewayUrlException) {
+            throw EstimateFailed(e.message ?: "Invalid gateway URL")
         } catch (e: IOException) {
             throw EstimateRetryable(e) // offline, timeout, dropped connection
         }
+        if (reply.status in 300..399) {
+            throw EstimateFailed("The gateway redirected the request. Point the URL at the final host; redirects aren't followed.")
+        }
         if (reply.status != 200) {
-            when (val o = GrokErrors.classify(reply.status, reply.body, model)) {
+            when (val o = classify(reply.status, reply.body, model)) {
                 EstimateErrors.Retry -> throw EstimateRetryable(IOException("HTTP ${reply.status}"))
                 is EstimateErrors.Fail -> throw EstimateFailed(o.message)
             }
@@ -143,19 +169,26 @@ object XaiChat {
 /** One HTTP answer; non-2xx bodies are kept for classifying, never shown. */
 data class XaiReply(val status: Int, val body: String)
 
-/** How a request reaches xAI; a fake in tests. Throws [IOException] when it can't get through. */
+/** How a request reaches the chat-completions endpoint; a fake in tests. Throws [IOException] when it can't get through. */
 fun interface XaiTransport {
     suspend fun post(apiKey: String, json: String): XaiReply
 }
 
 /**
- * HTTPS only, no redirects (a redirect could carry the key elsewhere), a total deadline and a
+ * HTTPS by default, no redirects (a redirect could carry the key elsewhere), a total deadline and a
  * size cap on the answer, like the Open Food Facts lookup. The key goes in the Authorization
- * header only.
+ * header only when non-blank (local gateways often need none). [endpoint] is re-read each call so
+ * Setup changes apply without restarting the process. Cleartext is re-checked here after any
+ * normalization; see [GatewayUrl.assertAllowed].
  */
-class HttpXaiTransport(private val endpoint: String = XaiChat.ENDPOINT) : XaiTransport {
+class HttpXaiTransport(
+    private val endpoint: () -> String = { XaiChat.ENDPOINT },
+) : XaiTransport {
+    constructor(endpoint: String) : this({ endpoint })
+
     override suspend fun post(apiKey: String, json: String): XaiReply = withContext(Dispatchers.IO) {
-        val conn = URL(endpoint).openConnection() as HttpURLConnection
+        val target = GatewayUrl.assertAllowed(endpoint()).url
+        val conn = URL(target).openConnection() as HttpURLConnection
         coroutineScope {
             // Per-read timeouts alone don't bound a server that drips bytes slowly.
             val deadline = launch { delay(DEADLINE_MS); conn.disconnect() }
@@ -165,11 +198,27 @@ class HttpXaiTransport(private val endpoint: String = XaiChat.ENDPOINT) : XaiTra
                 conn.doOutput = true
                 conn.connectTimeout = 15_000
                 conn.readTimeout = 60_000
-                conn.setRequestProperty("Authorization", "Bearer $apiKey")
+                if (apiKey.isNotBlank()) {
+                    conn.setRequestProperty("Authorization", "Bearer $apiKey")
+                }
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("Accept", "application/json")
                 conn.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
                 val status = conn.responseCode
+                // Never follow; if something still handed us a Location to another host, refuse.
+                if (status in 300..399) {
+                    val location = conn.getHeaderField("Location")
+                    if (!location.isNullOrBlank()) {
+                        val next = try {
+                            URL(URL(target), location)
+                        } catch (e: Exception) {
+                            throw IOException("bad redirect", e)
+                        }
+                        if (!next.host.equals(URL(target).host, ignoreCase = true)) {
+                            throw IOException("redirect to different host")
+                        }
+                    }
+                }
                 val stream = if (status in 200..299) conn.inputStream else conn.errorStream
                 XaiReply(status, stream?.use { readCapped(it) }.orEmpty())
             } finally {
@@ -195,5 +244,6 @@ class HttpXaiTransport(private val endpoint: String = XaiChat.ENDPOINT) : XaiTra
         const val DEADLINE_MS = 90_000L
         /** An estimate reply is well under 4 KB. */
         const val MAX_BYTES = 256 * 1024
+
     }
 }
