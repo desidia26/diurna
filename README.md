@@ -77,7 +77,7 @@ Key data rules:
 
 ## Building it yourself
 
-Requires JDK 17 and the Android SDK at `~/Android/Sdk` (platform 36), or `sdk.dir` in `local.properties`.
+Requires JDK 17 and the Android SDK at `~/Android/Sdk` (platform 37), or `sdk.dir` in `local.properties`.
 
 - **Debug builds need no setup:** `./gradlew assembleDebug`, or `scripts/install` with a device connected.
 - **Release builds need your own signing key.** Create a keystore in `signing/` (git-ignored) and a `signing/keystore.properties` next to it:

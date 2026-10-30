@@ -12,14 +12,15 @@ updates:
     open-pull-requests-limit: 5
     # A dependency goes to the first group that matches it.
     groups:
-      # Kotlin, KSP and the Compose compiler plugin only build when their versions match.
-      kotlin:
-        patterns: ["org.jetbrains.kotlin*", "com.google.devtools.ksp*"]
-      # The Android Gradle plugin breaks builds most often, so it gets its own PR.
-      agp:
-        patterns: ["com.android*"]
-      androidx:
-        patterns: ["androidx.*"]
+      # One PR for the build toolchain and AndroidX: they only work in step. New KSP needs a newer
+      # AGP, AGP needs a newer Gradle, and new AndroidX releases need a newer compileSdk (raised by
+      # hand in app/build.gradle.kts). Split apart, none of them could pass CI on its own.
+      toolchain:
+        patterns: ["gradle-wrapper", "org.jetbrains.kotlin*", "com.google.devtools.ksp*", "com.android*", "androidx.*"]
+      # R8 keeps the whole SDK (proguard-rules.pro), so its size goes straight into the APK: 2.75
+      # added 13 MB. Its own PR, to weigh on its own.
+      anthropic:
+        patterns: ["com.anthropic*"]
       other:
         patterns: ["*"]
 
