@@ -4,7 +4,10 @@ import app.diurna.ai.CardioPrompt
 import app.diurna.ai.CardioReading
 import app.diurna.ai.ClaudeCardioReader
 import app.diurna.ai.ClaudeFoodEstimator
+import app.diurna.ai.BarcodeIngredientsContext
+import app.diurna.ai.BarcodeIngredientsPrompt
 import app.diurna.ai.EstimatePrompt
+import app.diurna.domain.FoodIngredient
 import app.diurna.ai.FoodEstimate
 import app.diurna.ai.GrokCardioReader
 import app.diurna.ai.GrokFoodEstimator
@@ -51,6 +54,7 @@ interface EvalFoodClient {
     val providerId: String
     val model: String
     suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate
+    suspend fun guessBarcodeIngredients(ctx: app.diurna.ai.BarcodeIngredientsContext): List<app.diurna.domain.FoodIngredient>
 }
 
 interface EvalCardioClient {
@@ -83,6 +87,8 @@ object EvalProviders {
                 override val model = model
                 private val est = GrokFoodEstimator({ key }, { model })
                 override suspend fun estimate(text: String, photo: ByteArray?) = est.estimate(text, photo)
+                override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext) =
+                    est.guessBarcodeIngredients(ctx)
             }
             val cardio = object : EvalCardioClient {
                 override val providerId = id.id
@@ -101,6 +107,8 @@ object EvalProviders {
                 override val model = model
                 private val est = ClaudeFoodEstimator({ key }, model)
                 override suspend fun estimate(text: String, photo: ByteArray?) = est.estimate(text, photo)
+                override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext) =
+                    est.guessBarcodeIngredients(ctx)
             }
             val cardio = object : EvalCardioClient {
                 override val providerId = id.id
@@ -128,6 +136,17 @@ object EvalProviders {
                 override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
                     val body = OllamaChat.request(model, EstimatePrompt.SYSTEM, text, photo)
                     return EstimatePrompt.parse(OllamaChat.call(transport, key, body))
+                }
+                override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext): List<FoodIngredient> {
+                    val body = OllamaChat.request(
+                        model,
+                        BarcodeIngredientsPrompt.SYSTEM,
+                        BarcodeIngredientsPrompt.userMessage(ctx),
+                        photoJpeg = null,
+                        schemaName = "barcode_ingredients",
+                        schema = BarcodeIngredientsPrompt.SCHEMA,
+                    )
+                    return BarcodeIngredientsPrompt.parse(OllamaChat.call(transport, key, body))
                 }
             }
             val cardio = object : EvalCardioClient {

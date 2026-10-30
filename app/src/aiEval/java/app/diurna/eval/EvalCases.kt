@@ -30,13 +30,29 @@ data class CaseExpect(
     val durationS: IntRangeExpect? = null,
     val kcal: IntRangeExpect? = null,
     val avgHr: IntRangeExpect? = null,
+    /** barcode_ingredients: minimum ingredient count when outcome is ingredients. */
+    val minIngredients: Int? = null,
+    /** barcode_ingredients: each listed substring must appear in some ingredient name. */
+    val nameContainsAny: List<String> = emptyList(),
 )
 
-data class CaseInput(val text: String? = null, val image: String? = null)
+data class CaseInput(
+    val text: String? = null,
+    val image: String? = null,
+    val productName: String? = null,
+    val brand: String? = null,
+    val servingGrams: Double? = null,
+    val servingSize: String? = null,
+    val ingredientsText: String? = null,
+    val kcal: Int? = null,
+    val proteinG: Int? = null,
+    val carbsG: Int? = null,
+    val fatG: Int? = null,
+)
 
 data class EvalCase(
     val id: String,
-    val prompt: String, // "food" | "cardio"
+    val prompt: String, // "food" | "cardio" | "barcode_ingredients"
     val tags: List<String> = emptyList(),
     val input: CaseInput,
     val expect: CaseExpect,
@@ -94,6 +110,15 @@ object EvalCases {
                 input = CaseInput(
                     text = c.path("input").path("text").takeIf { !it.isMissingNode && !it.isNull }?.asText(),
                     image = c.path("input").path("image").takeIf { it.isTextual }?.asText(),
+                    productName = c.path("input").path("productName").takeIf { it.isTextual }?.asText(),
+                    brand = c.path("input").path("brand").takeIf { it.isTextual }?.asText(),
+                    servingGrams = c.path("input").path("servingGrams").takeIf { it.isNumber }?.asDouble(),
+                    servingSize = c.path("input").path("servingSize").takeIf { it.isTextual }?.asText(),
+                    ingredientsText = c.path("input").path("ingredientsText").takeIf { it.isTextual }?.asText(),
+                    kcal = c.path("input").path("kcal").takeIf { it.isNumber }?.asInt(),
+                    proteinG = c.path("input").path("proteinG").takeIf { it.isNumber }?.asInt(),
+                    carbsG = c.path("input").path("carbsG").takeIf { it.isNumber }?.asInt(),
+                    fatG = c.path("input").path("fatG").takeIf { it.isNumber }?.asInt(),
                 ),
                 expect = CaseExpect(
                     outcome = expect.path("outcome").asText("estimate"),
@@ -108,6 +133,8 @@ object EvalCases {
                     durationS = intRange(expect.path("durationS")),
                     kcal = intRange(expect.path("kcal")),
                     avgHr = intRange(expect.path("avgHr")),
+                    minIngredients = expect.path("minIngredients").takeIf { it.isNumber }?.asInt(),
+                    nameContainsAny = expect.path("nameContainsAny").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
                 ),
             )
         }

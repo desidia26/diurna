@@ -112,6 +112,26 @@ class EvalRunner(
                     val reading = reader.read(photo)
                     EvalScoring.scoreCardio(case, reading, clients.scoringMode).copy(provider = pid.id)
                 }
+                "barcode_ingredients" -> {
+                    val inp = case.input
+                    val grams = inp.servingGrams ?: 0.0
+                    if (grams <= 0) {
+                        return CaseScore(case.id, pid.id, case.prompt, passed = false, error = "servingGrams required")
+                    }
+                    val ctx = app.diurna.ai.BarcodeIngredientsContext(
+                        productName = inp.productName,
+                        brand = inp.brand,
+                        servingGrams = grams,
+                        servingSize = inp.servingSize,
+                        ingredientsText = inp.ingredientsText,
+                        kcal = inp.kcal,
+                        proteinG = inp.proteinG,
+                        carbsG = inp.carbsG,
+                        fatG = inp.fatG,
+                    )
+                    val list = clients.food.guessBarcodeIngredients(ctx)
+                    EvalScoring.scoreBarcodeIngredients(case, list, clients.scoringMode).copy(provider = pid.id)
+                }
                 else -> CaseScore(case.id, pid.id, case.prompt, passed = false, error = "unknown prompt ${case.prompt}")
             }
         } catch (e: ProviderSkip) {
@@ -124,6 +144,9 @@ class EvalRunner(
             when (case.prompt) {
                 "food" -> EvalScoring.scoreFoodFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "cardio" -> EvalScoring.scoreCardioFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
+                "barcode_ingredients" -> CaseScore(
+                    case.id, pid.id, case.prompt, passed = false, error = e.message ?: "EstimateFailed",
+                )
                 else -> CaseScore(case.id, pid.id, case.prompt, passed = false, error = e.message)
             }
         } catch (e: Exception) {

@@ -57,7 +57,7 @@ class DetailBackfillRunner(
         for (e in entries) {
             when {
                 DetailBackfill.needsAiFill(e, wantAminos) -> ai++
-                DetailBackfill.needsMealAttempt(e) || DetailBackfill.needsOffAttempt(e) -> meal++
+                DetailBackfill.needsMealAttempt(e) || DetailBackfill.needsOffAttempt(e, wantAminos) -> meal++
             }
         }
         return DetailBackfill.Preview(entryCount = ai + meal, aiCalls = ai, mealCount = meal)
@@ -70,7 +70,7 @@ class DetailBackfillRunner(
         val work = candidates.filter {
             DetailBackfill.needsAiFill(it, wantAminos) ||
                 DetailBackfill.needsMealAttempt(it) ||
-                DetailBackfill.needsOffAttempt(it)
+                DetailBackfill.needsOffAttempt(it, wantAminos)
         }
         var filled = 0
         var partial = 0
@@ -94,7 +94,7 @@ class DetailBackfillRunner(
             }
             try {
                 // Prefer OFF (snapshot or retry) for barcode entries; never changes stored macros.
-                var wrote = DetailBackfill.needsOffAttempt(entry) && fillOff(entry)
+                var wrote = DetailBackfill.needsOffAttempt(entry, wantAminos) && fillOff(entry, wantAminos)
                 val fresh = food.get(entry.id) ?: entry
                 when (fresh.source) {
                     FoodEntryEntity.SOURCE_MEAL -> {
@@ -138,14 +138,18 @@ class DetailBackfillRunner(
     private enum class MealResult { FILLED, NEEDS_DETAIL, SKIPPED }
 
     /**
-     * Fill null sub-macros from OFF snapshot (retrying a failed lookup). Macros stay unchanged.
+     * Fill null sub-macros from OFF snapshot (retrying a failed lookup) and, when [wantAminos],
+     * resolve ingredients → FDC aminos (OFF percents first, else AI guess). Macros stay unchanged.
      * Returns true when at least one null was written.
      */
-    private suspend fun fillOff(entry: FoodEntryEntity): Boolean {
-        if (!DetailBackfill.needsOffAttempt(entry)) return false
+    private suspend fun fillOff(entry: FoodEntryEntity, wantAminos: Boolean): Boolean {
+        if (!DetailBackfill.needsOffAttempt(entry, wantAminos)) return false
         val code = entry.barcode ?: return false
         var snap = OffSnapshot.decode(entry.offSnapshotJson)
-        if (snap == null || !snap.lookupOk || snap.per100Json == null) {
+        // Refresh when missing, failed, or (for amino fill) lacking ingredients fields on an old snapshot.
+        val needsRefresh = snap == null || !snap.lookupOk || snap.per100Json == null ||
+            (wantAminos && snap.ingredientsJson == null && snap.ingredientsText == null && snap.ingredientsTextEn == null)
+        if (needsRefresh) {
             val json = try {
                 products.fetch(code)
             } catch (e: CancellationException) {
@@ -154,15 +158,48 @@ class DetailBackfillRunner(
                 null
             }
             val at = System.currentTimeMillis()
-            snap = json?.let { parseOffSnapshot(it, at) } ?: OffSnapshot.failed(at)
+            snap = json?.let { parseOffSnapshot(it, at) } ?: (snap?.takeIf { it.lookupOk } ?: OffSnapshot.failed(at))
             db.foodDao().setBarcodeSnapshot(entry.id, code, snap.encode())
         }
         if (!snap.lookupOk) return false
         val grams = snap.servingGrams() * entry.servings.coerceAtLeast(0.0)
-        val incoming = DetailBackfill.fromOffSnapshot(snap, grams) ?: return false
         val fresh = db.foodDao().get(entry.id) ?: return false
         if (DetailBackfill.macrosOf(fresh) != DetailBackfill.macrosOf(entry)) return false
         val current = DetailBackfill.fromEntry(fresh)
+        var incoming = DetailBackfill.fromOffSnapshot(snap, grams) ?: DetailBackfill.Detail()
+        if (wantAminos && aminoResolver != null && current.ingredientsJson == null) {
+            val fill = BarcodeIngredientFill.resolve(
+                snap = snap,
+                servingGrams = grams,
+                macros = BarcodeIngredientFill.MacrosHint(
+                    // Prefer mid of kcal range when both ends set.
+                    kcal = listOfNotNull(fresh.kcalLow, fresh.kcalHigh).let { if (it.isEmpty()) null else it.sum() / it.size },
+                    proteinG = fresh.proteinG,
+                    carbsG = fresh.carbsG,
+                    fatG = fresh.fatG,
+                ),
+                estimator = estimator,
+                aminoResolver = aminoResolver,
+            )
+            if (fill.wrote) {
+                incoming = incoming.copy(
+                    hisMg = fill.aminos?.hisMg,
+                    ileMg = fill.aminos?.ileMg,
+                    leuMg = fill.aminos?.leuMg,
+                    lysMg = fill.aminos?.lysMg,
+                    metMg = fill.aminos?.metMg,
+                    pheMg = fill.aminos?.pheMg,
+                    thrMg = fill.aminos?.thrMg,
+                    trpMg = fill.aminos?.trpMg,
+                    valMg = fill.aminos?.valMg,
+                    cysMg = fill.aminos?.cysMg,
+                    tyrMg = fill.aminos?.tyrMg,
+                    ingredientsJson = fill.ingredientsJson,
+                    aminoMatched = fill.aminoMatched,
+                    aminoTotal = fill.aminoTotal,
+                )
+            }
+        }
         val merged = DetailBackfill.mergeNullsOnly(current, incoming, fresh.carbsG, fresh.fatG)
         if (merged == current) return false
         writeDetail(fresh, merged)

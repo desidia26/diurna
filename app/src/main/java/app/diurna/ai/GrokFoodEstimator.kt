@@ -57,6 +57,23 @@ class GrokFoodEstimator(
         }
     }
 
+    override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext): List<app.diurna.domain.FoodIngredient> {
+        val key = apiKey() ?: throw NoApiKey(NO_KEY)
+        val json = XaiChat.call(
+            transportProvider(), key, model,
+            XaiChat.request(
+                model,
+                BarcodeIngredientsPrompt.SYSTEM,
+                BarcodeIngredientsPrompt.userMessage(ctx),
+                photoJpeg = null,
+                schemaName = "barcode_ingredients",
+                schema = BarcodeIngredientsPrompt.SCHEMA,
+                maxCompletionTokens = XaiChat.MAX_COMPLETION_TOKENS,
+            ),
+        )
+        return BarcodeIngredientsPrompt.parse(json)
+    }
+
     companion object {
         /**
          * Grok 4.20 without reasoning: takes text and images, supports structured outputs, and is

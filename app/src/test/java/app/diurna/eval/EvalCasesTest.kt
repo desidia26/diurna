@@ -30,9 +30,10 @@ class EvalCasesTest {
 
     @Test fun smokeIsTinyAndTextOnly() {
         val set = EvalCases.load(resolveCasesDir(), "smoke")
-        assertEquals(3, set.cases.size)
+        assertEquals(4, set.cases.size)
         assertTrue(set.cases.all { it.input.image == null })
-        assertTrue(set.cases.all { it.prompt == "food" })
+        assertTrue(set.cases.any { it.prompt == "food" })
+        assertTrue(set.cases.any { it.prompt == "barcode_ingredients" })
     }
 
     private fun resolveCasesDir(): File {
