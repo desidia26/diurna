@@ -15,7 +15,7 @@ class FoodPhotos(val dir: File) {
     fun newName(): String = "${UUID.randomUUID()}.jpg"
 
     /** The file for a stored name, or null if the name isn't one of ours. */
-    fun file(name: String?): File? = name?.takeIf { NAME.matches(it) }?.let { File(dir, it) }
+    fun file(name: String?): File? = name?.takeIf { PhotoSizing.FILE_NAME.matches(it) }?.let { File(dir, it) }
 
     fun exists(name: String?): Boolean = file(name)?.isFile == true
 
@@ -42,7 +42,6 @@ class FoodPhotos(val dir: File) {
     }
 
     companion object {
-        private val NAME = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.jpg")
         private const val DAY_MS = 24 * 60 * 60 * 1000L
     }
 }

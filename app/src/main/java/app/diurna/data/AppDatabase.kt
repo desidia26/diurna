@@ -75,6 +75,8 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val DEFAULT_ALARM = "06:30"
+        /** Kept from the app's first name, like the app id; renaming it would orphan everyone's data. */
+        const val NAME = "daybook.db"
 
         /** Every weekday exists from the start, at the default alarm with no workout. */
         val seedRoutine = object : Callback() {
@@ -138,7 +140,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "daybook.db")
+            Room.databaseBuilder(context, AppDatabase::class.java, NAME)
                 .addMigrations(MIGRATION_5_6, MIGRATION_14_15)
                 .addCallback(seedRoutine)
                 .addCallback(seedCatalog)
