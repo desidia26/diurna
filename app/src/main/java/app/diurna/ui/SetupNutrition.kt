@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import android.Manifest
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
@@ -21,6 +22,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
@@ -40,7 +42,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.diurna.ai.AiProvider
 import app.diurna.ai.DetailBackfill
 import app.diurna.ai.BackfillWorkState
+import app.diurna.ai.GatewayUrl
 import app.diurna.ai.GrokFoodEstimator
+import app.diurna.ai.XaiChat
 import app.diurna.data.SettingsStore.ProfileDraft
 import app.diurna.domain.Activity
 import app.diurna.domain.Goal
@@ -175,10 +179,41 @@ private fun NumberField(
 @Composable
 fun FoodEstimatesCard(vm: SetupViewModel) {
     val provider by vm.aiProvider.collectAsStateWithLifecycle()
+    val gateway by vm.gateway.collectAsStateWithLifecycle()
     val lastFour by remember(provider) { vm.apiKeyLastFour(provider) }.collectAsStateWithLifecycle()
     var key by remember(provider) { mutableStateOf("") }
     var confirmRemove by remember { mutableStateOf(false) }
-    SectionCard("Food estimates", chip = { if (lastFour != null) Chip("Key set", Tone.Good) else Chip("No key", Tone.Warn) }) {
+    var openAiBase by remember(gateway.openAiBaseUrl) { mutableStateOf(gateway.openAiBaseUrl) }
+    var openAiModel by remember(gateway.openAiModel) { mutableStateOf(gateway.openAiModel) }
+    var anthropicBase by remember(gateway.anthropicBaseUrl) { mutableStateOf(gateway.anthropicBaseUrl) }
+    var xaiEndpoint by remember(gateway.xaiEndpoint) { mutableStateOf(gateway.xaiEndpoint) }
+    val supportsImages = when (provider) {
+        AiProvider.ANTHROPIC -> gateway.anthropicSupportsImages
+        AiProvider.XAI -> gateway.xaiSupportsImages
+        AiProvider.OPENAI_COMPAT -> gateway.openAiSupportsImages
+    }
+    val baseUrlForCleartext = when (provider) {
+        AiProvider.OPENAI_COMPAT -> openAiBase
+        AiProvider.ANTHROPIC -> anthropicBase
+        AiProvider.XAI -> xaiEndpoint
+    }
+    val cleartextBlocked = GatewayUrl.cleartextBlockedHint(baseUrlForCleartext)
+    val cleartextLocalOk = cleartextBlocked == null && baseUrlForCleartext.isNotBlank() &&
+        GatewayUrl.isCleartextUrl(baseUrlForCleartext)
+    val chipLabel = when {
+        provider == AiProvider.OPENAI_COMPAT && openAiBase.isNotBlank() && openAiModel.isNotBlank() ->
+            if (lastFour != null) "Ready" else "Ready (no key)"
+        lastFour != null -> "Key set"
+        provider.keyOptional -> "No key"
+        else -> "No key"
+    }
+    val chipTone = when {
+        provider == AiProvider.OPENAI_COMPAT && openAiBase.isNotBlank() && openAiModel.isNotBlank() -> Tone.Good
+        lastFour != null -> Tone.Good
+        provider.keyOptional -> Tone.Neutral
+        else -> Tone.Warn
+    }
+    SectionCard("Food estimates", chip = { Chip(chipLabel, chipTone) }) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AiProvider.entries.forEach { p ->
                 FilterChip(p == provider, { vm.setAiProvider(p) }, label = { Text(p.label) })
@@ -187,6 +222,88 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
         when (provider) {
             AiProvider.ANTHROPIC -> Hint("Each food entry is sent once to Claude (claude-haiku-5-5) for a calorie range and macros, when you log it or change its text or photo. The text is sent, plus the photo if you attach one; nothing else.")
             AiProvider.XAI -> Hint("Each food entry is sent once to Grok (${GrokFoodEstimator.DEFAULT_MODEL}) for a calorie range and macros, when you log it or change its text or photo. The text is sent, plus the photo if you attach one; nothing else.")
+            AiProvider.OPENAI_COMPAT -> Hint("Each food entry is sent once to your OpenAI-compatible gateway (/v1/chat/completions) for a calorie range and macros. Works with OpenRouter, LiteLLM, Ollama, llama.cpp, LM Studio, Cloudflare AI Gateway, and similar. The text is sent, plus the photo if the model supports images.")
+        }
+        if (provider == AiProvider.OPENAI_COMPAT) {
+            OutlinedTextField(
+                openAiBase, { openAiBase = it }, Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text("Base URL") },
+                placeholder = { Text("https://host/v1 or …/chat/completions") },
+                isError = cleartextBlocked != null,
+                supportingText = cleartextBlocked?.let { { Text(it) } },
+            )
+            OutlinedTextField(
+                openAiModel, { openAiModel = it }, Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text("Model") },
+                placeholder = { Text("e.g. gpt-4o-mini, llama3.2-vision") },
+            )
+            val gatewayDirty = openAiBase != gateway.openAiBaseUrl || openAiModel != gateway.openAiModel
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = {
+                        vm.saveGateway { it.copy(openAiBaseUrl = openAiBase.trim(), openAiModel = openAiModel.trim()) }
+                    },
+                    enabled = gatewayDirty && openAiBase.isNotBlank() && openAiModel.isNotBlank() && cleartextBlocked == null,
+                ) { Text("Save gateway") }
+                if (gatewayDirty) TextButton(onClick = {
+                    openAiBase = gateway.openAiBaseUrl
+                    openAiModel = gateway.openAiModel
+                }) { Text("Discard") }
+            }
+        }
+        if (provider == AiProvider.ANTHROPIC) {
+            OutlinedTextField(
+                anthropicBase, { anthropicBase = it }, Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text("Base URL (optional)") },
+                placeholder = { Text("Empty = api.anthropic.com") },
+                isError = cleartextBlocked != null,
+                supportingText = cleartextBlocked?.let { { Text(it) } },
+            )
+            if (anthropicBase != gateway.anthropicBaseUrl) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { vm.saveGateway { it.copy(anthropicBaseUrl = anthropicBase.trim()) } },
+                        enabled = cleartextBlocked == null,
+                    ) { Text("Save base URL") }
+                    TextButton(onClick = { anthropicBase = gateway.anthropicBaseUrl }) { Text("Discard") }
+                }
+            }
+        }
+        if (provider == AiProvider.XAI) {
+            OutlinedTextField(
+                xaiEndpoint, { xaiEndpoint = it }, Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text("Endpoint (optional)") },
+                placeholder = { Text("Empty = ${XaiChat.ENDPOINT}") },
+                isError = cleartextBlocked != null,
+                supportingText = cleartextBlocked?.let { { Text(it) } },
+            )
+            if (xaiEndpoint != gateway.xaiEndpoint) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { vm.saveGateway { it.copy(xaiEndpoint = xaiEndpoint.trim()) } },
+                        enabled = cleartextBlocked == null,
+                    ) { Text("Save endpoint") }
+                    TextButton(onClick = { xaiEndpoint = gateway.xaiEndpoint }) { Text("Discard") }
+                }
+            }
+        }
+        if (cleartextLocalOk) {
+            Hint("HTTP (no TLS) — only for localhost or the emulator. LAN servers need HTTPS.")
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Model supports images", Modifier.weight(1f))
+            Switch(checked = supportsImages, onCheckedChange = { on ->
+                vm.saveGateway { g ->
+                    when (provider) {
+                        AiProvider.ANTHROPIC -> g.copy(anthropicSupportsImages = on)
+                        AiProvider.XAI -> g.copy(xaiSupportsImages = on)
+                        AiProvider.OPENAI_COMPAT -> g.copy(openAiSupportsImages = on)
+                    }
+                }
+            })
+        }
+        if (!supportsImages) {
+            Hint("Photo features will estimate from text only (food) or ask you to type numbers (cardio).")
         }
         if (lastFour != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -206,6 +323,7 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
         when (provider) {
             AiProvider.ANTHROPIC -> Hint("Use a key from its own Anthropic workspace with a monthly spend limit, so a leaked key can only cost that much. It's stored encrypted on this phone and left out of backups.")
             AiProvider.XAI -> Hint("Use a key from its own xAI team with a spending limit, so a leaked key can only cost that much. It's stored encrypted on this phone and left out of backups.")
+            AiProvider.OPENAI_COMPAT -> Hint("API key is optional for local servers (Ollama, LM Studio, llama.cpp). When set, it's stored encrypted on this phone and left out of backups. Don't put credentials in the URL.")
         }
     }
     if (confirmRemove) {

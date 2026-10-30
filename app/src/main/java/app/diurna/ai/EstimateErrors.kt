@@ -31,6 +31,9 @@ object EstimateErrors {
             ". Raise it in the Claude Console, then tap Retry."
 
     fun classify(status: Int, message: String?, model: String): Outcome {
+        if (VisionSupport.isUnsupportedImageError(status, message)) {
+            return Fail(VisionSupport.API_REJECTED_IMAGE)
+        }
         val m = message.orEmpty().lowercase()
         val isSpendLimit = "enforced_spend_limit_reached" in m || "api usage limits" in m ||
             "usage limit" in m || "spend limit" in m
@@ -62,6 +65,9 @@ object GrokErrors {
     const val GAVE_UP = "Couldn't reach Grok after several tries. Tap Retry."
 
     fun classify(status: Int, message: String?, model: String): EstimateErrors.Outcome {
+        if (VisionSupport.isUnsupportedImageError(status, message)) {
+            return EstimateErrors.Fail(VisionSupport.API_REJECTED_IMAGE)
+        }
         val m = message.orEmpty().lowercase()
         return when {
             "spending limit" in m || "spend limit" in m || "usage limit" in m -> EstimateErrors.Fail(SPEND_LIMIT)
