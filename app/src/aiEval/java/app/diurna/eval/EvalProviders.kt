@@ -81,13 +81,13 @@ object EvalProviders {
             val food = object : EvalFoodClient {
                 override val providerId = id.id
                 override val model = model
-                private val est = GrokFoodEstimator({ key }, model)
+                private val est = GrokFoodEstimator({ key }, { model })
                 override suspend fun estimate(text: String, photo: ByteArray?) = est.estimate(text, photo)
             }
             val cardio = object : EvalCardioClient {
                 override val providerId = id.id
                 override val model = model
-                private val reader = GrokCardioReader({ key }, model)
+                private val reader = GrokCardioReader({ key }, { model })
                 override suspend fun read(photo: ByteArray) = reader.read(photo)
             }
             EvalClients(food, cardio, ScoringMode.ACCURACY)
@@ -150,8 +150,9 @@ object EvalProviders {
  * OpenAI-compatible chat against a local Ollama (or any compatible) server.
  *
  * This is a **smoke** path: prompt + parse health on a substitute CPU model, not an accuracy
- * eval of the app’s real Grok/Claude providers. Eval-side only — once PR #21 (BYO OpenAI-
- * compatible gateway) lands on main, this can switch to that app provider.
+ * eval of the app’s real Grok/Claude providers. Eval-side only — the app’s OpenAI-compatible
+ * gateway (#21) is a separate production path; covering it here would need a cheap fixture
+ * endpoint and is left as a follow-up.
  */
 object OllamaChat {
     const val DEFAULT_BASE_URL = "http://localhost:11434/v1"

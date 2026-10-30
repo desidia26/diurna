@@ -186,6 +186,7 @@ class SelectedFoodEstimatorTest {
         val s = SelectedFoodEstimator({ selected }, mapOf(
             AiProvider.ANTHROPIC to Named("claude-m", "claude gave up"),
             AiProvider.XAI to Named("grok-m", "grok gave up"),
+            AiProvider.OPENAI_COMPAT to Named("compat-m", "compat gave up"),
         ))
         assertEquals("claude-m", s.estimate("a", photo = null, detailed = false).model)
         assertEquals("claude gave up", s.gaveUpMessage)
@@ -197,7 +198,7 @@ class SelectedFoodEstimatorTest {
 
     @Test fun passesThePhotoThrough() = runTest {
         val grok = Named("grok-m", "")
-        val s = SelectedFoodEstimator({ AiProvider.XAI }, mapOf(AiProvider.ANTHROPIC to Named("c", ""), AiProvider.XAI to grok))
+        val s = SelectedFoodEstimator({ AiProvider.XAI }, mapOf(AiProvider.ANTHROPIC to Named("c", ""), AiProvider.XAI to grok, AiProvider.OPENAI_COMPAT to Named("o", "")))
         val jpeg = byteArrayOf(1, 2, 3)
         s.estimate("a", jpeg, detailed = false)
         assertArrayEquals(jpeg, grok.photo)
@@ -207,6 +208,8 @@ class SelectedFoodEstimatorTest {
         assertEquals(AiProvider.ANTHROPIC, AiProvider.fromId(null))
         assertEquals(AiProvider.ANTHROPIC, AiProvider.fromId("gone"))
         assertEquals(AiProvider.XAI, AiProvider.fromId("xai"))
+        assertEquals(AiProvider.OPENAI_COMPAT, AiProvider.fromId("openai_compat"))
+        assertTrue(AiProvider.OPENAI_COMPAT.keyOptional)
         assertEquals(AiProvider.DEFAULT, AiProvider.ANTHROPIC)
     }
 }

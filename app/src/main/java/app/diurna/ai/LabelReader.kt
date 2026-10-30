@@ -128,11 +128,14 @@ class ClaudeLabelReader(
     private val apiKey: () -> String?,
     // Printed label OCR is easy for a small vision model, same as cardio screens.
     override val model: String = "claude-haiku-5-5",
+    private val baseUrl: () -> String? = { null },
+    private val supportsImages: () -> Boolean = { true },
 ) : LabelReader {
     override suspend fun read(photo: ByteArray): NutritionLabelReading = withContext(Dispatchers.IO) {
+        if (!supportsImages()) throw EstimateFailed(VisionSupport.PHOTO_FEATURES_DISABLED)
         if (apiKey() == null) throw NoApiKey("Add an Anthropic API key in Setup to read labels")
         val params = ClaudeRequest.params(model, LabelPrompt.USER_TEXT, photo, LabelPrompt.SYSTEM, LabelPrompt.SCHEMA)
-        LabelPrompt.parse(ClaudeCall.json(apiKey, model, params, declined = "The model declined to read this label"))
+        LabelPrompt.parse(ClaudeCall.json(apiKey, model, params, declined = "The model declined to read this label", baseUrl = baseUrl))
     }
 }
 
@@ -140,8 +143,10 @@ class GrokLabelReader(
     private val apiKey: () -> String?,
     override val model: String = GrokFoodEstimator.DEFAULT_MODEL,
     private val transport: XaiTransport = HttpXaiTransport(),
+    private val supportsImages: () -> Boolean = { true },
 ) : LabelReader {
     override suspend fun read(photo: ByteArray): NutritionLabelReading {
+        if (!supportsImages()) throw EstimateFailed(VisionSupport.PHOTO_FEATURES_DISABLED)
         val key = apiKey() ?: throw NoApiKey(NO_KEY)
         val request = XaiChat.request(
             model, LabelPrompt.SYSTEM, LabelPrompt.USER_TEXT, photo,

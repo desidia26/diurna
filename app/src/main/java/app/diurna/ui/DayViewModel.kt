@@ -146,6 +146,10 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoImport
      * needed for the call, so it's deleted straight after reading. Nothing is saved here.
      */
     suspend fun readCardioPhoto(name: String): CardioPhotoResult = withContext(Dispatchers.IO) {
+        if (!c.supportsImages()) {
+            c.foodPhotos.delete(name)
+            return@withContext CardioPhotoResult.Problem(app.diurna.ai.VisionSupport.PHOTO_FEATURES_DISABLED)
+        }
         val bytes = c.foodPhotos.read(name)
         c.foodPhotos.delete(name)
         if (bytes == null) return@withContext CardioPhotoResult.Problem("Couldn't read that photo")
@@ -197,6 +201,8 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoImport
     fun entryPhotos(entryId: Long) = c.food.observePhotos(entryId).map { rows -> rows.map { it.fileName } }
 
     val photos get() = c.foodPhotos
+    /** False when Setup says the selected model has no vision; photo food falls back to text. */
+    fun supportsImages(): Boolean = c.supportsImages()
     override val captureFile get() = c.photoImporter.captureFile
     override suspend fun importPhoto(uri: Uri) = c.photoImporter.import(uri)
     override suspend fun importCapture() = c.photoImporter.importCapture()

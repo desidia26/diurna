@@ -9,6 +9,7 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | # | P | Item | Notes |
 |---|---|---|---|
 | — | Grok (xAI) as an alternative to Claude for food estimates, chosen in Setup | 2026-10-25 |
+| — | Bring-your-own-gateway: OpenAI-compatible provider (base URL, model, optional key), optional Anthropic base URL and Grok endpoint overrides, per-provider vision toggle, cleartext only for localhost/LAN | 2026-10-28 |
 | B1 | P2 | "Last time" on today's workout doesn't refresh after editing an older workout | Only re-queried when today's workout changes. Workaround: switch days. |
 | B2 | P3 | Scheduler records `scheduled_alarm` even when the system refused to arm it | `AlarmScheduler.reschedule` marks the day before `arm()`; with exact alarms denied, the frozen time is one that never rang. |
 | B3 | P3 | Alarm screen shows the "wrong code" hint briefly even for the right code | The screen closes right after, so it's barely visible. |
@@ -106,4 +107,4 @@ One list for features, bugs and tech debt. Add new items at the bottom of their 
 | — | "View metrics" in a Day exercise's ⋮ menu opens that exercise's Metrics screen (lift or cardio); back returns to Day. Shown once the exercise has a session to chart | 2026-10-27 |
 | — | What's new: a dialog on the first launcher open after an update lists new `Changelog.kt` entries; Setup shows recent ones and all of them on a page; `scripts/release` warns when the app changed without an entry | 2026-10-27 |
 | — | Metrics: Macros card — stacked kcal from protein/carbs/fat (P×4+C×4+F×9), kcal/% toggle (remembered), dashed target line in kcal mode; hidden until any food is estimated; daily bars on 4w, week averages longer. No DB migration | 2026-10-27 |
-| — | Export and import everything: Setup → Backups saves one zip (database, settings including the porch code, meal photos; not API keys) anywhere the person picks, and imports it on another install, e.g. one signed with a different key. Imports are checked before anything changes, the current data is backed up first, and older exports migrate on import | 2026-10-28 |
+| — | Export and import everything: Setup → Backups saves one zip (database, settings including the porch code, meal photos; not API keys or AI provider settings) anywhere the person picks, and imports it on another install, e.g. one signed with a different key. Imports are checked before anything changes, the current data is backed up first, and older exports migrate on import | 2026-10-28 |
