@@ -65,6 +65,10 @@ object Changelog {
             14, "2026-10-28", "Use any OpenAI-compatible AI",
             "Setup → Food estimates has a new OpenAI-compatible option, for services like OpenRouter or a model you run yourself: enter its address, the model name and a key if it needs one. Claude and Grok can also point at a different address. Nothing changes unless you set one up.",
         ),
+        Entry(
+            15, "2026-10-30", "Omegas card fits on a narrow phone",
+            "The Omegas & cholesterol card on Metrics no longer squeezes its numbers into a tall column of single characters on a small screen. The same fix applies to the Training and Cardio summary rows.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
