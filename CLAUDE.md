@@ -7,18 +7,19 @@ Android app (Kotlin, Jetpack Compose, Room): a porch-QR alarm, food logging with
 - `scripts/test`: unit tests, plus device tests on a running emulator (`scripts/emulator --headless` starts one)
 - `scripts/install`: debug build onto the connected device
 - `scripts/release`: tests, release build, backup, install as an update, data check, alarm check, tag
+- `scripts/new-release-key`: run once, ever: creates the release key and stores it in the GitHub environment `release`
 - `scripts/backup-db`, `scripts/logs`, `scripts/screenshot`, `scripts/alarm-check`, `scripts/demo-data` (emulator only: replaces app data with made-up history)
 - `./gradlew assembleDebug` / `testDebugUnitTest` for a build or unit tests without a device
 - `./gradlew aiEval -Pprovider=grok|claude|ollama|all` — live AI prompt evals (see [docs/ai-evals.md](docs/ai-evals.md))
-- CI (`.github/workflows/tests.yml`) runs unit and emulator device tests on every PR and push to `main`; `.github/workflows/ai-evals.yml` runs Ollama smoke always plus Grok/Claude when keys exist (parallel jobs) on path-filtered changes
+- CI (`.github/workflows/tests.yml`) runs unit and emulator device tests on every PR and push to `main`; `.github/workflows/nightly.yml` publishes a signed release from `main` daily (skipped when nothing changed or Tests failed), which friends' phones install with Obtainium; `.github/workflows/ai-evals.yml` runs Ollama smoke always plus Grok/Claude when keys exist (parallel jobs) on path-filtered changes
 
 Check a build by its exit code, not by filtered output.
 
 ## Hard rules
 
 - **Never run device tests on the real phone.** `connectedDebugAndroidTest` uninstalls the app afterwards and wipes its data. Use `scripts/test`, which only targets the emulator.
-- **Install to the phone only through `scripts/release`.** It backs up first and checks that no rows were lost. Don't uninstall the app, clear its data, reboot the phone or change its settings without asking.
-- **Never change `applicationId app.daybook` or the signing key**. The app was renamed from Daybook to Diurna; the code package is `app.diurna`, but the app id, `daybook.db` and backup file names keep the old name on purpose (`signing/`, git-ignored). Either change makes in-place updates impossible.
+- **Install to the phone only through `scripts/release` or the published releases (Obtainium).** `scripts/release` backs up first and checks that no rows were lost. Don't uninstall the app, clear its data, reboot the phone or change its settings without asking.
+- **Never change `applicationId app.daybook`, the release key or `RELEASE_CERT_SHA256`.** The app was renamed from Daybook to Diurna; the code package is `app.diurna`, but the app id, `daybook.db` and backup file names keep the old name on purpose. Builds are signed with the **release key** (`signing/release.*`, git-ignored, and the `release` environment's secrets for `nightly.yml`); `signing/keystore.properties` names whichever key local release builds use. The original Daybook key (`signing/daybook.keystore`) retires once every phone has moved to the release key by export, reinstall and import; until then a phone only takes builds signed with the key it has. Any key change makes in-place updates impossible.
 - **`versionCode` is the commit count, so commits must never be dropped.** Android won't install a lower version without wiping data. Never rewrite `main`'s history (no force-push, rebase or amend of pushed commits). PRs land as merge commits only (squash and rebase merges are off in the repo): `main` then keeps every branch commit, so it always counts at least as high as any build made from a branch, including stacked previews. Don't squash or rebase a branch someone may have built from.
 - **Never commit secrets or personal data:** API keys, `signing/`, `local.properties`, `backups/`, databases. AI provider keys are entered in the app and stored encrypted on the phone; never put one in code, tests or chat.
 - **Every schema change ships with a migration and a `MigrationTest` case.** Prefer `AutoMigration`; data-only changes use a `Migration`. Never a destructive fallback. Other people run the app too, on phones with no backup script, so a bad migration there can't be undone.

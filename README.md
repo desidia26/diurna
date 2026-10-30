@@ -76,6 +76,15 @@ Key data rules:
 - A saved meal's numbers are copied onto the entry when it's logged (× servings), so editing or deleting the meal never changes past days. Changing a meal entry's text turns it back into an AI entry.
 - Every schema change ships with a migration test (`MigrationTest`); never a destructive fallback.
 
+## Installing and updating
+
+Releases are published from `main` once a day (when something changed and the tests passed) on the [Releases page](https://github.com/desidia26/diurna/releases), signed with Diurna's release key.
+
+1. Install [Obtainium](https://github.com/ImranR98/Obtainium).
+2. In Obtainium, **Add app** → `https://github.com/desidia26/diurna`, then install. Obtainium checks for new releases and offers each update.
+
+**Moving from a build signed with another key** (an older build, or one you built yourself): Android only installs an update signed with the key the app already has, so this is a reinstall, once. In the old app, **Setup → Backups → Export everything** and save the file somewhere that survives uninstalling (Downloads or a cloud drive). Uninstall it, install from Obtainium, then **Setup → Backups → Import…** and pick the file. API keys and the AI provider aren't in the export, so set them up again under Food estimates, and grant the permissions Setup asks for.
+
 ## Building it yourself
 
 Requires JDK 17 and the Android SDK at `~/Android/Sdk` (platform 37), or `sdk.dir` in `local.properties`.
@@ -113,6 +122,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 | `scripts/screenshot` | Capture the device screen to `~/Downloads` (`--last` copies the newest screenshot taken on the phone) |
 | `scripts/demo-data` | **Emulator only:** clear the app's data and fill it with 12 weeks of made-up history (or `scripts/demo-data <weeks>`), for screenshots |
 | `scripts/backup-db` | Copy the database off the device into `backups/<timestamp>/`, which git ignores |
+| `scripts/new-release-key` | **Once, ever:** create the release key in `signing/` and store it in the GitHub environment `release` for the nightly workflow (refuses if it exists) |
 | `scripts/alarm-check` | Show the armed alarm and permissions (`--doze` or `--reboot` to stress-test it) |
 | `LIVE_API=1 ./gradlew testDebugUnitTest --tests '*LiveApiErrorTest*'` | Check a real API error end to end, using a deliberately invalid key (free) |
 
@@ -120,7 +130,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 
 **Device tests never run on a real phone.** Gradle uninstalls the app after them, which deletes all of Diurna's data, so `scripts/test` refuses anything but the emulator. Run `./gradlew connectedDebugAndroidTest` by hand only if you know which device it will hit.
 
-**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key.
+**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key. `.github/workflows/nightly.yml` builds a release from `main` daily, checks its certificate against `RELEASE_CERT_SHA256`, its version and its size (30 MB at most), and publishes it as `v0.N`. It only runs on `main` and is the only job given the release key.
 
 **Wireless debugging** works with the scripts too: pair once in Developer options → Wireless debugging, and `adb` reconnects whenever it's turned on. Keep it on trusted networks only, and off when not in use.
 
