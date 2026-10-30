@@ -8,6 +8,7 @@ Android app (Kotlin, Jetpack Compose, Room): a porch-QR alarm, food logging with
 - `scripts/install`: debug build onto the connected device
 - `scripts/release`: tests, release build, backup, install as an update, data check, alarm check, tag
 - `scripts/new-release-key`: run once, ever: creates the release key and stores it in the GitHub environment `release`
+- `scripts/backup-signing-keys`: encrypted copy of `signing/` to keep off this machine
 - `scripts/backup-db`, `scripts/logs`, `scripts/screenshot`, `scripts/alarm-check`, `scripts/demo-data` (emulator only: replaces app data with made-up history)
 - `./gradlew assembleDebug` / `testDebugUnitTest` for a build or unit tests without a device
 - `./gradlew aiEval -Pprovider=grok|claude|ollama|all` — live AI prompt evals (see [docs/ai-evals.md](docs/ai-evals.md))
