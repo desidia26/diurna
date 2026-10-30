@@ -144,6 +144,45 @@ class MetricsSubMacroTest {
         assertEquals(2, s.daysWithOmega)
         assertEquals(2, s.daysWithChol)
         assertEquals(3, s.daysWithFood)
+        // Averages ignore days that left the field unknown (not divided by all food days).
+        assertEquals("Detail on 2 of 3 days", Metrics.lipidCoverageLabel(s))
+        assertEquals(
+            listOf("ω6:3 avg", "mg chol · avg", "g ω3 · avg", "g ω6 · avg"),
+            Metrics.lipidStatLabels(s),
+        )
+    }
+
+    @Test fun lipidCardShowsFiveStatsWhenOmega9Present() {
+        // Repro for the phone overflow: five Stat columns in one Row crushed ω9 off-screen.
+        val byDate = mapOf(
+            d(1) to grams(1, o3 = 2, o6 = 15, o9 = 4, chol = 45),
+            d(2) to grams(2, o3 = 2, o6 = 15, o9 = 4, chol = 45),
+            d(3) to grams(3, carbs = 50), // food day without lipid detail
+            d(4) to grams(4, carbs = 40),
+            d(5) to grams(5, carbs = 30),
+        )
+        val s = Metrics.lipidSummary(byDate)!!
+        assertEquals(7.5, s.omega6to3!!, 1e-9)
+        assertEquals(45.0, s.avgCholesterolMg!!, 1e-9)
+        assertEquals(2.0, s.avgOmega3G!!, 1e-9)
+        assertEquals(15.0, s.avgOmega6G!!, 1e-9)
+        assertEquals(4.0, s.avgOmega9G!!, 1e-9)
+        assertEquals(2, s.daysWithOmega)
+        assertEquals(2, s.daysWithChol)
+        assertEquals(5, s.daysWithFood)
+        assertEquals("Detail on 2 of 5 days", Metrics.lipidCoverageLabel(s))
+        assertEquals(
+            listOf("ω6:3 avg", "mg chol · avg", "g ω3 · avg", "g ω6 · avg", "g ω9 · avg"),
+            Metrics.lipidStatLabels(s),
+        )
+        assertEquals(5, Metrics.lipidStatLabels(s).size)
+    }
+
+    @Test fun lipidCoverageLabelOmegaOrCholOnly() {
+        val omegaOnly = Metrics.lipidSummary(mapOf(d(1) to grams(1, o3 = 1, o6 = 2), d(2) to grams(2)))!!
+        assertEquals("Omega on 1 of 2 days", Metrics.lipidCoverageLabel(omegaOnly))
+        val cholOnly = Metrics.lipidSummary(mapOf(d(1) to grams(1, chol = 10), d(2) to grams(2), d(3) to grams(3)))!!
+        assertEquals("Cholesterol on 1 of 3 days", Metrics.lipidCoverageLabel(cholOnly))
     }
 
     @Test fun gatingFlagsMatchDetailPresence() {
