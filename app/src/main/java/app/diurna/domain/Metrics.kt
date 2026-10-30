@@ -504,6 +504,29 @@ object Metrics {
     }
 
     /**
+     * Coverage chip for the Omegas & cholesterol card. Uses the larger of omega/chol
+     * day counts when both are present so a single "Detail on N of M days" reads clearly.
+     */
+    fun lipidCoverageLabel(s: LipidSummary): String = when {
+        s.daysWithOmega > 0 && s.daysWithChol > 0 ->
+            "Detail on ${maxOf(s.daysWithOmega, s.daysWithChol)} of ${s.daysWithFood} days"
+        s.daysWithOmega > 0 -> "Omega on ${s.daysWithOmega} of ${s.daysWithFood} days"
+        else -> "Cholesterol on ${s.daysWithChol} of ${s.daysWithFood} days"
+    }
+
+    /**
+     * Stat labels the Omegas & cholesterol card shows, in display order.
+     * Up to five columns — the UI must wrap (FlowRow), not shrink a column below content width.
+     */
+    fun lipidStatLabels(s: LipidSummary): List<String> = buildList {
+        if (s.omega6to3 != null) add("ω6:3 avg")
+        if (s.avgCholesterolMg != null) add("mg chol · avg")
+        if (s.avgOmega3G != null) add("g ω3 · avg")
+        if (s.avgOmega6G != null) add("g ω6 · avg")
+        if (s.avgOmega9G != null) add("g ω9 · avg")
+    }
+
+    /**
      * Average daily amino mg over days that reported any amino.
      * [daysWithPartial] counts days that include at least one partial FDC match.
      * WHO adult-requirement reference lines are drawn in the UI (not stored here).

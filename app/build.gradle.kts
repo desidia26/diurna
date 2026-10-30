@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
@@ -20,7 +19,7 @@ val commitCount: Int = providers.exec { commandLine("git", "rev-list", "--count"
 
 android {
     namespace = "app.diurna"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         // Kept from the app's first name, Daybook: changing it would make Android treat it as a
@@ -71,8 +70,9 @@ android {
         // Exported Room schemas double as fixtures for migration tests.
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
         // AI prompt eval harness (JVM): shares the unit-test classpath, not shipped in the APK.
+        // Built-in Kotlin (AGP 9) only compiles .kt files from Kotlin source dirs, not java.srcDir.
         getByName("test") {
-            java.srcDir("src/aiEval/java")
+            kotlin.srcDir("src/aiEval/java")
         }
     }
 }
@@ -113,8 +113,14 @@ dependencies {
         implementation(libs.httpclient5)
         implementation(libs.httpcore5)
         implementation(libs.httpcore5.h2)
+        // AndroidX brings in 1.7.3, but room-testing's serializers need 1.8+; device tests run on
+        // the app's copy, so it has to be raised here (AbstractMethodError in MigrationTest otherwise).
+        implementation(libs.kotlinx.serialization.core)
     }
     implementation(libs.androidx.work.runtime.ktx)
+    // Declared so the app and its device tests share one version; otherwise the app gets whatever
+    // AndroidX pulls in, and kotlinx-coroutines-test calls methods that version lacks.
+    implementation(libs.kotlinx.coroutines.android)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 

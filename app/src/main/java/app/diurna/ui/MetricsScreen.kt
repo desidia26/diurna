@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.diurna.R
@@ -368,17 +369,16 @@ private fun FatDetailCardView(card: FatDetailCard, from: LocalDate, to: LocalDat
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LipidDetailCardView(card: LipidDetailCard) {
     val s = card.summary
-    val chip = when {
-        s.daysWithOmega > 0 && s.daysWithChol > 0 ->
-            "Detail on ${maxOf(s.daysWithOmega, s.daysWithChol)} of ${s.daysWithFood} days"
-        s.daysWithOmega > 0 -> "Omega on ${s.daysWithOmega} of ${s.daysWithFood} days"
-        else -> "Cholesterol on ${s.daysWithChol} of ${s.daysWithFood} days"
-    }
-    SectionCard("Omegas & cholesterol", chip = { Hint(chip) }) {
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+    // Summary-only card (no chart): up to five stats, so wrap instead of crushing a column.
+    SectionCard("Omegas & cholesterol", chip = { Hint(Metrics.lipidCoverageLabel(s)) }) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             s.omega6to3?.let { Stat("%.1f".format(it), "ω6:3 avg") }
             s.avgCholesterolMg?.let { Stat("%.0f".format(it), "mg chol · avg") }
             s.avgOmega3G?.let { Stat("%.1f".format(it), "g ω3 · avg") }
@@ -522,6 +522,7 @@ private fun carbAvgLine(avg: Metrics.CarbStack, splitFiber: Boolean, showAdded: 
     return parts.joinToString(" · ") + " g"
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TrainingCardView(t: TrainingCard) {
     SectionCard("Training", chip = { Hint("${t.workouts} workouts") }) {
@@ -530,7 +531,10 @@ private fun TrainingCardView(t: TrainingCard) {
             return@SectionCard
         }
         val s = LocalStatusColors.current
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Stat(volume(t.thisWeek), "lb this week")
             t.vsEarlier?.let { Stat("${if (it >= 0) "+" else "−"}${(abs(it) * 100).roundToInt()}%", "vs earlier weeks", if (it >= 0) s.good else s.warn) }
             Stat("${t.prs}", if (t.prs == 1) "PR" else "PRs")
@@ -544,6 +548,7 @@ private fun TrainingCardView(t: TrainingCard) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CardioCardView(c: CardioCard, onOpen: (Long) -> Unit) {
     SectionCard("Cardio", chip = { Hint(if (c.sessions == 1) "1 session" else "${c.sessions} sessions") }) {
@@ -552,7 +557,10 @@ private fun CardioCardView(c: CardioCard, onOpen: (Long) -> Unit) {
             return@SectionCard
         }
         val unitText = { v: Double -> if (c.unit == "m") metres(v) else if (c.unit == "min") "${v.roundToInt()}" else "%.1f".format(v) }
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Stat(if (c.unit == "m") "%,d".format(c.thisWeek.roundToInt()) else unitText(c.thisWeek), "${c.unit} this week")
             Stat("${c.prs}", if (c.prs == 1) "PR" else "PRs")
         }
@@ -799,9 +807,25 @@ private fun Headline(value: String, unit: String, delta: String?, deltaColor: Co
 
 @Composable
 private fun Stat(value: String, label: String, color: Color = Color.Unspecified) {
+    // softWrap=false keeps a squeezed column from stacking one character per line (tall empty card).
     Column {
-        Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = color)
-        Hint(label)
+        Text(
+            value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+            softWrap = false,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            softWrap = false,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+        )
     }
 }
 
