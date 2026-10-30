@@ -6,6 +6,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONException
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -64,7 +65,7 @@ class OpenFoodFacts : ProductSource {
         // Digits only by construction; checked again since it goes into a URL.
         require(code.length in 8..13 && code.all { it in '0'..'9' }) { "not a barcode" }
         return withContext(Dispatchers.IO) {
-            val url = URL("https://world.openfoodfacts.org/api/v2/product/$code?fields=product_name,brands,serving_size,serving_quantity,nutriments")
+            val url = URL("https://world.openfoodfacts.org/api/v2/product/$code?fields=product_name,brands,serving_size,serving_quantity,nutriments,ingredients_text,ingredients_text_en,ingredients")
             val conn = url.openConnection() as HttpURLConnection
             coroutineScope {
                 // Per-read timeouts alone don't bound a server that drips bytes slowly.
@@ -115,6 +116,8 @@ private const val MAX_GRAMS = 1_000.0 // per serving, for macros and the serving
 private const val MAX_CHOL_MG = 5_000.0 // per serving; OFF stores cholesterol in grams
 private const val MAX_NAME = 80
 private const val MAX_NOTE = 60
+private const val MAX_INGREDIENTS_TEXT = 2_000
+private const val MAX_INGREDIENTS_JSON = 48 * 1024
 
 /**
  * Single-line printable text, length-capped. Control characters (newlines, tabs, NUL) become
@@ -229,6 +232,15 @@ data class OffSnapshot(
     val lookupOk: Boolean,
     /** Capped raw OFF response; null when omitted or too large. */
     val rawJson: String? = null,
+    /** Label ingredients text (original language), when OFF had it. */
+    val ingredientsText: String? = null,
+    /** English ingredients text when OFF provides a translation. */
+    val ingredientsTextEn: String? = null,
+    /**
+     * Raw OFF `ingredients` array JSON (structured id/text/percent). Null when absent.
+     * Old snapshots without this field decode as null — no Room migration needed.
+     */
+    val ingredientsJson: String? = null,
 ) {
     fun encode(): String {
         val o = JSONObject()
@@ -240,6 +252,9 @@ data class OffSnapshot(
         if (per100Json != null) o.put("per100", JSONObject(per100Json))
         val raw = rawJson?.takeIf { it.length <= MAX_RAW_CHARS }
         if (raw != null) o.put("raw", raw)
+        if (ingredientsText != null) o.put("ingredientsText", ingredientsText)
+        if (ingredientsTextEn != null) o.put("ingredientsTextEn", ingredientsTextEn)
+        if (ingredientsJson != null) o.put("ingredients", JSONArray(ingredientsJson))
         return o.toString()
     }
 
@@ -259,6 +274,9 @@ data class OffSnapshot(
                     lookedUpAt = o.getLong("lookedUpAt"),
                     lookupOk = o.optBoolean("lookupOk", false),
                     rawJson = o.optString("raw").ifEmpty { null },
+                    ingredientsText = o.optString("ingredientsText").ifEmpty { null },
+                    ingredientsTextEn = o.optString("ingredientsTextEn").ifEmpty { null },
+                    ingredientsJson = o.optJSONArray("ingredients")?.toString(),
                 )
             } catch (_: JSONException) {
                 null
@@ -332,6 +350,9 @@ fun parseOffSnapshot(json: String, lookedUpAt: Long = System.currentTimeMillis()
         val name = cleanText(p.optString("product_name"), MAX_NAME).ifEmpty { null }
         val serving = cleanText(p.optString("serving_size"), MAX_NOTE).ifEmpty { null }
         val raw = if (json.length <= OffSnapshot.MAX_RAW_CHARS) json else null
+        val ingText = cleanText(p.optString("ingredients_text"), MAX_INGREDIENTS_TEXT).ifEmpty { null }
+        val ingTextEn = cleanText(p.optString("ingredients_text_en"), MAX_INGREDIENTS_TEXT).ifEmpty { null }
+        val ingArr = p.optJSONArray("ingredients")?.toString()?.takeIf { it.length <= MAX_INGREDIENTS_JSON }
         OffSnapshot(
             productName = name,
             servingSize = serving,
@@ -340,6 +361,9 @@ fun parseOffSnapshot(json: String, lookedUpAt: Long = System.currentTimeMillis()
             lookedUpAt = lookedUpAt,
             lookupOk = true,
             rawJson = raw,
+            ingredientsText = ingText,
+            ingredientsTextEn = ingTextEn,
+            ingredientsJson = ingArr,
         )
     } catch (_: JSONException) {
         null

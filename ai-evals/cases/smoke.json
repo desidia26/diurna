@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Tiny smoke set for Ollama CI (no secrets). Text-only food cases. Scores parse health; accuracy bands are informational for ollama.",
+  "description": "Tiny smoke set for Ollama CI (no secrets). Text-only food + barcode_ingredients. Scores parse health; accuracy bands are informational for ollama.",
   "passThreshold": 0.5,
   "cases": [
     {
@@ -40,6 +40,27 @@
         "carbsG": { "min": 0, "max": 20 },
         "fatG": { "min": 5, "max": 40 },
         "macrosConsistentWithKcal": true
+      }
+    },
+    {
+      "id": "smoke-barcode-oat-bar",
+      "prompt": "barcode_ingredients",
+      "tags": ["smoke", "barcode"],
+      "input": {
+        "productName": "Oat & Honey Bar",
+        "brand": "Acme",
+        "servingGrams": 40,
+        "servingSize": "1 bar (40 g)",
+        "ingredientsText": "whole grain oats, honey, sunflower oil, brown sugar, salt",
+        "kcal": 160,
+        "proteinG": 4,
+        "carbsG": 26,
+        "fatG": 5
+      },
+      "expect": {
+        "outcome": "ingredients",
+        "minIngredients": 2,
+        "nameContainsAny": ["oat", "honey", "oil", "sugar"]
       }
     }
   ]

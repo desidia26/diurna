@@ -2,6 +2,7 @@ package app.diurna.eval
 
 import app.diurna.ai.CardioReading
 import app.diurna.ai.FoodEstimate
+import app.diurna.domain.FoodIngredient
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -185,6 +186,53 @@ object EvalScoring {
             passed = wantReject,
             error = error,
             checks = listOf(CheckResult("failure_as_reject", wantReject, error)),
+        )
+    }
+
+
+    fun scoreBarcodeIngredients(
+        case: EvalCase,
+        ingredients: List<FoodIngredient>,
+        mode: ScoringMode = ScoringMode.ACCURACY,
+    ): CaseScore {
+        val bandsRequired = mode == ScoringMode.ACCURACY
+        val e = case.expect
+        val checks = mutableListOf<CheckResult>()
+        checks += CheckResult("parsed", true, "ingredients=${ingredients.size}")
+        val positive = ingredients.filter { it.grams > 0 && it.name.isNotBlank() }
+        checks += CheckResult(
+            "non_empty",
+            positive.isNotEmpty(),
+            "count=${positive.size}",
+            required = bandsRequired,
+        )
+        e.minIngredients?.let { min ->
+            checks += CheckResult(
+                "min_ingredients",
+                positive.size >= min,
+                "got ${positive.size} want >= $min",
+                required = bandsRequired,
+            )
+        }
+        if (e.nameContainsAny.isNotEmpty()) {
+            val hay = positive.joinToString(" ") { it.name.lowercase() }
+            val hit = e.nameContainsAny.any { it.lowercase() in hay }
+            checks += CheckResult(
+                "name_contains_any",
+                hit,
+                "want one of ${e.nameContainsAny} in $hay",
+                required = bandsRequired,
+            )
+        }
+        checks += CheckResult(
+            "grams_positive",
+            positive.all { it.grams > 0 && it.grams.isFinite() },
+            "ok",
+        )
+        return CaseScore(
+            case.id, "", case.prompt,
+            passed = checks.filter { it.required }.all { it.passed },
+            checks = checks,
         )
     }
 

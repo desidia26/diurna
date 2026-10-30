@@ -140,5 +140,47 @@
         "outcome": "reject"
       }
     }
+,
+    {
+      "id": "barcode-oat-bar",
+      "prompt": "barcode_ingredients",
+      "tags": ["barcode", "typical"],
+      "input": {
+        "productName": "Oat & Honey Bar",
+        "brand": "Acme",
+        "servingGrams": 40,
+        "servingSize": "1 bar (40 g)",
+        "ingredientsText": "whole grain oats, honey, sunflower oil, brown sugar, salt",
+        "kcal": 160,
+        "proteinG": 4,
+        "carbsG": 26,
+        "fatG": 5
+      },
+      "expect": {
+        "outcome": "ingredients",
+        "minIngredients": 3,
+        "nameContainsAny": ["oat", "honey"]
+      }
+    },
+    {
+      "id": "barcode-protein-shake-no-text",
+      "prompt": "barcode_ingredients",
+      "tags": ["barcode", "sparse"],
+      "input": {
+        "productName": "Chocolate Protein Shake",
+        "brand": "Premier",
+        "servingGrams": 325,
+        "servingSize": "1 bottle (325 ml)",
+        "kcal": 160,
+        "proteinG": 30,
+        "carbsG": 5,
+        "fatG": 3
+      },
+      "expect": {
+        "outcome": "ingredients",
+        "minIngredients": 1,
+        "nameContainsAny": ["protein", "milk", "whey", "cocoa", "chocolate"]
+      }
+    }
   ]
 }

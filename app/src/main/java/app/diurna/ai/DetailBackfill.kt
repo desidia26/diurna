@@ -166,12 +166,17 @@ object DetailBackfill {
         )
     }
 
-    /** True when a barcode entry can try OFF for null detail (fill-nulls only). */
-    fun needsOffAttempt(entry: FoodEntryEntity): Boolean {
+    /**
+     * True when a barcode entry can try OFF (and barcode AI-ingredient fallback) for null
+     * detail (fill-nulls only). When [wantAminos], also true if aminos/ingredients are missing.
+     */
+    fun needsOffAttempt(entry: FoodEntryEntity, wantAminos: Boolean = false): Boolean {
         if (entry.barcode.isNullOrBlank()) return false
         if (entry.estimatedAt == null) return false
         val d = fromEntry(entry)
-        return missingSubMacro(d)
+        if (missingSubMacro(d)) return true
+        if (wantAminos && missingAmino(d)) return true
+        return false
     }
 
 

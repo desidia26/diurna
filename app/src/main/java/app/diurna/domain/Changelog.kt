@@ -69,6 +69,10 @@ object Changelog {
             15, "2026-10-30", "Export and import everything",
             "Setup → Backups can now export all your data (history, meals, settings and photos) to one file you save anywhere, and import it on another phone or a fresh install. Your API keys and AI provider settings aren't included, so set them up again after importing.",
         ),
+        Entry(
+            16, "2026-10-30", "Amino acids for barcode foods",
+            "With Detailed nutrition and a USDA FoodData Central key, barcode scans now work out amino acids from the product's ingredients when Open Food Facts lists them, or from an AI guess of those ingredients when it doesn't. Filling in detail for past barcode entries does the same, without changing the calories or macros already recorded.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }

@@ -152,6 +152,26 @@ class EstimateRunner(
             DetailBackfill.fromOffSnapshot(snap, grams) ?: DetailBackfill.Detail()
         }
         val note = fromRaw?.note ?: snap.servingSize ?: "Open Food Facts"
+        var aminos: AminoAcids? = null
+        var ingredientsJson: String? = null
+        var aminoMatched: Int? = null
+        var aminoTotal: Int? = null
+        val wantAminos = detailed() && fdcKeyPresent() && aminoResolver != null
+        if (wantAminos) {
+            val fill = BarcodeIngredientFill.resolve(
+                snap = snap,
+                servingGrams = grams,
+                macros = BarcodeIngredientFill.MacrosHint(
+                    macros.kcal, macros.proteinG, macros.carbsG, macros.fatG,
+                ),
+                estimator = estimator,
+                aminoResolver = aminoResolver!!,
+            )
+            aminos = fill.aminos
+            ingredientsJson = fill.ingredientsJson
+            aminoMatched = fill.aminoMatched
+            aminoTotal = fill.aminoTotal
+        }
         food.setEstimate(
             entry.id, entry.text, entry.photo,
             macros.kcal, macros.kcal, macros.proteinG, macros.carbsG, macros.fatG,
@@ -159,8 +179,9 @@ class EstimateRunner(
             detail.sugarsG, detail.addedSugarsG, detail.starchG,
             detail.satFatG, detail.monoFatG, detail.polyFatG, detail.transFatG,
             detail.cholesterolMg, detail.omega3G, detail.omega6G, detail.omega9G,
-            null, null, null, null, null, null, null, null, null, null, null,
-            null, null, null,
+            aminos?.hisMg, aminos?.ileMg, aminos?.leuMg, aminos?.lysMg, aminos?.metMg,
+            aminos?.pheMg, aminos?.thrMg, aminos?.trpMg, aminos?.valMg, aminos?.cysMg, aminos?.tyrMg,
+            ingredientsJson, aminoMatched, aminoTotal,
             note, "open-food-facts", System.currentTimeMillis(),
         )
         return true

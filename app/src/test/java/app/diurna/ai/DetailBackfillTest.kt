@@ -210,4 +210,25 @@ class DetailBackfillTest {
         assertEquals(4, d.fiberG) // 8 * 0.5
     }
 
+    @Test fun needsOffAttemptWhenAminosWanted() {
+        val subMacrosOnly = entry(fiber = 5).copy(
+            barcode = "0012345678905",
+            solubleFiberG = 1, insolubleFiberG = 4, sugarsG = 10, addedSugarsG = 0, starchG = 20,
+            satFatG = 3, monoFatG = 5, polyFatG = 5, transFatG = 0, cholesterolMg = 0,
+            omega3G = 1, omega6G = 2, omega9G = 3,
+            // aminos still null
+        )
+        assertFalse(DetailBackfill.needsOffAttempt(subMacrosOnly, wantAminos = false))
+        assertTrue(DetailBackfill.needsOffAttempt(subMacrosOnly, wantAminos = true))
+        val withAminos = subMacrosOnly.copy(
+            hisMg = 1, ileMg = 1, leuMg = 1, lysMg = 1, metMg = 1,
+            pheMg = 1, thrMg = 1, trpMg = 1, valMg = 1, cysMg = 1, tyrMg = 1,
+            aminoMatched = 1, aminoTotal = 1,
+            ingredientsJson = """[{"name":"oats","grams":40}]""",
+        )
+        assertFalse(DetailBackfill.needsOffAttempt(withAminos, wantAminos = true))
+        assertFalse(DetailBackfill.needsOffAttempt(withAminos.copy(barcode = null), wantAminos = true))
+    }
+
+
 }

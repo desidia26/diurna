@@ -55,8 +55,8 @@ Reports: `ai-evals/out/summary.md` and `ai-evals/out/results.json` (gitignored).
 
 | Set | File | Intent |
 |-----|------|--------|
-| `smoke` | `ai-evals/cases/smoke.json` | 3 text-only food cases; Ollama CI default |
-| `default` | `ai-evals/cases/default.json` | ~11 cases: typical food, edges, synthetic food photos, cardio |
+| `smoke` | `ai-evals/cases/smoke.json` | 4 text-only cases (3 food + barcode_ingredients); Ollama CI default |
+| `default` | `ai-evals/cases/default.json` | ~13 cases: typical food, edges, synthetic food photos, cardio, barcode_ingredients |
 | `full` | `ai-evals/cases/full.json` | default + more food variety |
 
 Expectations are **bands and tolerances**, not exact values (kcal ±%, macro ranges, parse success, not-food / reject, macro↔kcal consistency). For `ollama`, bands are informational.
@@ -93,7 +93,7 @@ No secret is needed for Ollama smoke. Keys will be added later; until then those
 
 | Run | Calls | Rough cost |
 |-----|-------|------------|
-| `smoke` × ollama | 3 | Free (CPU on the runner; ~1 GB model download, cached) |
+| `smoke` × ollama | 4 | Free (CPU on the runner; ~1 GB model download, cached) |
 | `default` × one real provider | ~11 (incl. photos) | Low cents with Haiku / grok-4.20-non-reasoning |
 | `full` × both real providers | ~30+ | Still usually well under $1 |
 

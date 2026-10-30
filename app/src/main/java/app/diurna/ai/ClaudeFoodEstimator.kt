@@ -47,6 +47,22 @@ class ClaudeFoodEstimator(
             estimate
         }
     }
+
+    override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext): List<app.diurna.domain.FoodIngredient> = withContext(Dispatchers.IO) {
+        val json = ClaudeCall.json(
+            apiKey, model,
+            ClaudeRequest.params(
+                model,
+                BarcodeIngredientsPrompt.userMessage(ctx),
+                photo = null,
+                system = BarcodeIngredientsPrompt.SYSTEM,
+                schema = BarcodeIngredientsPrompt.SCHEMA,
+            ),
+            declined = "The model declined to list ingredients",
+            baseUrl = baseUrl,
+        )
+        BarcodeIngredientsPrompt.parse(json)
+    }
 }
 
 /** One structured-output Messages call with the app's error mapping; shared by food and cardio-screen reading. */
