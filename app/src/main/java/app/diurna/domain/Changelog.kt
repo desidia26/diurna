@@ -70,7 +70,11 @@ object Changelog {
             "Setup → Backups can now export all your data (history, meals, settings and photos) to one file you save anywhere, and import it on another phone or a fresh install. Your API keys and AI provider settings aren't included, so set them up again after importing.",
         ),
         Entry(
-            16, "2026-10-31", "The alarm rings again",
+            16, "2026-10-30", "Omegas card fits on a narrow phone",
+            "The Omegas & cholesterol card on Metrics no longer squeezes its numbers into a tall column of single characters on a small screen. The same fix applies to the Training and Cardio summary rows.",
+        ),
+        Entry(
+            17, "2026-10-31", "The alarm rings again",
             "Since the last update, the morning alarm and the barcode scanner could close the app instead of opening. Both work again.",
         ),
     )

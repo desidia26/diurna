@@ -15,7 +15,7 @@ data class IntRangeExpect(val min: Int, val max: Int) {
  * - estimate / reading: a successful structured reply in expected bands
  * - not_food: note mentions not food (or similar) and macros near zero
  * - not_food_or_zeros: not_food, or all-zero macros/kcal
- * - reject: parser or model fails (cardio non-screen, etc.)
+ * - reject: parser or model fails (cardio non-screen, label non-panel, etc.)
  */
 data class CaseExpect(
     val outcome: String,
@@ -30,13 +30,25 @@ data class CaseExpect(
     val durationS: IntRangeExpect? = null,
     val kcal: IntRangeExpect? = null,
     val avgHr: IntRangeExpect? = null,
+    /** Food detailed path: at least one sub-macro field present (nullable ints). */
+    val requireDetail: Boolean = false,
+    /** Food ingredients path: non-empty ingredient list. */
+    val requireIngredients: Boolean = false,
 )
 
-data class CaseInput(val text: String? = null, val image: String? = null)
+data class CaseInput(
+    val text: String? = null,
+    val image: String? = null,
+    /** When true, call EstimatePrompt.system/schema(detailed=true). */
+    val detailed: Boolean = false,
+    /** When true, also request ingredients (implies detailed in the app). */
+    val ingredients: Boolean = false,
+)
 
 data class EvalCase(
     val id: String,
-    val prompt: String, // "food" | "cardio"
+    /** "food" | "cardio" | "label" */
+    val prompt: String,
     val tags: List<String> = emptyList(),
     val input: CaseInput,
     val expect: CaseExpect,
@@ -87,13 +99,16 @@ object EvalCases {
         if (!node.isArray) return emptyList()
         return (node as ArrayNode).map { c ->
             val expect = c.path("expect")
+            val input = c.path("input")
             EvalCase(
                 id = c.path("id").asText(),
                 prompt = c.path("prompt").asText(),
                 tags = c.path("tags").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
                 input = CaseInput(
-                    text = c.path("input").path("text").takeIf { !it.isMissingNode && !it.isNull }?.asText(),
-                    image = c.path("input").path("image").takeIf { it.isTextual }?.asText(),
+                    text = input.path("text").takeIf { !it.isMissingNode && !it.isNull }?.asText(),
+                    image = input.path("image").takeIf { it.isTextual }?.asText(),
+                    detailed = input.path("detailed").asBoolean(false),
+                    ingredients = input.path("ingredients").asBoolean(false),
                 ),
                 expect = CaseExpect(
                     outcome = expect.path("outcome").asText("estimate"),
@@ -108,6 +123,8 @@ object EvalCases {
                     durationS = intRange(expect.path("durationS")),
                     kcal = intRange(expect.path("kcal")),
                     avgHr = intRange(expect.path("avgHr")),
+                    requireDetail = expect.path("requireDetail").asBoolean(false),
+                    requireIngredients = expect.path("requireIngredients").asBoolean(false),
                 ),
             )
         }

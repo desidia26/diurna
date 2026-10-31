@@ -4,10 +4,13 @@ import app.diurna.ai.CardioPrompt
 import app.diurna.ai.CardioReading
 import app.diurna.ai.ClaudeCardioReader
 import app.diurna.ai.ClaudeFoodEstimator
+import app.diurna.ai.ClaudeLabelReader
 import app.diurna.ai.EstimatePrompt
 import app.diurna.ai.FoodEstimate
 import app.diurna.ai.GrokCardioReader
 import app.diurna.ai.GrokFoodEstimator
+import app.diurna.ai.GrokLabelReader
+import app.diurna.ai.NutritionLabelReading
 import app.diurna.ai.XaiChat
 import app.diurna.ai.XaiTransport
 import org.json.JSONObject
@@ -50,7 +53,12 @@ class RateLimitedSkip(provider: String) :
 interface EvalFoodClient {
     val providerId: String
     val model: String
-    suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate
+    suspend fun estimate(
+        text: String,
+        photo: ByteArray?,
+        detailed: Boolean = false,
+        ingredients: Boolean = false,
+    ): FoodEstimate
 }
 
 interface EvalCardioClient {
@@ -59,9 +67,16 @@ interface EvalCardioClient {
     suspend fun read(photo: ByteArray): CardioReading
 }
 
+interface EvalLabelClient {
+    val providerId: String
+    val model: String
+    suspend fun read(photo: ByteArray): NutritionLabelReading
+}
+
 data class EvalClients(
     val food: EvalFoodClient,
     val cardio: EvalCardioClient?,
+    val label: EvalLabelClient?,
     val scoringMode: ScoringMode = ScoringMode.ACCURACY,
 )
 
@@ -82,7 +97,12 @@ object EvalProviders {
                 override val providerId = id.id
                 override val model = model
                 private val est = GrokFoodEstimator({ key }, { model })
-                override suspend fun estimate(text: String, photo: ByteArray?) = est.estimate(text, photo)
+                override suspend fun estimate(
+                    text: String,
+                    photo: ByteArray?,
+                    detailed: Boolean,
+                    ingredients: Boolean,
+                ) = est.estimate(text, photo, detailed, ingredients)
             }
             val cardio = object : EvalCardioClient {
                 override val providerId = id.id
@@ -90,7 +110,13 @@ object EvalProviders {
                 private val reader = GrokCardioReader({ key }, { model })
                 override suspend fun read(photo: ByteArray) = reader.read(photo)
             }
-            EvalClients(food, cardio, ScoringMode.ACCURACY)
+            val label = object : EvalLabelClient {
+                override val providerId = id.id
+                override val model = model
+                private val reader = GrokLabelReader({ key }, model)
+                override suspend fun read(photo: ByteArray) = reader.read(photo)
+            }
+            EvalClients(food, cardio, label, ScoringMode.ACCURACY)
         }
         EvalProviderId.CLAUDE -> {
             val key = env("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }
@@ -100,7 +126,12 @@ object EvalProviders {
                 override val providerId = id.id
                 override val model = model
                 private val est = ClaudeFoodEstimator({ key }, model)
-                override suspend fun estimate(text: String, photo: ByteArray?) = est.estimate(text, photo)
+                override suspend fun estimate(
+                    text: String,
+                    photo: ByteArray?,
+                    detailed: Boolean,
+                    ingredients: Boolean,
+                ) = est.estimate(text, photo, detailed, ingredients)
             }
             val cardio = object : EvalCardioClient {
                 override val providerId = id.id
@@ -108,7 +139,13 @@ object EvalProviders {
                 private val reader = ClaudeCardioReader({ key }, model)
                 override suspend fun read(photo: ByteArray) = reader.read(photo)
             }
-            EvalClients(food, cardio, ScoringMode.ACCURACY)
+            val label = object : EvalLabelClient {
+                override val providerId = id.id
+                override val model = model
+                private val reader = ClaudeLabelReader({ key }, model)
+                override suspend fun read(photo: ByteArray) = reader.read(photo)
+            }
+            EvalClients(food, cardio, label, ScoringMode.ACCURACY)
         }
         EvalProviderId.OLLAMA -> {
             val base = (ollamaBaseUrl?.takeIf { it.isNotBlank() }
@@ -125,8 +162,20 @@ object EvalProviders {
             val food = object : EvalFoodClient {
                 override val providerId = id.id
                 override val model = model
-                override suspend fun estimate(text: String, photo: ByteArray?): FoodEstimate {
-                    val body = OllamaChat.request(model, EstimatePrompt.SYSTEM, text, photo)
+                override suspend fun estimate(
+                    text: String,
+                    photo: ByteArray?,
+                    detailed: Boolean,
+                    ingredients: Boolean,
+                ): FoodEstimate {
+                    val body = OllamaChat.request(
+                        model,
+                        EstimatePrompt.system(detailed, ingredients),
+                        text,
+                        photo,
+                        schemaName = "food_estimate",
+                        schema = EstimatePrompt.schema(detailed, ingredients),
+                    )
                     return EstimatePrompt.parse(OllamaChat.call(transport, key, body))
                 }
             }
@@ -141,7 +190,8 @@ object EvalProviders {
                     return CardioPrompt.parse(OllamaChat.call(transport, key, body))
                 }
             }
-            EvalClients(food, cardio, ScoringMode.PARSE_HEALTH)
+            // Label is vision-only; Ollama smoke skips vision by default (no label client needed).
+            EvalClients(food, cardio, label = null, ScoringMode.PARSE_HEALTH)
         }
     }
 }
