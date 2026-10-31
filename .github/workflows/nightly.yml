@@ -1,14 +1,18 @@
 # Publishes a signed release build from main once a day, as a normal GitHub release that
 # Obtainium installs and updates. Skips when there's nothing new or main's tests didn't pass.
 #
-# Signed with the release key from the "release" environment (deployable from main only; created
-# by scripts/new-release-key). Every build's certificate is checked against RELEASE_CERT_SHA256
-# before it's published, so a wrong or missing key never reaches anyone's phone.
+# Before publishing, the same minified build runs on an emulator and the morning alarm is made to
+# go off (scripts/smoke): debug builds and unit/device tests never run R8's output, and release
+# 128 shipped an alarm that crashed on opening. Signed with the release key from the "release"
+# environment (deployable from main only; created by scripts/new-release-key), and every build's
+# certificate is checked against RELEASE_CERT_SHA256, so a wrong key never reaches anyone's phone.
 name: Nightly
 
 on:
   schedule:
-    - cron: "0 10 * * *"
+    # 04:00 UTC is midnight Eastern: well away from morning alarms, so an update never lands as
+    # one is about to ring.
+    - cron: "0 4 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -20,28 +24,27 @@ permissions:
   contents: read
 
 jobs:
-  publish:
-    name: Publish
+  check:
+    name: Anything to publish?
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    environment: release
+    timeout-minutes: 5
     permissions:
-      contents: write # create the release and its tag
+      contents: read
       actions: read # see whether Tests passed on this commit
     env:
       GH_TOKEN: ${{ github.token }}
-      # Release APKs are about 26.5 MB; a jump past this is a dependency to look at, not ship.
-      MAX_APK_BYTES: 31457280
+    outputs:
+      n: ${{ steps.version.outputs.n }}
+      tag: ${{ steps.version.outputs.tag }}
+      skip: ${{ steps.version.outputs.skip }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # versionCode is the commit count, so the build needs the full history.
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Decide whether to publish
-        id: version
+      - id: version
         run: |
           n="$(git rev-list --count HEAD)"
           tag="v0.$n"
@@ -61,17 +64,97 @@ jobs:
           fi
           echo "skip=false" >>"$GITHUB_OUTPUT"
 
-      - if: steps.version.outputs.skip == 'false'
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+  smoke:
+    name: Alarm smoke test (minified build, emulator)
+    needs: check
+    if: needs.check.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      API_LEVEL: 33
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: 17
-      - if: steps.version.outputs.skip == 'false'
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      # Signing only has to let the emulator install it, so a throwaway key does; the release key
+      # stays in the publish job.
+      - name: Throwaway signing key
+        run: |
+          mkdir -p signing
+          keytool -genkeypair -keystore signing/smoke.keystore -storetype PKCS12 -alias smoke \
+            -keyalg RSA -keysize 2048 -validity 1 -dname "CN=smoke" -storepass smoketest -keypass smoketest
+          printf 'storeFile=smoke.keystore\nstorePassword=smoketest\nkeyAlias=smoke\nkeyPassword=smoketest\n' >signing/keystore.properties
+      - name: Build (release, plus x86_64 for the emulator)
+        run: ./gradlew assembleRelease -PsmokeTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: AVD cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.API_LEVEL }}-google_apis-x86_64
+      - name: Create AVD and snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+      - name: Smoke test
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: scripts/smoke app/build/outputs/apk/release/app-release.apk
+
+  publish:
+    name: Publish
+    needs: [check, smoke]
+    if: needs.check.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: release
+    permissions:
+      contents: write # create the release and its tag
+    env:
+      GH_TOKEN: ${{ github.token }}
+      N: ${{ needs.check.outputs.n }}
+      TAG: ${{ needs.check.outputs.tag }}
+      # Release APKs are about 26.5 MB; a jump past this is a dependency to look at, not ship.
+      MAX_APK_BYTES: 31457280
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       # Same layout as on the release machine: app/build.gradle.kts reads signing/keystore.properties.
       - name: Write the signing key
-        if: steps.version.outputs.skip == 'false'
         env:
           KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
           STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
@@ -89,14 +172,11 @@ jobs:
           } >signing/keystore.properties
 
       - name: Build
-        if: steps.version.outputs.skip == 'false'
         run: ./gradlew assembleRelease
 
       - name: Check the APK
-        if: steps.version.outputs.skip == 'false'
         env:
           EXPECTED_CERT: ${{ vars.RELEASE_CERT_SHA256 }}
-          N: ${{ steps.version.outputs.n }}
         run: |
           apk=app/build/outputs/apk/release/app-release.apk
           tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
@@ -106,19 +186,46 @@ jobs:
           badging="$("$tools/aapt2" dump badging "$apk")"
           grep -q "package: name='app.daybook' versionCode='$N' versionName='0.$N'" <<<"$badging" \
             || { echo "unexpected package or version:"; head -1 <<<"$badging"; exit 1; }
+          grep -q "native-code: 'arm64-v8a'$" <<<"$badging" \
+            || { echo "unexpected native code (the emulator ABI must not ship):"; grep native-code <<<"$badging"; exit 1; }
           size="$(stat -c %s "$apk")"
           (( size <= MAX_APK_BYTES )) || { echo "APK is $size bytes, over the $MAX_APK_BYTES limit"; exit 1; }
           cp "$apk" "diurna-0.$N.apk"
           echo "0.$N: $((size / 1048576)) MB, certificate $cert" >>"$GITHUB_STEP_SUMMARY"
 
+      # What's new entries added since the last published build, in the words the app shows; the
+      # PR list GitHub generates follows them.
+      - name: Release notes
+        run: |
+          prev="$(gh release list --limit 50 --json tagName --jq '[.[] | select(.tagName | startswith("v0."))][0].tagName // ""')"
+          dir=app/src/main/assets/changelog
+          if [[ -n "$prev" ]] && git rev-parse -q --verify "refs/tags/$prev" >/dev/null && [[ -d "$dir" ]]; then
+            git diff --name-only --diff-filter=A "$prev" HEAD -- "$dir" | sort -r >new-entries.txt
+          else
+            : >new-entries.txt
+          fi
+          {
+            if [[ -s new-entries.txt ]]; then
+              echo "## What's new"
+              while read -r f; do
+                [[ -f "$f" ]] || continue
+                echo
+                echo "**$(head -1 "$f")**"
+                echo
+                tail -n +2 "$f" | sed '/^$/d' | tr '\n' ' '
+                echo
+              done <new-entries.txt
+            else
+              echo "Fixes and improvements."
+            fi
+            echo
+          } >notes.md
+          cat notes.md >>"$GITHUB_STEP_SUMMARY"
+
       - name: Publish
-        if: steps.version.outputs.skip == 'false'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-          N: ${{ steps.version.outputs.n }}
         run: |
           gh release create "$TAG" "diurna-0.$N.apk" --target "$GITHUB_SHA" \
-            --title "Diurna 0.$N" --generate-notes
+            --title "Diurna 0.$N" --notes-file notes.md --generate-notes
           # Keep the newest 15 builds; Obtainium only needs the latest.
           gh release list --limit 200 --json tagName,createdAt \
             --jq '[.[] | select(.tagName | startswith("v0."))] | sort_by(.createdAt) | reverse | .[15:] | .[].tagName' \

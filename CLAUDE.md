@@ -9,10 +9,11 @@ Android app (Kotlin, Jetpack Compose, Room): a porch-QR alarm, food logging with
 - `scripts/release`: tests, release build, backup, install as an update, data check, alarm check, tag
 - `scripts/new-release-key`: run once, ever: creates the release key and stores it in the GitHub environment `release`
 - `scripts/backup-signing-keys`: encrypted copy of `signing/` to keep off this machine
+- `scripts/smoke <apk>`: emulator only: installs a minified build (`./gradlew assembleRelease -PsmokeTest` adds x86_64) and makes the test alarm go off, failing on a crash. Debug builds and the tests never run R8's output; run this after toolchain or keep-rule changes
 - `scripts/backup-db`, `scripts/logs`, `scripts/screenshot`, `scripts/alarm-check`, `scripts/demo-data` (emulator only: replaces app data with made-up history)
 - `./gradlew assembleDebug` / `testDebugUnitTest` for a build or unit tests without a device
 - `./gradlew aiEval -Pprovider=grok|claude|ollama|all` — live AI prompt evals (see [docs/ai-evals.md](docs/ai-evals.md))
-- CI (`.github/workflows/tests.yml`) runs unit and emulator device tests on every PR and push to `main`; `.github/workflows/nightly.yml` publishes a signed release from `main` daily (skipped when nothing changed or Tests failed), which friends' phones install with Obtainium; `.github/workflows/ai-evals.yml` runs Ollama smoke always plus Grok/Claude when keys exist (parallel jobs) on path-filtered changes
+- CI (`.github/workflows/tests.yml`) runs unit and emulator device tests on every PR and push to `main`; `.github/workflows/nightly.yml` publishes a signed release from `main` daily at 04:00 UTC (skipped when nothing changed or Tests failed) after `scripts/smoke` makes the alarm go off in the same minified build on an emulator; friends' phones install it with Obtainium; `.github/workflows/ai-evals.yml` runs Ollama smoke always plus Grok/Claude when keys exist (parallel jobs) on path-filtered changes
 
 Check a build by its exit code, not by filtered output.
 

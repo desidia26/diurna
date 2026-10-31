@@ -123,6 +123,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 | `scripts/demo-data` | **Emulator only:** clear the app's data and fill it with 12 weeks of made-up history (or `scripts/demo-data <weeks>`), for screenshots |
 | `scripts/backup-db` | Copy the database off the device into `backups/<timestamp>/`, which git ignores |
 | `scripts/new-release-key` | **Once, ever:** create the release key in `signing/` and store it in the GitHub environment `release` for the nightly workflow (refuses if it exists) |
+| `scripts/smoke <apk>` | **Emulator only:** install a minified build (`./gradlew assembleRelease -PsmokeTest`, which adds x86_64) and make the test alarm go off with the screen asleep, failing if the app crashes. The tests never run R8's output; this does |
 | `scripts/backup-signing-keys` | Encrypt `signing/` (both keys and their passwords) with a passphrase into `~/diurna-signing-keys-<date>.tar.gz.gpg`, and check it opens again; keep the file off this machine |
 | `scripts/alarm-check` | Show the armed alarm and permissions (`--doze` or `--reboot` to stress-test it) |
 | `LIVE_API=1 ./gradlew testDebugUnitTest --tests '*LiveApiErrorTest*'` | Check a real API error end to end, using a deliberately invalid key (free) |
@@ -131,7 +132,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 
 **Device tests never run on a real phone.** Gradle uninstalls the app after them, which deletes all of Diurna's data, so `scripts/test` refuses anything but the emulator. Run `./gradlew connectedDebugAndroidTest` by hand only if you know which device it will hit.
 
-**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key. `.github/workflows/nightly.yml` builds a release from `main` daily, checks its certificate against `RELEASE_CERT_SHA256`, its version and its size (30 MB at most), and publishes it as `v0.N`. It only runs on `main` and is the only job given the release key.
+**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key. `.github/workflows/nightly.yml` runs from `main` daily at 04:00 UTC (midnight Eastern, away from morning alarms): it first runs `scripts/smoke` on the minified build in an emulator, then builds the release, checks its certificate against `RELEASE_CERT_SHA256`, its version, its CPU type (arm64 only) and its size (30 MB at most), and publishes it as `v0.N` with the new What's new entries as release notes. It only runs on `main` and is the only job given the release key.
 
 **Wireless debugging** works with the scripts too: pair once in Developer options → Wireless debugging, and `adb` reconnects whenever it's turned on. Keep it on trusted networks only, and off when not in use.
 

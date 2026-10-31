@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Install a release-style APK on the emulator and make the morning alarm go off, checking the app
+# doesn't crash. Emulator only: it replaces the app and its data.
+#   scripts/smoke <apk>
+#
+# Debug builds skip R8, and published APKs are arm64 only, so the tests never ran the minified
+# code: release 128 crashed when its alarm screen opened the porch scanner (ML Kit lost a
+# constructor to R8). Build the APK to check with `./gradlew assembleRelease -PsmokeTest`, which
+# adds x86_64 so it runs here. The nightly workflow runs this before publishing.
+source "$(dirname "$0")/_lib.sh"
+
+apk="${1:?usage: scripts/smoke <apk>}"
+[[ -f "$apk" ]] || die "no such file: $apk"
+pick_device emulator
+
+ui_xml="$(mktemp)"
+trap 'rm -f "$ui_xml"' EXIT
+# Centre of the first view whose text or description is exactly $1, or nothing.
+find_view() {
+  adb shell uiautomator dump /sdcard/smoke-ui.xml >/dev/null 2>&1 || true
+  adb shell cat /sdcard/smoke-ui.xml >"$ui_xml" 2>/dev/null || true
+  python3 - "$1" "$ui_xml" <<'PY'
+import re, sys
+want, xml = sys.argv[1], open(sys.argv[2], errors="replace").read()
+for node in re.findall(r"<node [^>]*>", xml):
+    text = re.search(r' text="([^"]*)"', node)
+    desc = re.search(r' content-desc="([^"]*)"', node)
+    if want in ((text and text.group(1)), (desc and desc.group(1))):
+        x1, y1, x2, y2 = map(int, re.findall(r"\d+", re.search(r'bounds="([^"]*)"', node).group(1)))
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        break
+PY
+}
+tap() {
+  local at
+  for _ in $(seq 1 15); do
+    at="$(find_view "$1")"
+    [[ -n "$at" ]] && { adb shell input tap $at; return; }
+    adb shell input swipe 540 1600 540 800 300
+    sleep 1
+  done
+  die "couldn't find \"$1\" on screen"
+}
+alive() { [[ -n "$(adb shell pidof "$PKG" | tr -d '\r')" ]]; }
+crashes() { adb logcat -d -b crash | grep -c "Process: $PKG" || true; }
+
+echo "== Install"
+adb uninstall "$PKG" >/dev/null 2>&1 || true
+adb install "$apk" | tail -1
+for p in CAMERA POST_NOTIFICATIONS; do adb shell pm grant "$PKG" "android.permission.$p" 2>/dev/null || true; done
+adb logcat -c -b all
+
+echo "== Open the app"
+adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+sleep 6
+alive || die "the app isn't running after launch"
+# A What's new dialog would cover the tabs on an update; a fresh install has none, but be sure.
+at="$(find_view "Got it")"; [[ -n "$at" ]] && adb shell input tap $at
+
+echo "== Test alarm"
+tap "Setup"
+sleep 1
+tap "Test alarm in 1 minute"
+sleep 2
+adb shell dumpsys alarm | grep -q "app.diurna.alarm.AlarmReceiver" || die "the test alarm wasn't set"
+# With the screen on the alarm only rings as a notification; asleep, it opens the full-screen
+# alarm screen, which starts the porch scanner: the code that crashed in release 128.
+adb shell input keyevent KEYCODE_SLEEP
+show_crash() {
+  adb logcat -d -b crash | grep -A20 "Process: $PKG" | head -40
+  adb shell input keyevent KEYCODE_WAKEUP
+  die "the app crashed during the test alarm"
+}
+opened=false
+for _ in $(seq 1 90); do
+  (( $(crashes) > 0 )) && show_crash
+  adb shell dumpsys activity activities | grep -q "ResumedActivity.*AlarmActivity" && { opened=true; break; }
+  sleep 1
+done
+$opened || { adb shell input keyevent KEYCODE_WAKEUP; die "the alarm screen didn't open within 90 seconds"; }
+sleep 8 # let the scanner start
+if (( $(crashes) > 0 )) || ! alive; then show_crash; fi
+adb shell am force-stop "$PKG" # stops the ringing
+adb shell input keyevent KEYCODE_WAKEUP
+echo "OK: the alarm screen opened and the app didn't crash."
