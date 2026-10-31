@@ -69,6 +69,10 @@ object Changelog {
             15, "2026-10-30", "Export and import everything",
             "Setup → Backups can now export all your data (history, meals, settings and photos) to one file you save anywhere, and import it on another phone or a fresh install. Your API keys and AI provider settings aren't included, so set them up again after importing.",
         ),
+        Entry(
+            16, "2026-10-30", "Omegas card fits on a narrow phone",
+            "The Omegas & cholesterol card on Metrics no longer squeezes its numbers into a tall column of single characters on a small screen. The same fix applies to the Training and Cardio summary rows.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
