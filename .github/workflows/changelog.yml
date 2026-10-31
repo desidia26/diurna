@@ -1,0 +1,40 @@
+# A pull request that changes the app needs a What's new entry: a new file in
+# app/src/main/assets/changelog (see domain/Changelog.kt), or the "no-changelog" label for changes
+# nobody would notice (refactors, tests, internal fixes). Re-runs when labels change.
+name: Changelog
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+# Actions are pinned to full commit SHAs (release tag in the comment), as in tests.yml.
+permissions:
+  contents: read
+
+jobs:
+  entry:
+    name: Changelog entry
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          SKIP: ${{ contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
+        run: |
+          dir=app/src/main/assets/changelog
+          app="$(git diff --name-only "$BASE"...HEAD -- app/src/main ":!$dir")"
+          added="$(git diff --name-only --diff-filter=A "$BASE"...HEAD -- "$dir")"
+          if [[ -z "$app" ]]; then
+            echo "No app changes; no entry needed."
+          elif [[ -n "$added" ]]; then
+            echo "New entries:"; echo "$added"
+          elif [[ "$SKIP" == true ]]; then
+            echo "Labelled no-changelog."
+          else
+            echo "::error::This PR changes the app but adds no What's new entry. Add $dir/yyyy-MM-dd-short-name.md (title line, blank line, plain-words body), or label the PR no-changelog if nobody would notice."
+            exit 1
+          fi
