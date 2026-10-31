@@ -69,6 +69,10 @@ object Changelog {
             15, "2026-10-30", "Export and import everything",
             "Setup → Backups can now export all your data (history, meals, settings and photos) to one file you save anywhere, and import it on another phone or a fresh install. Your API keys and AI provider settings aren't included, so set them up again after importing.",
         ),
+        Entry(
+            16, "2026-10-31", "The alarm rings again",
+            "Since the last update, the morning alarm and the barcode scanner could close the app instead of opening. Both work again.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
