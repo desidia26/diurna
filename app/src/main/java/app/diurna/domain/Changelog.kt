@@ -73,6 +73,10 @@ object Changelog {
             16, "2026-10-30", "Omegas card fits on a narrow phone",
             "The Omegas & cholesterol card on Metrics no longer squeezes its numbers into a tall column of single characters on a small screen. The same fix applies to the Training and Cardio summary rows.",
         ),
+        Entry(
+            17, "2026-10-31", "The alarm rings again",
+            "Since the last update, the morning alarm and the barcode scanner could close the app instead of opening. Both work again.",
+        ),
     )
 
     val latest: Int get() = entries.maxOf { it.id }
