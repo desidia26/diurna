@@ -64,6 +64,9 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel() {
         todaySteps.value = c.steps.stepsOn(java.time.LocalDate.now())
     }
 
+    /** What's new entries for Setup's card and page, newest first. */
+    val changelog = c.changelog
+
     // Backups
     val lastBackup = c.backups.last
     fun backupNow() = io { c.backups.backupNow() }

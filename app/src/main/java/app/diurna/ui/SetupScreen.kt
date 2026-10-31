@@ -66,7 +66,7 @@ fun SetupScreen(vm: SetupViewModel, library: LibraryViewModel, contentPadding: P
     when (page) {
         "meals" -> MealsPage(library) { page = null }
         "exercises" -> ExercisesPage(library) { page = null }
-        "changes" -> ChangesPage { page = null }
+        "changes" -> ChangesPage(vm.changelog) { page = null }
         else -> SetupMain(vm, library, contentPadding, onOpen = { page = it })
     }
 }
@@ -155,7 +155,7 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
                 }
             }
         }
-        item { WhatsNewCard(onAll = { onOpen("changes") }) }
+        item { WhatsNewCard(vm.changelog, onAll = { onOpen("changes") }) }
     }
 
     if (scanning) PorchScanDialog(vm, onDone = { scanning = false })
