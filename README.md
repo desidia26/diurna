@@ -65,7 +65,7 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Self-backups: a consistent copy of the database and settings daily (keeps 14) in the app's shared-storage folder, readable over `adb`; meal photos mirrored once into `backups/food-photos` | `data/Backups.kt` |
 | Export and import: Setup → Backups writes one zip (manifest, a consistent database copy, settings with the porch code, meal photos; never API keys or AI provider settings) wherever the person picks, and imports one on a fresh install. Imports are checked entry by entry (known names only, size caps, `integrity_check`, schema no newer than the app), staged, backed up against, then swapped in at the next start before anything opens the database; older exports migrate as usual | `domain/ExportArchive.kt`, `data/DataTransfer.kt` |
 | Shared one-line summaries for the Day screen and lock screen | `domain/DayText.kt` |
-| What's new: user-facing notes in `Changelog.kt` (numbered entries, not versions), shown once as a dialog on the first launcher open after an update (not from the check-in notification or the alarm); a fresh install starts caught up. The last seen id lives in settings; Setup lists recent entries | `domain/Changelog.kt`, `ui/WhatsNew.kt` |
+| What's new: user-facing notes, one file per change in `assets/changelog` (`yyyy-MM-dd-short-name.md`: title line, then body), so parallel PRs never conflict and there's nothing to number. Shown once as a dialog on the first launcher open after an update (not from the check-in notification or the alarm); a fresh install starts caught up. Settings keep the set of entry names already shown, so an entry that merges late still appears; installs from when entries were numbered carry over. Setup lists recent entries. CI (`changelog.yml`) asks app-changing PRs for an entry or the `no-changelog` label | `domain/Changelog.kt`, `data/ChangelogFiles.kt`, `ui/WhatsNew.kt` |
 | UI: Compose, five tabs (Day, Week, Metrics, Routine, Setup), one ViewModel per screen | `ui/` |
 
 Key data rules:
@@ -105,7 +105,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 
 | Command | What it does |
 |---|---|
-| `scripts/release` | **Ship to the phone:** tests, release build, backup, install as an update, check no data was lost, check the alarm, tag `release-N` and push the tag. Warns if the app changed but `Changelog.kt` didn't. Needs a clean working tree. |
+| `scripts/release` | **Ship to the phone:** tests, release build, backup, install as an update, check no data was lost, check the alarm, tag `release-N` and push the tag. Warns if the app changed but no `assets/changelog` entry was added. Needs a clean working tree. |
 | `scripts/install` | Build, install and open a **debug** build (`--no-launch` to skip opening) |
 | `scripts/test` | Unit tests, plus device tests if an emulator is running (`unit` or `device` for just one) |
 | `scripts/emulator` | Start the emulator and wait until it's ready (`--headless` for no window, `--stop` to shut it down) |

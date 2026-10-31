@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -81,12 +82,18 @@ class SettingsStore(private val context: Context) : StepStateStore {
     }
 
     // ---- What's new ----
-    // The newest Changelog entry already shown. Null until the first launch that has a changelog.
-    private val changelogSeenKey = intPreferencesKey("changelog_seen")
-    val changelogSeen: Flow<Int?> = context.dataStore.data.map { it[changelogSeenKey] }.distinctUntilChanged()
+    // The Changelog entries already shown, by name. Null until the first launch that has a changelog.
+    private val changelogSeenKey = stringSetPreferencesKey("changelog_seen_ids")
+    val changelogSeen: Flow<Set<String>?> = context.dataStore.data.map { it[changelogSeenKey] }.distinctUntilChanged()
+    // Before entries were files: the highest entry number shown. Read once to carry it over.
+    private val changelogSeenNumberKey = intPreferencesKey("changelog_seen")
+    suspend fun changelogSeenNumber(): Int? = context.dataStore.data.first()[changelogSeenNumberKey]
 
-    suspend fun setChangelogSeen(id: Int) {
-        context.dataStore.edit { it[changelogSeenKey] = id }
+    suspend fun setChangelogSeen(ids: Set<String>) {
+        context.dataStore.edit {
+            it[changelogSeenKey] = ids
+            it.remove(changelogSeenNumberKey)
+        }
     }
 
     // ---- Steps ----
