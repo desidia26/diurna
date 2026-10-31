@@ -346,7 +346,9 @@ jobs:
                 head -n 20 "$dir/summary.md" >> "$GITHUB_STEP_SUMMARY" || true
                 echo "" >> "$GITHUB_STEP_SUMMARY"
                 # Heuristic: look for FAILED / passed in summary
-                if grep -qiE 'overall.*(fail|❌)' "$dir/summary.md"; then
+                if grep -qiE 'Parse failures \(block the build\)' "$dir/summary.md"; then
+                  status="fail (parse)"
+                elif grep -qiE 'overall.*(fail|❌)' "$dir/summary.md"; then
                   status="fail"
                 elif grep -qiE 'skipped:.*(API_KEY|not set)' "$dir/summary.md"; then
                   status="skipped (no key)"

@@ -35,7 +35,7 @@ object Changelog {
         if (freshInstall) entries.map { it.id }.toSet() else emptySet()
 
     /**
-     * Before entries were files they were numbered 1 to 16, and installs stored the highest number
+     * Before entries were files they were numbered 1 to 17, and installs stored the highest number
      * shown. These are those entries' names, in the old order.
      */
     private val NUMBERED = listOf(
@@ -54,6 +54,7 @@ object Changelog {
         "2026-10-28-import-a-recipe-from-a-link",
         "2026-10-28-use-any-openai-compatible-ai",
         "2026-10-30-export-and-import-everything",
+        "2026-10-30-omegas-card-fits-on-a-narrow-phone",
         "2026-10-31-the-alarm-rings-again",
     )
 

@@ -10,6 +10,7 @@ data class ProviderSummary(
     val passed: Int,
     val failed: Int,
     val skipped: Int,
+    val parseFailures: Int = 0,
     val passRate: Double?,
     val skipReasons: List<String> = emptyList(),
 )
@@ -20,6 +21,8 @@ data class EvalReport(
     val scores: List<CaseScore>,
     val overallPassed: Boolean,
     val anyProviderRan: Boolean,
+    /** True when any case had a parseFailure; forces overall fail regardless of threshold. */
+    val anyParseFailure: Boolean = false,
 )
 
 object EvalReportWriter {
@@ -32,6 +35,7 @@ object EvalReportWriter {
             val passed = list.count { it.passed && !it.skipped }
             val failed = list.count { !it.passed && !it.skipped }
             val skipped = list.count { it.skipped }
+            val parseFailures = list.count { it.parseFailure }
             ProviderSummary(
                 provider = p,
                 model = models[p],
@@ -39,43 +43,57 @@ object EvalReportWriter {
                 passed = passed,
                 failed = failed,
                 skipped = skipped,
+                parseFailures = parseFailures,
                 passRate = if (ran == 0) null else passed.toDouble() / ran,
                 skipReasons = list.mapNotNull { it.skipReason }.distinct(),
             )
         }.sortedBy { it.provider }
         val anyRan = summaries.any { it.ran > 0 }
-        val overall = if (!anyRan) {
+        val anyParseFailure = scores.any { it.parseFailure }
+        val thresholdOk = if (!anyRan) {
             true // nothing to grade; missing keys / unreachable Ollama is a skip, not a fail
         } else {
             summaries.filter { it.ran > 0 }.all { (it.passRate ?: 0.0) >= threshold }
         }
-        return EvalReport(threshold, summaries, scores, overall, anyRan)
+        // Any parse failure fails the run even when the pass-rate threshold is still met.
+        val overall = thresholdOk && !anyParseFailure
+        return EvalReport(threshold, summaries, scores, overall, anyRan, anyParseFailure)
     }
 
     fun toMarkdown(report: EvalReport): String = buildString {
         appendLine("## AI prompt evals")
         appendLine()
         appendLine("Pass threshold: **${"%.0f".format(report.threshold * 100)}%** of cases per provider that ran.")
+        appendLine("Any **parse failure** (unparseable / empty / transport with no body) fails the run regardless of that threshold.")
         appendLine()
         if (!report.anyProviderRan) {
             appendLine("> No provider ran (missing keys, or Ollama unreachable). Harness OK; live accuracy not scored.")
             appendLine()
         }
-        appendLine("| Provider | Model | Passed | Failed | Skipped | Pass rate |")
-        appendLine("|---|---|---:|---:|---:|---:|")
+        appendLine("| Provider | Model | Passed | Failed | Parse fail | Skipped | Pass rate |")
+        appendLine("|---|---|---:|---:|---:|---:|---:|")
         report.providers.forEach { p ->
             val rate = p.passRate?.let { "${"%.0f".format(it * 100)}%" } ?: "—"
-            appendLine("| ${p.provider} | ${p.model ?: "—"} | ${p.passed} | ${p.failed} | ${p.skipped} | $rate |")
+            appendLine("| ${p.provider} | ${p.model ?: "—"} | ${p.passed} | ${p.failed} | ${p.parseFailures} | ${p.skipped} | $rate |")
         }
         appendLine()
         report.providers.filter { it.skipReasons.isNotEmpty() }.forEach { p ->
             appendLine("- **${p.provider} skips:** ${p.skipReasons.joinToString("; ")}")
         }
-        val failures = report.scores.filter { !it.passed && !it.skipped }
-        if (failures.isNotEmpty()) {
+        val parseFails = report.scores.filter { it.parseFailure }
+        if (parseFails.isNotEmpty()) {
             appendLine()
-            appendLine("### Failures")
-            failures.forEach { s ->
+            appendLine("### Parse failures (block the build)")
+            parseFails.forEach { s ->
+                appendLine("- `${s.provider}` / `${s.caseId}`: " +
+                    (s.error ?: s.failedChecks.joinToString { "${it.name}: ${it.detail}" }))
+            }
+        }
+        val scoreFails = report.scores.filter { !it.passed && !it.skipped && !it.parseFailure }
+        if (scoreFails.isNotEmpty()) {
+            appendLine()
+            appendLine("### Accuracy / score failures")
+            scoreFails.forEach { s ->
                 appendLine("- `${s.provider}` / `${s.caseId}`: " +
                     (s.error ?: s.failedChecks.joinToString { "${it.name}: ${it.detail}" }))
             }
@@ -90,6 +108,11 @@ object EvalReportWriter {
             }
         }
         appendLine()
+        if (report.anyParseFailure) {
+            appendLine()
+            appendLine("> Parse failure(s) present — overall FAIL regardless of pass-rate threshold.")
+        }
+        appendLine()
         appendLine("Overall: **${if (report.overallPassed) "PASS" else "FAIL"}**")
     }
 
@@ -99,6 +122,7 @@ object EvalReportWriter {
         root.put("threshold", report.threshold)
         root.put("overallPassed", report.overallPassed)
         root.put("anyProviderRan", report.anyProviderRan)
+        root.put("anyParseFailure", report.anyParseFailure)
         val providers = root.putArray("providers")
         report.providers.forEach { p ->
             providers.addObject().apply {
@@ -108,6 +132,7 @@ object EvalReportWriter {
                 put("passed", p.passed)
                 put("failed", p.failed)
                 put("skipped", p.skipped)
+                put("parseFailures", p.parseFailures)
                 if (p.passRate != null) put("passRate", p.passRate) else putNull("passRate")
             }
         }
@@ -119,6 +144,7 @@ object EvalReportWriter {
                 put("prompt", s.prompt)
                 put("passed", s.passed)
                 put("skipped", s.skipped)
+                put("parseFailure", s.parseFailure)
                 put("skipReason", s.skipReason)
                 put("error", s.error)
                 val ch = putArray("checks")

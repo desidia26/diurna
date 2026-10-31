@@ -41,10 +41,10 @@ class ChangelogTest {
 
     @Test fun oldNumbersCarryOverToNames() {
         val ids = entries.map { it.id }.toSet()
-        val all = Changelog.seenFromNumber(16)
-        assertEquals(16, all.size)
+        val all = Changelog.seenFromNumber(17)
+        assertEquals(17, all.size)
         assertTrue("every numbered entry still has its file", ids.containsAll(all))
-        assertEquals(setOf("2026-10-31-the-alarm-rings-again"), Changelog.seenFromNumber(16) - Changelog.seenFromNumber(15))
+        assertEquals(setOf("2026-10-31-the-alarm-rings-again"), Changelog.seenFromNumber(17) - Changelog.seenFromNumber(16))
         assertEquals(emptySet<String>(), Changelog.seenFromNumber(0))
         assertEquals(all, Changelog.seenFromNumber(99))
     }
