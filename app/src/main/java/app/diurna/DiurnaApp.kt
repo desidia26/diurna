@@ -28,6 +28,8 @@ import app.diurna.alarm.AlarmScheduler
 import app.diurna.checkin.CheckInReminder
 import app.diurna.data.AppDatabase
 import app.diurna.data.Backups
+import app.diurna.data.DataTransfer
+import app.diurna.data.ImportApply
 import app.diurna.data.DayFinalizer
 import app.diurna.data.DayRepository
 import app.diurna.data.NutritionRepository
@@ -68,6 +70,12 @@ class AppContainer(context: Context) {
     val photoImporter = PhotoImporter(context, foodPhotos)
     val library = LibraryRepository(db, photoStore = foodPhotoStore)
     val backups = Backups(context, db, foodPhotos)
+    val transfer = DataTransfer(
+        backups, foodPhotos,
+        versionCode = context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toInt(),
+        scratchDir = context.cacheDir,
+        stagingDir = File(context.filesDir, ImportApply.STAGING),
+    )
     val aiProvider = AiProviderStore(context)
     val gateway = GatewaySettingsStore(context)
     val apiKeys: Map<AiProvider, ApiKeyStore> = AiProvider.entries.associateWith { ApiKeyStore(context, it) }
@@ -183,6 +191,8 @@ class DiurnaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         PackageRename.cleanUpOnce(this) // before the container schedules anything
+        // An import confirmed in Setup is swapped in here, before anything opens the database.
+        if (ImportApply.forApp(this).applyPending()) ImportApply.markImported(this)
         container = AppContainer(this)
         container.appScope.launch {
             container.settings.ensureSecret()

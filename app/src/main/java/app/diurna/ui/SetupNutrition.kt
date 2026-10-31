@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.LaunchedEffect
@@ -45,12 +46,14 @@ import app.diurna.ai.BackfillWorkState
 import app.diurna.ai.GatewayUrl
 import app.diurna.ai.GrokFoodEstimator
 import app.diurna.ai.XaiChat
+import app.diurna.data.DataTransfer
 import app.diurna.data.SettingsStore.ProfileDraft
 import app.diurna.domain.Activity
 import app.diurna.domain.Goal
 import app.diurna.domain.Sex
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
@@ -411,13 +414,49 @@ fun StepsCard(vm: SetupViewModel) {
 @Composable
 fun BackupsCard(vm: SetupViewModel) {
     val last by vm.lastBackup.collectAsStateWithLifecycle()
+    val message by vm.transferMessage.collectAsStateWithLifecycle()
+    val staged by vm.stagedImport.collectAsStateWithLifecycle()
+    val imported by vm.justImported.collectAsStateWithLifecycle()
+    val exportTo = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        uri?.let(vm::export)
+    }
+    val importFrom = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(vm::stageImport)
+    }
     SectionCard("Backups") {
+        if (imported) {
+            Text("Imported. API keys and AI provider settings aren't part of an export, so set them up again under Food estimates.", color = MaterialTheme.colorScheme.primary)
+            TextButton(onClick = vm::dismissImported) { Text("OK") }
+        }
         Hint("Diurna backs itself up once a day (the last 14 are kept) to its folder on this phone, where a computer can copy them with scripts/backup-db.")
         Text(
             last?.let { "Last backup: " + it.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, HH:mm")) } ?: "No backup yet",
             fontFamily = FontFamily.Monospace,
         )
         OutlinedButton(onClick = vm::backupNow) { Text("Back up now") }
+        // Backups live in the app's own folder, which uninstalling deletes; an export is saved wherever you pick.
+        Hint("To move to a new install, export everything to a file you keep (Downloads, a cloud drive), then import it there. API keys and AI provider settings aren't included.")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { exportTo.launch(DataTransfer.fileName()) }) { Text("Export everything") }
+            OutlinedButton(onClick = { importFrom.launch(arrayOf("application/zip", "application/octet-stream")) }) { Text("Import…") }
+        }
+        message?.let { Hint(it) }
+    }
+    staged?.let { s ->
+        val from = runCatching { LocalDateTime.parse(s.manifest.exportedAt).format(DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm")) }
+            .getOrDefault(s.manifest.exportedAt)
+        AlertDialog(
+            onDismissRequest = vm::cancelImport,
+            title = { Text("Replace everything?") },
+            text = {
+                Text(
+                    "Everything in Diurna on this phone will be replaced by the export from $from (${s.days} days). " +
+                        "What's here now is backed up first. Diurna restarts to finish.",
+                )
+            },
+            confirmButton = { TextButton(onClick = vm::commitImport) { Text("Replace") } },
+            dismissButton = { TextButton(onClick = vm::cancelImport) { Text("Cancel") } },
+        )
     }
 }
 

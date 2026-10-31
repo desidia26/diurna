@@ -2,6 +2,7 @@ package app.diurna.eval
 
 import app.diurna.ai.CardioReading
 import app.diurna.ai.FoodEstimate
+import app.diurna.ai.NutritionLabelReading
 import app.diurna.domain.CardioPiece
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -108,4 +109,89 @@ class EvalScoringTest {
         assertTrue(s.infoMisses.any { it.name == "not_food_or_zeros" })
         assertTrue(s.checks.any { it.name == "parsed" && it.passed })
     }
+
+    @Test fun labelReadingInBand() {
+        val c = EvalCase(
+            "l", "label", input = CaseInput(image = "x.jpg"),
+            expect = CaseExpect(
+                outcome = "reading",
+                kcal = IntRangeExpect(120, 160),
+                proteinG = IntRangeExpect(3, 8),
+                carbsG = IntRangeExpect(24, 34),
+                fatG = IntRangeExpect(0, 5),
+            ),
+        )
+        val s = EvalScoring.scoreLabel(
+            c,
+            NutritionLabelReading(
+                productName = "SYNTHETIC OATS",
+                serving = "1 cup (40g)",
+                kcal = 140, proteinG = 5, carbsG = 29, fatG = 2,
+            ),
+        )
+        assertTrue(s.passed)
+    }
+
+    @Test fun labelRejectOnFailurePasses() {
+        val c = EvalCase("l", "label", input = CaseInput(image = "x.jpg"), expect = CaseExpect(outcome = "reject"))
+        assertTrue(EvalScoring.scoreLabelFailure(c, "No calories found (not a nutrition label). Enter it by hand.").passed)
+    }
+
+    @Test fun foodRequireDetailAndIngredients() {
+        val c = EvalCase(
+            "d", "food",
+            input = CaseInput("oats", detailed = true, ingredients = true),
+            expect = CaseExpect(
+                outcome = "estimate",
+                kcalMid = 300,
+                kcalTolPct = 80.0,
+                requireDetail = true,
+                requireIngredients = true,
+            ),
+        )
+        val ok = EvalScoring.scoreFood(
+            c,
+            FoodEstimate(
+                250, 350, 10, 50, 8, "bowl",
+                fiberG = 5, sugarsG = 12,
+                ingredients = listOf(app.diurna.domain.FoodIngredient("oats, cooked", 80.0)),
+            ),
+        )
+        assertTrue(ok.passed)
+        val missing = EvalScoring.scoreFood(
+            c,
+            FoodEstimate(250, 350, 10, 50, 8, "bowl"),
+        )
+        assertFalse(missing.passed)
+        assertTrue(missing.failedChecks.any { it.name == "has_detail" })
+        assertTrue(missing.failedChecks.any { it.name == "has_ingredients" })
+    }
+
+    @Test fun parseHealthOatmealMarkedNotFoodIsWarningNotFailure() {
+        // Small Ollama models sometimes label real food as "not food"; that is an accuracy miss,
+        // not a parse failure, and must not fail PARSE_HEALTH scoring.
+        val s = EvalScoring.scoreFood(
+            foodCase("estimate", mid = 300, tol = 100.0),
+            FoodEstimate(250, 350, 10, 50, 8, "not food"),
+            ScoringMode.PARSE_HEALTH,
+        )
+        assertTrue("case should pass under PARSE_HEALTH", s.passed)
+        assertFalse(s.parseFailure)
+        assertTrue(s.infoMisses.any { it.name == "not_marked_not_food" })
+    }
+
+    @Test fun unexpectedFoodFailureIsParseFailure() {
+        val c = foodCase("estimate")
+        val s = EvalScoring.scoreFoodFailure(c, "Couldn't read the estimate")
+        assertFalse(s.passed)
+        assertTrue(s.parseFailure)
+    }
+
+    @Test fun expectedRejectFailureIsNotParseFailure() {
+        val c = EvalCase("l", "label", input = CaseInput(image = "x.jpg"), expect = CaseExpect(outcome = "reject"))
+        val s = EvalScoring.scoreLabelFailure(c, "No calories found (not a nutrition label).")
+        assertTrue(s.passed)
+        assertFalse(s.parseFailure)
+    }
+
 }
