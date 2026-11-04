@@ -26,14 +26,24 @@ import kotlinx.coroutines.flow.map
 
 class WhatsNewViewModel(private val c: AppContainer, freshInstall: Boolean) : ScreenViewModel() {
     init {
-        io { if (c.settings.changelogSeen.first() == null) c.settings.setChangelogSeen(Changelog.initialSeen(freshInstall)) }
+        io {
+            if (c.settings.changelogSeen.first() == null) {
+                val number = c.settings.changelogSeenNumber()
+                c.settings.setChangelogSeen(
+                    if (number != null) Changelog.seenFromNumber(number) else Changelog.initialSeen(c.changelog, freshInstall),
+                )
+            }
+        }
     }
 
-    /** Entries since the last dismissal, newest first; empty until a starting point is recorded. */
+    /** Entries not shown yet, newest first; empty until a starting point is recorded. */
     val unseen: StateFlow<List<Changelog.Entry>> =
-        c.settings.changelogSeen.map { seen -> seen?.let(Changelog::since).orEmpty() }.state(emptyList())
+        c.settings.changelogSeen.map { seen -> seen?.let { Changelog.unseen(c.changelog, it) }.orEmpty() }.state(emptyList())
 
-    fun dismiss() = io { c.settings.setChangelogSeen(Changelog.latest) }
+    fun dismiss() = io {
+        val seen = c.settings.changelogSeen.first().orEmpty()
+        c.settings.setChangelogSeen(seen + c.changelog.map { it.id })
+    }
 }
 
 /** Shown on a launcher open after an update; tapping outside counts as read, like "Got it". */
@@ -67,17 +77,18 @@ fun ChangelogEntry(e: Changelog.Entry) {
 private const val RECENT_CHANGES = 3
 
 @Composable
-fun WhatsNewCard(onAll: () -> Unit) {
+fun WhatsNewCard(entries: List<Changelog.Entry>, onAll: () -> Unit) {
+    if (entries.isEmpty()) return
     SectionCard("What's new") {
-        Changelog.since(0).take(RECENT_CHANGES).forEach { ChangelogEntry(it) }
-        if (Changelog.entries.size > RECENT_CHANGES) TextButton(onClick = onAll) { Text("All changes") }
+        entries.take(RECENT_CHANGES).forEach { ChangelogEntry(it) }
+        if (entries.size > RECENT_CHANGES) TextButton(onClick = onAll) { Text("All changes") }
     }
 }
 
 @Composable
-fun ChangesPage(onBack: () -> Unit) {
+fun ChangesPage(entries: List<Changelog.Entry>, onBack: () -> Unit) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { PageHeader("What's new", onBack) }
-        items(Changelog.since(0), key = { it.id }) { ChangelogEntry(it) }
+        items(entries, key = { it.id }) { ChangelogEntry(it) }
     }
 }

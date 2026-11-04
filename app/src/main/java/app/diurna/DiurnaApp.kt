@@ -28,6 +28,7 @@ import app.diurna.alarm.AlarmScheduler
 import app.diurna.checkin.CheckInReminder
 import app.diurna.data.AppDatabase
 import app.diurna.data.Backups
+import app.diurna.data.ChangelogFiles
 import app.diurna.data.DataTransfer
 import app.diurna.data.ImportApply
 import app.diurna.data.DayFinalizer
@@ -70,6 +71,8 @@ class AppContainer(context: Context) {
     val photoImporter = PhotoImporter(context, foodPhotos)
     val library = LibraryRepository(db, photoStore = foodPhotoStore)
     val backups = Backups(context, db, foodPhotos)
+    /** What's new entries, read from assets once. */
+    val changelog by lazy { ChangelogFiles.load(context.assets) }
     val transfer = DataTransfer(
         backups, foodPhotos,
         versionCode = context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toInt(),
