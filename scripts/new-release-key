@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Create the release key and hand it to GitHub. Run once, ever.
+#   scripts/new-release-key
+#
+# Makes signing/release.keystore with random passwords in signing/release.properties (both
+# git-ignored, same shape as keystore.properties), creates the GitHub environment "release"
+# (deployable from main only) and stores the key there as secrets for the nightly workflow. The
+# certificate's SHA-256 goes into the repo variable RELEASE_CERT_SHA256, which every nightly is
+# checked against. No password is ever printed or passed on a command line.
+#
+# Refuses to run if the key exists: a replaced key strands every phone that has the old one.
+source "$(dirname "$0")/_lib.sh"
+cd "$ROOT"
+
+ks="signing/release.keystore"
+props="signing/release.properties"
+alias_name="diurna"
+[[ -e "$ks" || -e "$props" ]] && die "$ks already exists. The release key must never be replaced."
+for tool in keytool openssl gh; do command -v "$tool" >/dev/null || die "needs $tool"; done
+repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+
+umask 077
+mkdir -p signing
+# PKCS12 uses one password for the store and the key.
+RELEASE_PASS="$(openssl rand -base64 48 | tr -d '/+=\n')"
+RELEASE_PASS="${RELEASE_PASS:0:40}"
+export RELEASE_PASS
+keytool -genkeypair -keystore "$ks" -storetype PKCS12 -alias "$alias_name" \
+  -keyalg RSA -keysize 4096 -validity 10950 -dname "CN=Diurna" \
+  -storepass:env RELEASE_PASS -keypass:env RELEASE_PASS 2>/dev/null
+{
+  echo "storeFile=release.keystore"
+  echo "storePassword=$RELEASE_PASS"
+  echo "keyAlias=$alias_name"
+  echo "keyPassword=$RELEASE_PASS"
+} >"$props"
+# Lower-case hex without colons, the way apksigner prints it.
+fingerprint="$(keytool -list -v -keystore "$ks" -storepass:env RELEASE_PASS \
+  | awk '/SHA256:/ && !n++ {print $2}' | tr -d ':' | tr 'A-F' 'a-f')"
+[[ ${#fingerprint} -eq 64 ]] || die "couldn't read the new certificate's fingerprint"
+echo "created $ks"
+
+# The environment's secrets are only handed to jobs running on main.
+gh api -X PUT "repos/$repo/environments/release" --input - >/dev/null <<'JSON'
+{"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
+JSON
+gh api "repos/$repo/environments/release/deployment-branch-policies" --jq '.branch_policies[].name' \
+  | grep -qx main || gh api -X POST "repos/$repo/environments/release/deployment-branch-policies" \
+    -f name=main -f type=branch >/dev/null
+base64 -w0 "$ks" | gh secret set RELEASE_KEYSTORE_B64 --env release --repo "$repo"
+printf '%s' "$RELEASE_PASS" | gh secret set RELEASE_STORE_PASSWORD --env release --repo "$repo"
+printf '%s' "$RELEASE_PASS" | gh secret set RELEASE_KEY_PASSWORD --env release --repo "$repo"
+printf '%s' "$alias_name" | gh secret set RELEASE_KEY_ALIAS --env release --repo "$repo"
+gh variable set RELEASE_CERT_SHA256 --body "$fingerprint" --repo "$repo"
+echo "stored in the GitHub environment \"release\"; certificate SHA-256 $fingerprint"
+
+echo
+echo "Now copy $ks and $props into your password manager. Without them (or the"
+echo "GitHub secrets) no phone on this key can ever be updated again."
+echo "signing/keystore.properties still names the old key; point it at release.keystore on switch day."

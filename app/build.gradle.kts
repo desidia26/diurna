@@ -52,7 +52,11 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
             // Only the Pixel's CPU type; debug builds keep all of them for the x86 emulator.
-            ndk { abiFilters += listOf("arm64-v8a") }
+            // -PsmokeTest adds x86_64 so scripts/smoke can run the minified build on the emulator.
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+                if (providers.gradleProperty("smokeTest").isPresent) abiFilters += listOf("x86_64")
+            }
         }
     }
     compileOptions {
