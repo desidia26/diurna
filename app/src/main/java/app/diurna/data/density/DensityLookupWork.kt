@@ -14,7 +14,7 @@ import app.diurna.data.MealEntity
 import kotlinx.coroutines.CancellationException
 
 /**
- * Background fill of density / grams-per-each on recipe lines that still lack grams.
+ * Background fill of density / grams and empty nutrition on recipe lines.
  * Idempotent: skips lines that already have grams. Manual density_id is never overwritten
  * by [IngredientDensityResolver.applyToLine].
  */
@@ -28,8 +28,10 @@ class DensityLookupWorker(context: Context, params: WorkerParameters) : Coroutin
             val mealIds: List<Long> = if (mealId > 0L) {
                 listOf(mealId)
             } else {
-                db.recipeIngredientDao().blockedNeedingDensity()
-                    .map { it.mealId }.distinct()
+                (
+                    db.recipeIngredientDao().blockedNeedingDensity() +
+                        db.recipeIngredientDao().needingNutritionFill()
+                    ).map { it.mealId }.distinct()
             }
             var filled = 0
             for (id in mealIds) {

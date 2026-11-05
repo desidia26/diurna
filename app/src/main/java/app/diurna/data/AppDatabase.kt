@@ -27,8 +27,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FoodPhotoEntity::class,
         FdcFoodCacheEntity::class,
         IngredientDensityCacheEntity::class,
+        IngredientNutritionCacheEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -58,6 +59,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         // v15: food_photo gallery (data copy of food_entry.photo is in MIGRATION_14_15).
         // v16: ingredient density / grams-per-each lookup cache.
         AutoMigration(from = 15, to = 16),
+        // v17: per-100g ingredient nutrition cache (USDA / AI).
+        AutoMigration(from = 16, to = 17),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -71,6 +74,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun foodPhotoDao(): FoodPhotoDao
     abstract fun fdcFoodCacheDao(): FdcFoodCacheDao
     abstract fun ingredientDensityCacheDao(): IngredientDensityCacheDao
+    abstract fun ingredientNutritionCacheDao(): IngredientNutritionCacheDao
 
     /** v2: food estimates, body weight, finalized-day snapshots. The v1 estimate columns were never written. */
     @DeleteColumn(tableName = "food_entry", columnName = "kcal_estimate")

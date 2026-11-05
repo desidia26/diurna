@@ -1,16 +1,21 @@
 package app.diurna.data.density
 
 import app.diurna.ai.DensityEstimator
+import app.diurna.ai.NutritionEstimator
 import app.diurna.ai.EstimateFailed
 import app.diurna.ai.NoApiKey
 import app.diurna.data.IngredientDensityCacheEntity
 import app.diurna.data.IngredientDensityCacheDao
+import app.diurna.data.IngredientNutritionCacheEntity
+import app.diurna.data.IngredientNutritionCacheDao
 import app.diurna.data.RecipeIngredientEntity
 import app.diurna.data.fdc.FdcClient
+import app.diurna.data.fdc.FdcNutritionProfile
 import app.diurna.data.fdc.FdcTransport
 import app.diurna.domain.DensityLookup
 import app.diurna.domain.DensityUnitKind
 import app.diurna.domain.IngredientDensity
+import app.diurna.domain.RecipeMath
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,6 +29,14 @@ private class MemCache : IngredientDensityCacheDao {
     override suspend fun get(key: String) = map[key]
     override suspend fun upsert(row: IngredientDensityCacheEntity) { map[row.queryKey] = row }
     override suspend fun delete(key: String) { map.remove(key) }
+    fun size() = map.size
+}
+
+private class MemNutritionCache : IngredientNutritionCacheDao {
+    private val map = linkedMapOf<String, IngredientNutritionCacheEntity>()
+    override suspend fun get(name: String) = map[name]
+    override suspend fun upsert(row: IngredientNutritionCacheEntity) { map[row.normalizedName] = row }
+    override suspend fun delete(name: String) { map.remove(name) }
     fun size() = map.size
 }
 
@@ -234,5 +247,202 @@ class IngredientDensityResolverTest {
     @Test fun goodFdcNameMatch() {
         assertTrue(IngredientDensity.isGoodFdcNameMatch("all-purpose flour", "Flour, wheat, all-purpose"))
         assertFalse(IngredientDensity.isGoodFdcNameMatch("olive oil", "Butter, salted"))
+    }
+
+    private val soyFood = """
+        {"fdcId":2,"description":"Soymilk, original and vanilla, unfortified",
+         "foodPortions":[{"gramWeight":243,"value":1,"measureUnit":{"name":"cup","abbreviation":"cup"},
+           "modifier":"","portionDescription":"1 cup"}],
+         "foodNutrients":[
+           {"nutrient":{"id":1008},"amount":43},
+           {"nutrient":{"id":1003},"amount":2.6},
+           {"nutrient":{"id":1005},"amount":4.9},
+           {"nutrient":{"id":1004},"amount":1.5}
+         ]}
+    """.trimIndent()
+
+    private val waterFood = """
+        {"fdcId":3,"description":"Water, municipal",
+         "foodPortions":[{"gramWeight":240,"value":1,"measureUnit":{"name":"cup","abbreviation":"cup"},
+           "modifier":"","portionDescription":"1 cup"}],
+         "foodNutrients":[
+           {"nutrient":{"id":1008},"amount":0},
+           {"nutrient":{"id":1003},"amount":0},
+           {"nutrient":{"id":1005},"amount":0},
+           {"nutrient":{"id":1004},"amount":0}
+         ]}
+    """.trimIndent()
+
+    private fun focacciaLines() = listOf(
+        RecipeIngredientEntity(
+            mealId = 1, position = 0, name = "ground flaxseeds", amount = 0.25, unit = "cup",
+            grams = 33.0, densityId = IngredientDensity.Source.AI, source = "import",
+        ),
+        RecipeIngredientEntity(
+            mealId = 1, position = 1, name = "water", amount = 0.5, unit = "cup",
+            grams = 120.0, densityId = "water", gPerMl = 1.0, source = "import",
+        ),
+        RecipeIngredientEntity(
+            mealId = 1, position = 2, name = "soy milk", amount = 3.5, unit = "cup",
+            grams = 865.0, densityId = "milk", gPerMl = 1.03, source = "import",
+        ),
+        RecipeIngredientEntity(
+            mealId = 1, position = 3, name = "apple cider vinegar", amount = 2.0, unit = "tbsp",
+            grams = 30.0, densityId = IngredientDensity.Source.AI, source = "import",
+        ),
+        RecipeIngredientEntity(
+            mealId = 1, position = 4,
+            name = "all purpose flour* (or a mix of whole wheat and white flour)",
+            amount = 3.5, unit = "cup",
+            grams = 445.0, densityId = "flour", gPerMl = 0.53, source = "import",
+        ),
+        RecipeIngredientEntity(
+            mealId = 1, position = 5, name = "baking powder", amount = 1.0, unit = "tbsp",
+            grams = 15.0, densityId = IngredientDensity.Source.AI, source = "import",
+        ),
+    )
+
+    private fun aiNutrition(): NutritionEstimator = NutritionEstimator { name ->
+        val n = name.lowercase()
+        when {
+            "flour" in n -> FdcNutritionProfile(
+                0, "AP flour", RecipeMath.IngredientNutrition(10, 76, 1, fiberG = 3), 364,
+            )
+            "soy" in n -> FdcNutritionProfile(
+                0, "soy milk", RecipeMath.IngredientNutrition(3, 5, 2), 43,
+            )
+            "flax" in n -> FdcNutritionProfile(
+                0, "flax", RecipeMath.IngredientNutrition(18, 29, 42, fiberG = 27), 534,
+            )
+            "vinegar" in n -> FdcNutritionProfile(
+                0, "vinegar", RecipeMath.IngredientNutrition(0, 1, 0), 21,
+            )
+            "baking" in n || "powder" in n -> FdcNutritionProfile(
+                0, "baking powder", RecipeMath.IngredientNutrition(0, 28, 0), 53,
+            )
+            "water" in n -> FdcNutritionProfile(
+                0, "water", RecipeMath.IngredientNutrition(0, 0, 0), 0,
+            )
+            else -> FdcNutritionProfile(
+                0, name, RecipeMath.IngredientNutrition(1, 1, 1), 20,
+            )
+        }
+    }
+
+    @Test fun importedFocacciaGetsMacrosWithoutUsdaKey() = runBlocking {
+        val nCache = MemNutritionCache()
+        val resolver = IngredientDensityResolver(
+            FdcClient({ null }, FdcTransport { _, _ -> error("no usda") }),
+            MemCache(),
+            ai = null,
+            nutritionAi = aiNutrition(),
+            nutritionCache = nCache,
+        )
+        val enriched = focacciaLines().map { resolver.enrichLine(it) }
+        val byName = enriched.associateBy { it.name }
+        val flour = byName.getValue("all purpose flour* (or a mix of whole wheat and white flour)")
+        val soy = byName.getValue("soy milk")
+        val water = byName.getValue("water")
+        assertTrue("flour protein", flour.proteinG > 0)
+        assertTrue("flour carbs", flour.carbsG > 0)
+        assertTrue("flour kcal", flour.kcal > 0)
+        assertEquals("ai", flour.source)
+        assertTrue("soy protein", soy.proteinG > 0)
+        assertTrue("soy kcal", soy.kcal > 0)
+        assertEquals("ai", soy.source)
+        // Water genuinely zero, but marked filled so we do not re-estimate forever.
+        assertEquals(0, water.proteinG)
+        assertEquals(0, water.carbsG)
+        assertEquals(0, water.fatG)
+        assertEquals(0, water.kcal)
+        assertEquals("ai", water.source)
+        assertFalse(water.nutritionNeedsFill())
+        assertTrue(nCache.size() >= 3)
+    }
+
+    @Test fun importedFocacciaGetsMacrosWithUsdaKey() = runBlocking {
+        val transport = FdcTransport { path, _ ->
+            when {
+                path.contains("/foods/search") && "flour" in path ->
+                    """{"foods":[{"fdcId":1,"description":"Flour, wheat, all-purpose"}]}"""
+                path.contains("/foods/search") && ("soy" in path || "soymilk" in path) ->
+                    """{"foods":[{"fdcId":2,"description":"Soymilk, original and vanilla, unfortified"}]}"""
+                path.contains("/foods/search") && "water" in path ->
+                    """{"foods":[{"fdcId":3,"description":"Water, municipal"}]}"""
+                path.contains("/foods/search") -> """{"foods":[]}"""
+                path.contains("/food/1") -> flourFood
+                path.contains("/food/2") -> soyFood
+                path.contains("/food/3") -> waterFood
+                else -> null
+            }
+        }
+        val resolver = IngredientDensityResolver(
+            FdcClient({ "k" }, transport),
+            MemCache(),
+            ai = null,
+            nutritionAi = aiNutrition(),
+            nutritionCache = MemNutritionCache(),
+        )
+        val enriched = focacciaLines().map { resolver.enrichLine(it) }
+        val flour = enriched.first { "flour" in it.name }
+        val soy = enriched.first { it.name == "soy milk" }
+        val flax = enriched.first { "flax" in it.name }
+        assertTrue(flour.proteinG > 0)
+        assertTrue(flour.carbsG > 0)
+        assertEquals("fdc", flour.source)
+        assertTrue(soy.proteinG > 0)
+        assertEquals("fdc", soy.source)
+        // Flax has no FDC hit in this fixture → AI fallback
+        assertTrue(flax.proteinG > 0)
+        assertEquals("ai", flax.source)
+    }
+
+    @Test fun enrichBackfillsNutritionOnBuiltinDensityLines() = runBlocking {
+        // Reproduces the bug: grams already set via builtin, so needsDensityLookup is false,
+        // and old code only filled nutrition when densityId was USDA.
+        val resolver = IngredientDensityResolver(
+            FdcClient({ null }, FdcTransport { _, _ -> null }),
+            MemCache(),
+            nutritionAi = aiNutrition(),
+            nutritionCache = MemNutritionCache(),
+        )
+        val flour = RecipeIngredientEntity(
+            mealId = 1, position = 0,
+            name = "all purpose flour* (or a mix of whole wheat and white flour)",
+            amount = 3.5, unit = "cup", grams = 445.0, densityId = "flour", gPerMl = 0.53,
+            source = "import", proteinG = 0, carbsG = 0, fatG = 0, kcal = 0,
+        )
+        assertFalse(flour.needsDensityLookup())
+        assertTrue(flour.needsEnrichment())
+        val filled = resolver.enrichLine(flour)
+        assertTrue(filled.proteinG > 0)
+        assertTrue(filled.carbsG > 0)
+        assertEquals("ai", filled.source)
+    }
+
+    @Test fun genuineZeroWaterDoesNotNeedRefill() = runBlocking {
+        val water = RecipeIngredientEntity(
+            mealId = 1, position = 0, name = "water", amount = 0.5, unit = "cup",
+            grams = 120.0, densityId = "water", gPerMl = 1.0, source = "fdc",
+            proteinG = 0, carbsG = 0, fatG = 0, kcal = 0,
+        )
+        assertFalse(water.nutritionIsEmpty())
+        assertFalse(water.nutritionNeedsFill())
+        assertFalse(water.needsEnrichment())
+    }
+
+    @Test fun soyMilkMatchesFdcSoymilkCompound() {
+        assertTrue(
+            IngredientDensity.isGoodFdcNameMatch(
+                "soy milk",
+                "Soymilk, original and vanilla, unfortified",
+            ),
+        )
+        assertTrue(
+            IngredientDensity.isGoodFdcNameMatch(
+                "all purpose flour* (or a mix of whole wheat and white flour)",
+                "Flour, wheat, all-purpose",
+            ),
+        )
     }
 }

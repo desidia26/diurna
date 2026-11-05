@@ -79,11 +79,18 @@ interface EvalDensityClient {
     suspend fun estimate(name: String, kind: app.diurna.domain.DensityUnitKind): app.diurna.domain.DensityLookup
 }
 
+interface EvalIngredientNutritionClient {
+    val providerId: String
+    val model: String
+    suspend fun estimate(name: String): app.diurna.data.fdc.FdcNutritionProfile
+}
+
 data class EvalClients(
     val food: EvalFoodClient,
     val cardio: EvalCardioClient?,
     val label: EvalLabelClient?,
     val density: EvalDensityClient? = null,
+    val ingredientNutrition: EvalIngredientNutritionClient? = null,
     val scoringMode: ScoringMode = ScoringMode.ACCURACY,
 )
 
@@ -130,7 +137,13 @@ object EvalProviders {
                 override suspend fun estimate(name: String, kind: app.diurna.domain.DensityUnitKind) =
                     est.estimate(name, kind)
             }
-            EvalClients(food, cardio, label, density, ScoringMode.ACCURACY)
+            val ingredientNutrition = object : EvalIngredientNutritionClient {
+                override val providerId = id.id
+                override val model = model
+                private val est = app.diurna.ai.GrokNutritionEstimator({ key }, { model }, { app.diurna.ai.HttpXaiTransport() })
+                override suspend fun estimate(name: String) = est.estimate(name)
+            }
+            EvalClients(food, cardio, label, density, ingredientNutrition, ScoringMode.ACCURACY)
         }
         EvalProviderId.CLAUDE -> {
             val key = env("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }
@@ -166,7 +179,13 @@ object EvalProviders {
                 override suspend fun estimate(name: String, kind: app.diurna.domain.DensityUnitKind) =
                     est.estimate(name, kind)
             }
-            EvalClients(food, cardio, label, density, ScoringMode.ACCURACY)
+            val ingredientNutrition = object : EvalIngredientNutritionClient {
+                override val providerId = id.id
+                override val model = model
+                private val est = app.diurna.ai.ClaudeNutritionEstimator({ key }, { model })
+                override suspend fun estimate(name: String) = est.estimate(name)
+            }
+            EvalClients(food, cardio, label, density, ingredientNutrition, ScoringMode.ACCURACY)
         }
         EvalProviderId.OLLAMA -> {
             val base = (ollamaBaseUrl?.takeIf { it.isNotBlank() }
@@ -233,7 +252,28 @@ object EvalProviders {
                     )
                 }
             }
-            EvalClients(food, cardio, label = null, density = density, ScoringMode.PARSE_HEALTH)
+            val ingredientNutrition = object : EvalIngredientNutritionClient {
+                override val providerId = id.id
+                override val model = model
+                override suspend fun estimate(name: String): app.diurna.data.fdc.FdcNutritionProfile {
+                    val body = OllamaChat.request(
+                        model,
+                        app.diurna.ai.IngredientNutritionPrompt.SYSTEM,
+                        app.diurna.ai.IngredientNutritionPrompt.userText(name),
+                        photoJpeg = null,
+                        schemaName = "ingredient_nutrition",
+                        schema = app.diurna.ai.IngredientNutritionPrompt.SCHEMA,
+                    )
+                    return app.diurna.ai.IngredientNutritionPrompt.parse(
+                        OllamaChat.call(transport, key, body),
+                    )
+                }
+            }
+            EvalClients(
+                food, cardio, label = null, density = density,
+                ingredientNutrition = ingredientNutrition,
+                scoringMode = ScoringMode.PARSE_HEALTH,
+            )
         }
     }
 }

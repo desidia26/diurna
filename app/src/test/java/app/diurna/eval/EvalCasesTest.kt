@@ -18,6 +18,7 @@ class EvalCasesTest {
         assertTrue(set.cases.any { it.prompt == "cardio" })
         assertTrue(set.cases.any { it.prompt == "label" })
         assertTrue(set.cases.any { it.prompt == "density" })
+        assertTrue(set.cases.any { it.prompt == "ingredient_nutrition" })
         assertTrue(set.cases.any { it.input.detailed })
         assertTrue(set.cases.any { it.input.ingredients })
         assertTrue(set.passThreshold in 0.0..1.0)
@@ -35,11 +36,12 @@ class EvalCasesTest {
 
     @Test fun smokeIsTinyAndTextOnly() {
         val set = EvalCases.load(resolveCasesDir(), "smoke")
-        assertTrue("smoke stays small", set.cases.size in 5..12)
+        assertTrue("smoke stays small", set.cases.size in 5..15)
         assertTrue(set.cases.all { it.input.image == null })
-        assertTrue(set.cases.all { it.prompt in setOf("food", "density") })
+        assertTrue(set.cases.all { it.prompt in setOf("food", "density", "ingredient_nutrition") })
         assertTrue(set.cases.any { it.prompt == "food" })
         assertTrue(set.cases.any { it.prompt == "density" })
+        assertTrue(set.cases.any { it.prompt == "ingredient_nutrition" })
         assertTrue(set.cases.any { it.input.detailed && !it.input.ingredients })
         assertTrue(set.cases.any { it.input.ingredients })
     }

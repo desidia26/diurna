@@ -151,6 +151,17 @@ class EvalRunner(
                     val lookup = dens.estimate(name, kind)
                     EvalScoring.scoreDensity(case, lookup, clients.scoringMode).copy(provider = pid.id)
                 }
+                "ingredient_nutrition" -> {
+                    val nut = clients.ingredientNutrition
+                        ?: return CaseScore(
+                            case.id, pid.id, case.prompt, passed = true, skipped = true,
+                            skipReason = "no ingredient nutrition client",
+                        )
+                    val name = case.input.text.orEmpty()
+                    val profile = nut.estimate(name)
+                    EvalScoring.scoreIngredientNutrition(case, profile, clients.scoringMode)
+                        .copy(provider = pid.id)
+                }
                 else -> CaseScore(case.id, pid.id, case.prompt, passed = false, error = "unknown prompt ${case.prompt}")
             }
         } catch (e: NoApiKey) {
@@ -184,6 +195,9 @@ class EvalRunner(
                 "cardio" -> EvalScoring.scoreCardioFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "label" -> EvalScoring.scoreLabelFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "density" -> EvalScoring.scoreDensityFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
+                "ingredient_nutrition" -> EvalScoring.scoreIngredientNutritionFailure(
+                    case, e.message ?: "EstimateFailed",
+                ).copy(provider = pid.id)
                 else -> CaseScore(
                     case.id, pid.id, case.prompt,
                     passed = false, error = e.message, parseFailure = true,

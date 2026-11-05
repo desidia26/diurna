@@ -248,7 +248,9 @@ fun RecipeDialog(
                                     color = LocalStatusColors.current.warn,
                                 )
                             }
-                            if (line.densityId == app.diurna.domain.IngredientDensity.Source.AI && line.grams != null) {
+                            val aiNutrition = line.source == "ai"
+                            val aiDensity = line.densityId == app.diurna.domain.IngredientDensity.Source.AI && line.grams != null
+                            if (aiNutrition || aiDensity) {
                                 Text("AI estimate", style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
                             }
                         }

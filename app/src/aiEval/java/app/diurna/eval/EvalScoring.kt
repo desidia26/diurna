@@ -340,4 +340,82 @@ object EvalScoring {
             checks = listOf(CheckResult("parse", false, message)),
         )
     }
+
+    fun scoreIngredientNutrition(
+        case: EvalCase,
+        profile: app.diurna.data.fdc.FdcNutritionProfile,
+        mode: ScoringMode = ScoringMode.ACCURACY,
+    ): CaseScore {
+        val bandsRequired = mode == ScoringMode.ACCURACY
+        val checks = mutableListOf<CheckResult>()
+        // Successful structured parse — zeros are valid (water).
+        checks += CheckResult(
+            "parsed",
+            true,
+            "kcal=${profile.kcalPer100} P=${profile.per100.proteinG} C=${profile.per100.carbsG} F=${profile.per100.fatG}",
+        )
+        checks += CheckResult(
+            "non_negative",
+            profile.kcalPer100 >= 0 && profile.per100.proteinG >= 0 &&
+                profile.per100.carbsG >= 0 && profile.per100.fatG >= 0,
+            "macros non-negative",
+            required = true,
+        )
+        case.expect.kcalMid?.let { mid ->
+            val tol = case.expect.kcalTolPct ?: 40.0
+            val lo = mid * (1 - tol / 100.0)
+            val hi = mid * (1 + tol / 100.0)
+            val v = profile.kcalPer100.toDouble()
+            checks += CheckResult(
+                "kcal",
+                v in lo..hi,
+                "got=$v expect=$lo..$hi",
+                required = bandsRequired,
+            )
+        }
+        case.expect.proteinG?.let { band ->
+            val v = profile.per100.proteinG
+            checks += CheckResult(
+                "protein",
+                band.contains(v),
+                "got=$v expect=${band.min}..${band.max}",
+                required = bandsRequired,
+            )
+        }
+        case.expect.carbsG?.let { band ->
+            val v = profile.per100.carbsG
+            checks += CheckResult(
+                "carbs",
+                band.contains(v),
+                "got=$v expect=${band.min}..${band.max}",
+                required = bandsRequired,
+            )
+        }
+        case.expect.fatG?.let { band ->
+            val v = profile.per100.fatG
+            checks += CheckResult(
+                "fat",
+                band.contains(v),
+                "got=$v expect=${band.min}..${band.max}",
+                required = bandsRequired,
+            )
+        }
+        val passed = checks.none { !it.passed && it.required }
+        return CaseScore(case.id, "", case.prompt, passed = passed, checks = checks)
+    }
+
+    fun scoreIngredientNutritionFailure(case: EvalCase, message: String): CaseScore {
+        if (case.expect.outcome == "reject") {
+            return CaseScore(
+                case.id, "", case.prompt,
+                passed = true,
+                checks = listOf(CheckResult("reject", true, message)),
+            )
+        }
+        return CaseScore(
+            case.id, "", case.prompt,
+            passed = false, error = message, parseFailure = true,
+            checks = listOf(CheckResult("parse", false, message)),
+        )
+    }
 }
