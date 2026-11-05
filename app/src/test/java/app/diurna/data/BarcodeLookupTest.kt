@@ -200,4 +200,20 @@ class BarcodeLookupTest {
         assertEquals(30, snap.toMacros(snap.basisGrams)!!.proteinG)
     }
 
+
+    @Test fun parseOffSnapshotKeepsIngredients() {
+        val json = off("""{"product_name":"Bar","serving_size":"40 g","serving_quantity":"40",
+            "ingredients_text":"oats, sugar","ingredients_text_en":"oats, sugar",
+            "ingredients":[{"id":"en:oats","text":"oats","percent":70},{"text":"sugar","percent_estimate":20}],
+            "nutriments":{"energy-kcal_100g":400,"proteins_100g":10,"carbohydrates_100g":60,"fat_100g":12}}""")
+        val snap = parseOffSnapshot(json)!!
+        assertEquals("oats, sugar", snap.ingredientsText)
+        assertEquals("oats, sugar", snap.ingredientsTextEn)
+        assertTrue(snap.ingredientsJson!!.contains("oats"))
+        assertTrue(OffIngredients.isUsable(snap, 40.0))
+        val round = OffSnapshot.decode(snap.encode())!!
+        assertEquals(snap.ingredientsText, round.ingredientsText)
+        assertTrue(OffIngredients.fromStructured(round.ingredientsJson, 40.0).usable)
+    }
+
 }

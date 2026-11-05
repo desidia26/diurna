@@ -1,104 +1,57 @@
 {
   "version": 1,
-  "description": "Tiny smoke set for Ollama CI (no secrets). Text-only food cases (basic, detailed, ingredients). Scores parse health; accuracy bands are informational for ollama.",
+  "description": "Tiny smoke set for Ollama CI (no secrets). Text-only food cases (basic, detailed, ingredients), density, and barcode_ingredients. Scores parse health; accuracy bands are informational for ollama.",
   "passThreshold": 0.5,
   "cases": [
     {
       "id": "smoke-apple",
       "prompt": "food",
-      "tags": [
-        "smoke"
-      ],
-      "input": {
-        "text": "one medium apple"
-      },
+      "tags": ["smoke"],
+      "input": { "text": "one medium apple" },
       "expect": {
         "outcome": "estimate",
         "kcalMid": 95,
         "kcalTolPct": 100,
-        "proteinG": {
-          "min": 0,
-          "max": 10
-        },
-        "carbsG": {
-          "min": 5,
-          "max": 50
-        },
-        "fatG": {
-          "min": 0,
-          "max": 10
-        },
+        "proteinG": { "min": 0, "max": 10 },
+        "carbsG": { "min": 5, "max": 50 },
+        "fatG": { "min": 0, "max": 10 },
         "macrosConsistentWithKcal": true
       }
     },
     {
       "id": "smoke-not-food",
       "prompt": "food",
-      "tags": [
-        "smoke"
-      ],
-      "input": {
-        "text": "I went for a long walk, no snacks"
-      },
-      "expect": {
-        "outcome": "not_food_or_zeros"
-      }
+      "tags": ["smoke"],
+      "input": { "text": "I went for a long walk, no snacks" },
+      "expect": { "outcome": "not_food_or_zeros" }
     },
     {
       "id": "smoke-eggs",
       "prompt": "food",
-      "tags": [
-        "smoke"
-      ],
-      "input": {
-        "text": "two scrambled eggs"
-      },
+      "tags": ["smoke"],
+      "input": { "text": "two scrambled eggs" },
       "expect": {
         "outcome": "estimate",
         "kcalMid": 180,
         "kcalTolPct": 100,
-        "proteinG": {
-          "min": 5,
-          "max": 40
-        },
-        "carbsG": {
-          "min": 0,
-          "max": 20
-        },
-        "fatG": {
-          "min": 5,
-          "max": 40
-        },
+        "proteinG": { "min": 5, "max": 40 },
+        "carbsG": { "min": 0, "max": 20 },
+        "fatG": { "min": 5, "max": 40 },
         "macrosConsistentWithKcal": true
       }
     },
     {
       "id": "smoke-detailed-oatmeal",
       "prompt": "food",
-      "tags": [
-        "smoke",
-        "detailed"
-      ],
-      "input": {
-        "text": "bowl of oatmeal with milk and banana",
-        "detailed": true
-      },
+      "tags": ["smoke", "detailed"],
+      "input": { "text": "bowl of oatmeal with milk and banana", "detailed": true },
       "expect": {
         "outcome": "estimate",
         "kcalMid": 300,
         "kcalTolPct": 100,
-        "proteinG": {
-          "min": 0,
-          "max": 30
-        },
-        "carbsG": {
-          "min": 20,
-          "max": 90
-        },
-        "fatG": {
-          "min": 0,
-          "max": 25
-        },
+        "proteinG": { "min": 0, "max": 30 },
+        "carbsG": { "min": 20, "max": 90 },
+        "fatG": { "min": 0, "max": 25 },
         "macrosConsistentWithKcal": true,
         "requireDetail": true
       }
@@ -106,10 +59,7 @@
     {
       "id": "smoke-ingredients-chicken",
       "prompt": "food",
-      "tags": [
-        "smoke",
-        "ingredients"
-      ],
+      "tags": ["smoke", "ingredients"],
       "input": {
         "text": "grilled chicken breast with rice and broccoli",
         "detailed": true,
@@ -119,18 +69,9 @@
         "outcome": "estimate",
         "kcalMid": 450,
         "kcalTolPct": 100,
-        "proteinG": {
-          "min": 10,
-          "max": 80
-        },
-        "carbsG": {
-          "min": 10,
-          "max": 100
-        },
-        "fatG": {
-          "min": 0,
-          "max": 40
-        },
+        "proteinG": { "min": 10, "max": 80 },
+        "carbsG": { "min": 10, "max": 100 },
+        "fatG": { "min": 0, "max": 40 },
         "macrosConsistentWithKcal": true,
         "requireIngredients": true
       }
@@ -138,58 +79,52 @@
     {
       "id": "density-flour-volume",
       "prompt": "density",
-      "tags": [
-        "smoke",
-        "density"
-      ],
-      "input": {
-        "text": "all-purpose flour",
-        "unitKind": "volume"
-      },
+      "tags": ["smoke", "density"],
+      "input": { "text": "all-purpose flour", "unitKind": "volume" },
       "expect": {
         "outcome": "estimate",
-        "gPerMl": {
-          "min": 0.3,
-          "max": 0.9
-        }
+        "gPerMl": { "min": 0.3, "max": 0.9 }
       }
     },
     {
       "id": "density-water-volume",
       "prompt": "density",
-      "tags": [
-        "smoke",
-        "density"
-      ],
-      "input": {
-        "text": "water",
-        "unitKind": "volume"
-      },
+      "tags": ["smoke", "density"],
+      "input": { "text": "water", "unitKind": "volume" },
       "expect": {
         "outcome": "estimate",
-        "gPerMl": {
-          "min": 0.9,
-          "max": 1.1
-        }
+        "gPerMl": { "min": 0.9, "max": 1.1 }
       }
     },
     {
       "id": "density-egg-each",
       "prompt": "density",
-      "tags": [
-        "smoke",
-        "density"
-      ],
-      "input": {
-        "text": "large egg",
-        "unitKind": "each"
-      },
+      "tags": ["smoke", "density"],
+      "input": { "text": "large egg", "unitKind": "each" },
       "expect": {
         "outcome": "estimate",
-        "gramsPerEach": {
-          "min": 40,
-          "max": 70
-        }
+        "gramsPerEach": { "min": 40, "max": 70 }
+      }
+    },
+    {
+      "id": "smoke-barcode-oat-bar",
+      "prompt": "barcode_ingredients",
+      "tags": ["smoke", "barcode"],
+      "input": {
+        "productName": "Oat & Honey Bar",
+        "brand": "Acme",
+        "servingGrams": 40,
+        "servingSize": "1 bar (40 g)",
+        "ingredientsText": "whole grain oats, honey, sunflower oil, brown sugar, salt",
+        "kcal": 160,
+        "proteinG": 4,
+        "carbsG": 26,
+        "fatG": 5
+      },
+      "expect": {
+        "outcome": "ingredients",
+        "minIngredients": 2,
+        "nameContainsAny": ["oat", "honey", "oil", "sugar"]
       }
     },
     {

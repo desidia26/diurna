@@ -57,6 +57,14 @@ interface FoodEstimator {
         detailed: Boolean = false,
         ingredients: Boolean = false,
     ): FoodEstimate
+
+    /**
+     * Guess {name, grams} ingredients for a barcode product when OFF lacks usable percents.
+     * Default throws; real providers override. Never returns amino milligrams.
+     */
+    suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext): List<FoodIngredient> {
+        throw EstimateFailed("Barcode ingredient guessing isn't available for this provider")
+    }
 }
 
 /** Retrying won't help: bad key, refused request, unparseable reply. Shown on the entry. */
