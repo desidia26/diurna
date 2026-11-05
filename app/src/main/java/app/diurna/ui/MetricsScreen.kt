@@ -166,7 +166,8 @@ private fun DailyMetricCardView(card: DailyMetricCard, from: LocalDate, to: Loca
             listOf(LineSeries(card.series, c.primary)),
             description = "${def.name}${if (scale) ", 1 to ${def.scaleMax}," else ""} $range",
             yRange = if (scale) 1.0..def.scaleMax.toDouble() else null,
-            label = if (scale) ({ it.roundToInt().toString() }) else DailyMetrics::number,
+            // Gridlines fall between steps (5.5 on a 1–10 scale); one decimal is enough to read them by.
+            label = { DailyMetrics.number((it * 10).roundToInt() / 10.0) },
         )
         ChartDates(from.short(), to.short())
         when {
