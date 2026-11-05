@@ -27,7 +27,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FoodPhotoEntity::class,
         FdcFoodCacheEntity::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -55,6 +55,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         // v14: barcode + OFF snapshot on food_entry; OFF snapshot on meal.
         AutoMigration(from = 13, to = 14),
         // v15: food_photo gallery (data copy of food_entry.photo is in MIGRATION_14_15).
+        // v16: a standing note on each exercise.
+        AutoMigration(from = 15, to = 16),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {

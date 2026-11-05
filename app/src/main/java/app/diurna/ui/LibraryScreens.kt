@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Switch
 import app.diurna.domain.Cardio
+import app.diurna.domain.ExerciseNote
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -605,6 +607,12 @@ fun ExercisesPage(vm: LibraryViewModel, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(e.name, color = if (e.hidden) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                    e.note?.let {
+                        Text(
+                            it.replace('\n', ' '), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Hint(
                         listOfNotNull(
                             e.style.label.lowercase().takeIf { e.isCardio },
@@ -615,7 +623,7 @@ fun ExercisesPage(vm: LibraryViewModel, onBack: () -> Unit) {
                         ).joinToString(" · ")
                     )
                 }
-                TextButton(onClick = { renaming = e }, contentPadding = PaddingValues(6.dp)) { Text("Rename") }
+                TextButton(onClick = { renaming = e }, contentPadding = PaddingValues(6.dp)) { Text("Edit") }
                 if (e.inUse || e.hidden) {
                     TextButton(onClick = { vm.setExerciseHidden(e.id, !e.hidden) }, contentPadding = PaddingValues(6.dp)) { Text(if (e.hidden) "Show" else "Hide") }
                 } else {
@@ -627,8 +635,9 @@ fun ExercisesPage(vm: LibraryViewModel, onBack: () -> Unit) {
     renaming?.let { e ->
         // With cardio off this is the plain rename it always was; cardio already logged still gets its style.
         val editKind = cardioOn || e.isCardio
-        RenameDialog(e, editKind, onDismiss = { renaming = null }) { name, cardio ->
+        ExerciseDialog(e, editKind, onDismiss = { renaming = null }) { name, cardio, note ->
             val r = vm.renameExercise(e.id, name)
+            if (r == Result.Ok && note != e.note.orEmpty()) vm.setExerciseNote(e.id, note)
             val current = e.style.takeIf { e.isCardio }
             if (r == Result.Ok && editKind && cardio != current) vm.setExerciseCardio(e.id, cardio) else r
         }
@@ -645,19 +654,26 @@ private fun StylePicker(selected: Cardio.Style, onPick: (Cardio.Style) -> Unit) 
 }
 
 @Composable
-private fun RenameDialog(e: CatalogExercise, editKind: Boolean, onDismiss: () -> Unit, onRename: suspend (String, Cardio.Style?) -> Result) {
+private fun ExerciseDialog(e: CatalogExercise, editKind: Boolean, onDismiss: () -> Unit, onSave: suspend (String, Cardio.Style?, String) -> Result) {
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(e.name) }
+    var note by remember { mutableStateOf(e.note.orEmpty()) }
     // Null: strength.
     var cardio by remember { mutableStateOf(e.style.takeIf { e.isCardio }) }
     var problem by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (editKind) "Edit exercise" else "Rename exercise") },
+        title = { Text("Edit exercise") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { name = it; problem = null }, Modifier.fillMaxWidth(), singleLine = true)
                 if (e.logged > 0) Hint("Past workouts will show the new name.")
+                OutlinedTextField(
+                    note, { note = it.take(ExerciseNote.MAX_CHARS) }, Modifier.fillMaxWidth(),
+                    label = { Text("Note (shows in every workout)") }, minLines = 2, maxLines = ExerciseNote.MAX_LINES,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    supportingText = { Text("${note.length} / ${ExerciseNote.MAX_CHARS}") },
+                )
                 if (editKind) {
                     // Kind only changes before anything is logged, so sets and pieces never mix in history.
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -678,12 +694,12 @@ private fun RenameDialog(e: CatalogExercise, editKind: Boolean, onDismiss: () ->
         confirmButton = {
             TextButton(enabled = name.isNotBlank(), onClick = {
                 scope.launch {
-                    when (val r = onRename(name, cardio)) {
+                    when (val r = onSave(name, cardio, note)) {
                         Result.Ok -> onDismiss()
                         is Result.Problem -> problem = r.message
                     }
                 }
-            }) { Text(if (editKind) "Save" else "Rename") }
+            }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
