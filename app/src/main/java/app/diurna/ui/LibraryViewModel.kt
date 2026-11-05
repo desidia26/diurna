@@ -11,6 +11,10 @@ import app.diurna.data.LibraryRepository.Result
 import app.diurna.data.MealEntity
 import app.diurna.data.RecipeIngredientEntity
 import app.diurna.data.recipe.RecipeImportResult
+import app.diurna.data.density.DensityLookupWorker
+import app.diurna.data.density.needsDensityLookup
+import app.diurna.domain.DensityUnitKind
+import app.diurna.domain.IngredientUnit
 import app.diurna.data.fdc.FdcNutritionProfile
 import app.diurna.data.fdc.FdcSearchHit
 import app.diurna.domain.Cardio
@@ -158,4 +162,23 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoIm
      * Does not call any AI provider and never attaches API keys.
      */
     suspend fun importRecipeFromUrl(url: String): RecipeImportResult = c.recipeImporter.importFromUrl(url)
+
+    /**
+     * Resolve density / grams-per-each for blocked volume/each lines. Uses the shared cache so
+     * the same ingredient across recipes is looked up once. Manual density_id is never overwritten.
+     */
+    suspend fun resolveDensities(lines: List<RecipeIngredientEntity>): List<RecipeIngredientEntity> {
+        val resolver = c.densityResolver
+        return lines.map { line ->
+            if (!line.needsDensityLookup()) return@map line
+            val kind = DensityUnitKind.of(IngredientUnit.of(line.unit)) ?: return@map line
+            val lookup = resolver.resolve(line.name, kind) ?: return@map line
+            resolver.applyToLine(line, lookup)
+        }
+    }
+
+    /** Kick a WorkManager pass for blocked lines on a saved recipe (or all recipes when id=0). */
+    fun enqueueDensityLookup(mealId: Long = 0L) {
+        DensityLookupWorker.enqueue(c.appContext, mealId)
+    }
 }

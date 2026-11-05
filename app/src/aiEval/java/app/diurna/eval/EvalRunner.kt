@@ -135,6 +135,22 @@ class EvalRunner(
                     val reading = reader.read(photo)
                     EvalScoring.scoreLabel(case, reading, clients.scoringMode).copy(provider = pid.id)
                 }
+                "density" -> {
+                    val dens = clients.density
+                        ?: return CaseScore(
+                            case.id, pid.id, case.prompt, passed = true, skipped = true,
+                            skipReason = "no density client",
+                        )
+                    val kindKey = case.input.unitKind ?: "volume"
+                    val kind = app.diurna.domain.DensityUnitKind.ofKey(kindKey)
+                        ?: return CaseScore(
+                            case.id, pid.id, case.prompt, passed = false,
+                            error = "bad unitKind $kindKey",
+                        )
+                    val name = case.input.text.orEmpty()
+                    val lookup = dens.estimate(name, kind)
+                    EvalScoring.scoreDensity(case, lookup, clients.scoringMode).copy(provider = pid.id)
+                }
                 else -> CaseScore(case.id, pid.id, case.prompt, passed = false, error = "unknown prompt ${case.prompt}")
             }
         } catch (e: NoApiKey) {
@@ -167,6 +183,7 @@ class EvalRunner(
                 "food" -> EvalScoring.scoreFoodFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "cardio" -> EvalScoring.scoreCardioFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "label" -> EvalScoring.scoreLabelFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
+                "density" -> EvalScoring.scoreDensityFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 else -> CaseScore(
                     case.id, pid.id, case.prompt,
                     passed = false, error = e.message, parseFailure = true,

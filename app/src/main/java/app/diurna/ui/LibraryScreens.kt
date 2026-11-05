@@ -152,6 +152,7 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
                         scope.launch {
                             recipeLines = vm.loadIngredients(m.id)
                             editingRecipe = m
+                            if (recipeLines.any { it.grams == null }) vm.enqueueDensityLookup(m.id)
                         }
                     } else {
                         editing = m
@@ -216,6 +217,7 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
             searchFdc = vm::searchFdc,
             loadFdcNutrition = vm::loadFdcNutrition,
             scanBarcode = vm::scanBarcode,
+            fillDensities = vm::resolveDensities,
             onDismiss = { editingRecipe = null },
             onSave = vm::saveRecipe,
         )

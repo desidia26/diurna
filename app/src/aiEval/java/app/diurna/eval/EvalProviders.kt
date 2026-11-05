@@ -73,10 +73,17 @@ interface EvalLabelClient {
     suspend fun read(photo: ByteArray): NutritionLabelReading
 }
 
+interface EvalDensityClient {
+    val providerId: String
+    val model: String
+    suspend fun estimate(name: String, kind: app.diurna.domain.DensityUnitKind): app.diurna.domain.DensityLookup
+}
+
 data class EvalClients(
     val food: EvalFoodClient,
     val cardio: EvalCardioClient?,
     val label: EvalLabelClient?,
+    val density: EvalDensityClient? = null,
     val scoringMode: ScoringMode = ScoringMode.ACCURACY,
 )
 
@@ -116,7 +123,14 @@ object EvalProviders {
                 private val reader = GrokLabelReader({ key }, model)
                 override suspend fun read(photo: ByteArray) = reader.read(photo)
             }
-            EvalClients(food, cardio, label, ScoringMode.ACCURACY)
+            val density = object : EvalDensityClient {
+                override val providerId = id.id
+                override val model = model
+                private val est = app.diurna.ai.GrokDensityEstimator({ key }, { model }, { app.diurna.ai.HttpXaiTransport() })
+                override suspend fun estimate(name: String, kind: app.diurna.domain.DensityUnitKind) =
+                    est.estimate(name, kind)
+            }
+            EvalClients(food, cardio, label, density, ScoringMode.ACCURACY)
         }
         EvalProviderId.CLAUDE -> {
             val key = env("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }
@@ -145,7 +159,14 @@ object EvalProviders {
                 private val reader = ClaudeLabelReader({ key }, model)
                 override suspend fun read(photo: ByteArray) = reader.read(photo)
             }
-            EvalClients(food, cardio, label, ScoringMode.ACCURACY)
+            val density = object : EvalDensityClient {
+                override val providerId = id.id
+                override val model = model
+                private val est = app.diurna.ai.ClaudeDensityEstimator({ key }, { model })
+                override suspend fun estimate(name: String, kind: app.diurna.domain.DensityUnitKind) =
+                    est.estimate(name, kind)
+            }
+            EvalClients(food, cardio, label, density, ScoringMode.ACCURACY)
         }
         EvalProviderId.OLLAMA -> {
             val base = (ollamaBaseUrl?.takeIf { it.isNotBlank() }
@@ -191,7 +212,28 @@ object EvalProviders {
                 }
             }
             // Label is vision-only; Ollama smoke skips vision by default (no label client needed).
-            EvalClients(food, cardio, label = null, ScoringMode.PARSE_HEALTH)
+            val density = object : EvalDensityClient {
+                override val providerId = id.id
+                override val model = model
+                override suspend fun estimate(
+                    name: String,
+                    kind: app.diurna.domain.DensityUnitKind,
+                ): app.diurna.domain.DensityLookup {
+                    val body = OllamaChat.request(
+                        model,
+                        app.diurna.ai.DensityPrompt.SYSTEM,
+                        app.diurna.ai.DensityPrompt.userText(name, kind),
+                        photoJpeg = null,
+                        schemaName = "ingredient_density",
+                        schema = app.diurna.ai.DensityPrompt.SCHEMA,
+                    )
+                    return app.diurna.ai.DensityPrompt.parse(
+                        OllamaChat.call(transport, key, body),
+                        kind,
+                    )
+                }
+            }
+            EvalClients(food, cardio, label = null, density = density, ScoringMode.PARSE_HEALTH)
         }
     }
 }

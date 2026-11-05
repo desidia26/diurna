@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 16,
-    "identityHash": "0c259e9b4bdee3fea5f1f175d1730ee5",
+    "identityHash": "33943501e411683568e4047cbd265af5",
     "entities": [
       {
         "tableName": "exercise",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `hidden` INTEGER NOT NULL DEFAULT 0, `kind` TEXT NOT NULL DEFAULT 'strength', `cardio_style` TEXT, `note` TEXT)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `hidden` INTEGER NOT NULL DEFAULT 0, `kind` TEXT NOT NULL DEFAULT 'strength', `cardio_style` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -37,11 +37,6 @@
           {
             "fieldPath": "cardioStyle",
             "columnName": "cardio_style",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "note",
-            "columnName": "note",
             "affinity": "TEXT"
           }
         ],
@@ -1527,11 +1522,83 @@
             "query_key"
           ]
         }
+      },
+      {
+        "tableName": "ingredient_density_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`query_key` TEXT NOT NULL, `normalized_name` TEXT NOT NULL, `unit_kind` TEXT NOT NULL, `g_per_ml` REAL, `grams_per_each` REAL, `source` TEXT NOT NULL, `fdc_id` INTEGER, `basis` TEXT, `description` TEXT, `cached_at` INTEGER NOT NULL, `retry_after` INTEGER, PRIMARY KEY(`query_key`))",
+        "fields": [
+          {
+            "fieldPath": "queryKey",
+            "columnName": "query_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedName",
+            "columnName": "normalized_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitKind",
+            "columnName": "unit_kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gPerMl",
+            "columnName": "g_per_ml",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "gramsPerEach",
+            "columnName": "grams_per_each",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fdcId",
+            "columnName": "fdc_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "basis",
+            "columnName": "basis",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cachedAt",
+            "columnName": "cached_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retryAfter",
+            "columnName": "retry_after",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "query_key"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0c259e9b4bdee3fea5f1f175d1730ee5')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '33943501e411683568e4047cbd265af5')"
     ]
   }
 }

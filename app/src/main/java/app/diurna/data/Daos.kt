@@ -172,6 +172,9 @@ interface MealDao {
            GROUP BY m.id ORDER BY COUNT(f.id) DESC, m.name COLLATE NOCASE"""
     )
     fun observeByUseFiltered(kind: String?): Flow<List<MealEntity>>
+
+    @Query("SELECT * FROM meal WHERE kind = 'recipe'")
+    suspend fun allRecipes(): List<MealEntity>
 }
 
 @Dao
@@ -187,6 +190,14 @@ interface RecipeIngredientDao {
 
     @Query("DELETE FROM recipe_ingredient WHERE meal_id = :mealId")
     suspend fun deleteForMeal(mealId: Long)
+
+    /** Volume/each lines still missing grams (blocked for save). */
+    @Query(
+        """SELECT * FROM recipe_ingredient
+           WHERE grams IS NULL
+             AND unit IN ('ml','cup','tbsp','tsp','each')"""
+    )
+    suspend fun blockedNeedingDensity(): List<RecipeIngredientEntity>
 }
 
 @Dao
@@ -589,4 +600,16 @@ interface FdcFoodCacheDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(row: FdcFoodCacheEntity)
+}
+
+@Dao
+interface IngredientDensityCacheDao {
+    @Query("SELECT * FROM ingredient_density_cache WHERE query_key = :key LIMIT 1")
+    suspend fun get(key: String): IngredientDensityCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(row: IngredientDensityCacheEntity)
+
+    @Query("DELETE FROM ingredient_density_cache WHERE query_key = :key")
+    suspend fun delete(key: String)
 }

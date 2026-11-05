@@ -287,4 +287,57 @@ object EvalScoring {
 
     private fun band(name: String, got: Int, range: IntRangeExpect, required: Boolean) =
         CheckResult(name, range.contains(got), "got $got want ${range.min}-${range.max}", required = required)
+
+    fun scoreDensity(
+        case: EvalCase,
+        lookup: app.diurna.domain.DensityLookup,
+        mode: ScoringMode = ScoringMode.ACCURACY,
+    ): CaseScore {
+        val bandsRequired = mode == ScoringMode.ACCURACY
+        val valueRequired = mode == ScoringMode.ACCURACY
+        val checks = mutableListOf<CheckResult>()
+        // Successful structured parse — hasValue is accuracy-only (smoke models often miss bands).
+        checks += CheckResult("parsed", true, "DensityLookup source=${lookup.source}")
+        checks += CheckResult(
+            "has_value",
+            lookup.hasValue,
+            "hasValue=${lookup.hasValue}",
+            required = valueRequired,
+        )
+        case.expect.gPerMl?.let { band ->
+            val v = lookup.gPerMl
+            checks += CheckResult(
+                "g_per_ml",
+                v != null && band.contains(v),
+                "got=$v expect=${band.min}..${band.max}",
+                required = bandsRequired,
+            )
+        }
+        case.expect.gramsPerEach?.let { band ->
+            val v = lookup.gramsPerEach
+            checks += CheckResult(
+                "grams_per_each",
+                v != null && band.contains(v),
+                "got=$v expect=${band.min}..${band.max}",
+                required = bandsRequired,
+            )
+        }
+        val passed = checks.none { !it.passed && it.required }
+        return CaseScore(case.id, "", case.prompt, passed = passed, checks = checks)
+    }
+
+    fun scoreDensityFailure(case: EvalCase, message: String): CaseScore {
+        if (case.expect.outcome == "reject") {
+            return CaseScore(
+                case.id, "", case.prompt,
+                passed = true,
+                checks = listOf(CheckResult("reject", true, message)),
+            )
+        }
+        return CaseScore(
+            case.id, "", case.prompt,
+            passed = false, error = message, parseFailure = true,
+            checks = listOf(CheckResult("parse", false, message)),
+        )
+    }
 }
