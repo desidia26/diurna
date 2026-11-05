@@ -21,6 +21,7 @@ data class DoubleRangeExpect(val min: Double, val max: Double) {
  * - not_food: note mentions not food (or similar) and macros near zero
  * - not_food_or_zeros: not_food, or all-zero macros/kcal
  * - reject: parser or model fails (cardio non-screen, label non-panel, etc.)
+ * - ingredients: barcode_ingredients prompt returned a usable list
  */
 data class CaseExpect(
     val outcome: String,
@@ -35,6 +36,10 @@ data class CaseExpect(
     val durationS: IntRangeExpect? = null,
     val kcal: IntRangeExpect? = null,
     val avgHr: IntRangeExpect? = null,
+    /** barcode_ingredients: minimum ingredient count when outcome is ingredients. */
+    val minIngredients: Int? = null,
+    /** barcode_ingredients: each listed substring must appear in some ingredient name. */
+    val nameContainsAny: List<String> = emptyList(),
     /** Food detailed path: at least one sub-macro field present (nullable ints). */
     val requireDetail: Boolean = false,
     /** Food ingredients path: non-empty ingredient list. */
@@ -48,6 +53,15 @@ data class CaseExpect(
 data class CaseInput(
     val text: String? = null,
     val image: String? = null,
+    val productName: String? = null,
+    val brand: String? = null,
+    val servingGrams: Double? = null,
+    val servingSize: String? = null,
+    val ingredientsText: String? = null,
+    val kcal: Int? = null,
+    val proteinG: Int? = null,
+    val carbsG: Int? = null,
+    val fatG: Int? = null,
     /** When true, call EstimatePrompt.system/schema(detailed=true). */
     val detailed: Boolean = false,
     /** When true, also request ingredients (implies detailed in the app). */
@@ -58,7 +72,7 @@ data class CaseInput(
 
 data class EvalCase(
     val id: String,
-    /** "food" | "cardio" | "label" | "density" */
+    /** "food" | "cardio" | "label" | "density" | "barcode_ingredients" */
     val prompt: String,
     val tags: List<String> = emptyList(),
     val input: CaseInput,
@@ -118,6 +132,15 @@ object EvalCases {
                 input = CaseInput(
                     text = input.path("text").takeIf { !it.isMissingNode && !it.isNull }?.asText(),
                     image = input.path("image").takeIf { it.isTextual }?.asText(),
+                    productName = input.path("productName").takeIf { it.isTextual }?.asText(),
+                    brand = input.path("brand").takeIf { it.isTextual }?.asText(),
+                    servingGrams = input.path("servingGrams").takeIf { it.isNumber }?.asDouble(),
+                    servingSize = input.path("servingSize").takeIf { it.isTextual }?.asText(),
+                    ingredientsText = input.path("ingredientsText").takeIf { it.isTextual }?.asText(),
+                    kcal = input.path("kcal").takeIf { it.isNumber }?.asInt(),
+                    proteinG = input.path("proteinG").takeIf { it.isNumber }?.asInt(),
+                    carbsG = input.path("carbsG").takeIf { it.isNumber }?.asInt(),
+                    fatG = input.path("fatG").takeIf { it.isNumber }?.asInt(),
                     detailed = input.path("detailed").asBoolean(false),
                     ingredients = input.path("ingredients").asBoolean(false),
                     unitKind = input.path("unitKind").takeIf { it.isTextual }?.asText(),
@@ -135,6 +158,8 @@ object EvalCases {
                     durationS = intRange(expect.path("durationS")),
                     kcal = intRange(expect.path("kcal")),
                     avgHr = intRange(expect.path("avgHr")),
+                    minIngredients = expect.path("minIngredients").takeIf { it.isNumber }?.asInt(),
+                    nameContainsAny = expect.path("nameContainsAny").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
                     requireDetail = expect.path("requireDetail").asBoolean(false),
                     requireIngredients = expect.path("requireIngredients").asBoolean(false),
                     gPerMl = doubleRange(expect.path("gPerMl")),

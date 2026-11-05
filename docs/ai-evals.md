@@ -71,8 +71,8 @@ Reports: `ai-evals/out/summary.md` and `ai-evals/out/results.json` (gitignored).
 
 | Set | File | Intent |
 |-----|------|--------|
-| `smoke` | `ai-evals/cases/smoke.json` | 5 text-only food cases (basic + detailed + ingredients); Ollama CI default |
-| `default` | `ai-evals/cases/default.json` | ~19 cases: typical food, detailed/ingredients, edges, menu photo, label OCR, cardio, density |
+| `smoke` | `ai-evals/cases/smoke.json` | ~9 text-only cases (food basic/detailed/ingredients + density + barcode_ingredients); Ollama CI default |
+| `default` | `ai-evals/cases/default.json` | ~21 cases: typical food, detailed/ingredients, edges, menu photo, label OCR, cardio, density, barcode_ingredients |
 | `full` | `ai-evals/cases/full.json` | default + more food variety |
 
 Expectations are **bands and tolerances**, not exact values (kcal ±%, macro ranges, parse success, not-food / reject, macro↔kcal consistency, optional `requireDetail` / `requireIngredients`). For `ollama`, bands, not-food labeling, and detail/ingredient presence are informational; **parse failures still fail the run** on every provider.
@@ -80,7 +80,7 @@ Expectations are **bands and tolerances**, not exact values (kcal ±%, macro ran
 ### Adding a case
 
 1. Edit the JSON under `ai-evals/cases/` (or add an image under `ai-evals/images/` — see `images/SOURCE.md`; only generate or use public-domain/CC0).
-2. Set `prompt` to `food`, `cardio`, or `label`. For detailed/ingredients food paths set `input.detailed` / `input.ingredients`.
+2. Set `prompt` to `food`, `cardio`, `label`, `density`, or `barcode_ingredients`. For detailed/ingredients food paths set `input.detailed` / `input.ingredients`.
 3. Set `expect.outcome` to `estimate`, `not_food`, `not_food_or_zeros`, `reading`, or `reject`.
 4. Run `./gradlew aiEval -Pprovider=… -Pset=…` and adjust bands if a healthy model is consistently outside them.
 
@@ -110,8 +110,8 @@ No secret is needed for Ollama smoke. Keys will be added later; until then those
 
 | Run | Calls | Rough cost |
 |-----|-------|------------|
-| `smoke` × ollama | 5 | Free (CPU on the runner; ~1 GB model download, cached) |
-| `default` × one real provider | ~16 (incl. photos) | Low cents with Haiku / grok-4.20-non-reasoning |
+| `smoke` × ollama | ~9 | Free (CPU on the runner; ~1 GB model download, cached) |
+| `default` × one real provider | ~21 (incl. photos) | Low cents with Haiku / grok-4.20-non-reasoning |
 | `full` × both real providers | ~40+ | Still usually well under $1 |
 
 Vision cases cost more than text. Prefer `smoke`/`default` in CI; use `full` on dispatch when you care.
