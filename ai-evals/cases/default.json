@@ -379,6 +379,63 @@
       "expect": {
         "outcome": "reject"
       }
+    },
+    {
+      "id": "density-flour-volume",
+      "prompt": "density",
+      "tags": [
+        "density",
+        "typical"
+      ],
+      "input": {
+        "text": "all-purpose flour",
+        "unitKind": "volume"
+      },
+      "expect": {
+        "outcome": "estimate",
+        "gPerMl": {
+          "min": 0.3,
+          "max": 0.9
+        }
+      }
+    },
+    {
+      "id": "density-water-volume",
+      "prompt": "density",
+      "tags": [
+        "density",
+        "typical"
+      ],
+      "input": {
+        "text": "water",
+        "unitKind": "volume"
+      },
+      "expect": {
+        "outcome": "estimate",
+        "gPerMl": {
+          "min": 0.9,
+          "max": 1.1
+        }
+      }
+    },
+    {
+      "id": "density-egg-each",
+      "prompt": "density",
+      "tags": [
+        "density",
+        "typical"
+      ],
+      "input": {
+        "text": "large egg",
+        "unitKind": "each"
+      },
+      "expect": {
+        "outcome": "estimate",
+        "gramsPerEach": {
+          "min": 40,
+          "max": 70
+        }
+      }
     }
   ]
 }

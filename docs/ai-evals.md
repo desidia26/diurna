@@ -1,6 +1,6 @@
 # AI prompt evals
 
-Eval harness for every prompt that ships on `main`. It calls the **same** Kotlin prompt builders, request builders, estimators and parsers the app uses (`EstimatePrompt`, `CardioPrompt`, `LabelPrompt`, `ClaudeFoodEstimator` / `GrokFoodEstimator`, cardio/label readers). Prompt text is not copied into the eval suite.
+Eval harness for every prompt that ships on `main`. It calls the **same** Kotlin prompt builders, request builders, estimators and parsers the app uses (`EstimatePrompt`, `CardioPrompt`, `LabelPrompt`, `DensityPrompt`, food/cardio/label/density estimators). Prompt text is not copied into the eval suite.
 
 ## Prompts covered (main)
 
@@ -11,8 +11,9 @@ Eval harness for every prompt that ships on `main`. It calls the **same** Kotlin
 | `EstimatePrompt` (detailed + ingredients) | Food estimate / backfill when Detailed + FDC key | text ± photo, `ingredients=true` | `food` + `input.ingredients` |
 | `CardioPrompt` | Claude + Grok cardio readers | workout-summary photo | `cardio` |
 | `LabelPrompt` | Claude + Grok label readers | Nutrition Facts photo | `label` |
+| `DensityPrompt` | Claude / Grok / OpenAI-compat density estimators (USDA FDC miss fallback) | ingredient name + `unit_kind` (`volume` / `each`) | `density` |
 
-**Not AI prompts** (no eval cases): Open Food Facts barcode lookup, schema.org recipe import, FDC amino resolution (API, not a model call).
+**Not AI prompts** (no eval cases): Open Food Facts barcode lookup, schema.org recipe import, FDC amino resolution and FDC portion→density derivation (API, not a model call). AI density fallback is covered above.
 
 **Follow-up:** [PR #21](https://github.com/desidia26/diurna/pull/21) (BYO OpenAI-compatible gateway) is still open and not on `main`. Do not add OpenAI-compatible provider coverage here; after it merges, Ollama smoke can switch to that app provider and BYO can get its own cases.
 
@@ -71,7 +72,7 @@ Reports: `ai-evals/out/summary.md` and `ai-evals/out/results.json` (gitignored).
 | Set | File | Intent |
 |-----|------|--------|
 | `smoke` | `ai-evals/cases/smoke.json` | 5 text-only food cases (basic + detailed + ingredients); Ollama CI default |
-| `default` | `ai-evals/cases/default.json` | ~16 cases: typical food, detailed/ingredients, edges, menu photo, label OCR, cardio |
+| `default` | `ai-evals/cases/default.json` | ~19 cases: typical food, detailed/ingredients, edges, menu photo, label OCR, cardio, density |
 | `full` | `ai-evals/cases/full.json` | default + more food variety |
 
 Expectations are **bands and tolerances**, not exact values (kcal ±%, macro ranges, parse success, not-food / reject, macro↔kcal consistency, optional `requireDetail` / `requireIngredients`). For `ollama`, bands, not-food labeling, and detail/ingredient presence are informational; **parse failures still fail the run** on every provider.

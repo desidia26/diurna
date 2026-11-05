@@ -10,6 +10,11 @@ data class IntRangeExpect(val min: Int, val max: Int) {
     fun contains(v: Int): Boolean = v in min..max
 }
 
+/** Inclusive double band for density / grams-per-each. */
+data class DoubleRangeExpect(val min: Double, val max: Double) {
+    fun contains(v: Double): Boolean = v in min..max
+}
+
 /**
  * What a case checks. [outcome] is one of:
  * - estimate / reading: a successful structured reply in expected bands
@@ -34,6 +39,10 @@ data class CaseExpect(
     val requireDetail: Boolean = false,
     /** Food ingredients path: non-empty ingredient list. */
     val requireIngredients: Boolean = false,
+    /** Density prompt: expected g/ml band. */
+    val gPerMl: DoubleRangeExpect? = null,
+    /** Density prompt: expected grams-per-each band. */
+    val gramsPerEach: DoubleRangeExpect? = null,
 )
 
 data class CaseInput(
@@ -43,11 +52,13 @@ data class CaseInput(
     val detailed: Boolean = false,
     /** When true, also request ingredients (implies detailed in the app). */
     val ingredients: Boolean = false,
+    /** Density prompt: "volume" or "each". */
+    val unitKind: String? = null,
 )
 
 data class EvalCase(
     val id: String,
-    /** "food" | "cardio" | "label" */
+    /** "food" | "cardio" | "label" | "density" */
     val prompt: String,
     val tags: List<String> = emptyList(),
     val input: CaseInput,
@@ -109,6 +120,7 @@ object EvalCases {
                     image = input.path("image").takeIf { it.isTextual }?.asText(),
                     detailed = input.path("detailed").asBoolean(false),
                     ingredients = input.path("ingredients").asBoolean(false),
+                    unitKind = input.path("unitKind").takeIf { it.isTextual }?.asText(),
                 ),
                 expect = CaseExpect(
                     outcome = expect.path("outcome").asText("estimate"),
@@ -125,6 +137,8 @@ object EvalCases {
                     avgHr = intRange(expect.path("avgHr")),
                     requireDetail = expect.path("requireDetail").asBoolean(false),
                     requireIngredients = expect.path("requireIngredients").asBoolean(false),
+                    gPerMl = doubleRange(expect.path("gPerMl")),
+                    gramsPerEach = doubleRange(expect.path("gramsPerEach")),
                 ),
             )
         }
@@ -133,5 +147,10 @@ object EvalCases {
     private fun intRange(node: JsonNode): IntRangeExpect? {
         if (!node.isObject) return null
         return IntRangeExpect(node.path("min").asInt(), node.path("max").asInt())
+    }
+
+    private fun doubleRange(node: JsonNode): DoubleRangeExpect? {
+        if (!node.isObject) return null
+        return DoubleRangeExpect(node.path("min").asDouble(), node.path("max").asDouble())
     }
 }
