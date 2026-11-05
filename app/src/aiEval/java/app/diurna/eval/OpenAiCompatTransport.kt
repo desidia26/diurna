@@ -16,13 +16,13 @@ import java.net.URL
 /**
  * Eval-only OpenAI-compatible chat client (HTTP or HTTPS). Mirrors
  * [app.diurna.ai.HttpXaiTransport] with a configurable endpoint and a longer deadline so
- * CPU-local models (Ollama) can finish. Not used by the app at runtime.
+ * CPU-local models (Ollama), including larger detailed/ingredients schemas, can finish. Not used by the app at runtime.
  */
 class OpenAiCompatTransport(
     private val endpoint: String,
     private val deadlineMs: Long = DEADLINE_MS,
     private val connectTimeoutMs: Int = 15_000,
-    private val readTimeoutMs: Int = 300_000,
+    private val readTimeoutMs: Int = 600_000,
 ) : XaiTransport {
     override suspend fun post(apiKey: String, json: String): XaiReply = withContext(Dispatchers.IO) {
         val conn = URL(endpoint).openConnection() as HttpURLConnection
@@ -62,7 +62,7 @@ class OpenAiCompatTransport(
     }
 
     companion object {
-        const val DEADLINE_MS = 360_000L
+        const val DEADLINE_MS = 660_000L
         const val MAX_BYTES = 256 * 1024
     }
 }

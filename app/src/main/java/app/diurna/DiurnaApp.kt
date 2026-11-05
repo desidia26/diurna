@@ -10,6 +10,11 @@ import app.diurna.ai.ClaudeLabelReader
 import app.diurna.ai.ClaudeFoodEstimator
 import app.diurna.ai.CardioReader
 import app.diurna.ai.LabelReader
+import app.diurna.ai.DensityEstimator
+import app.diurna.ai.SelectedDensityEstimator
+import app.diurna.ai.ClaudeDensityEstimator
+import app.diurna.ai.GrokDensityEstimator
+import app.diurna.ai.OpenAiCompatDensityEstimator
 import app.diurna.ai.GatewaySettingsStore
 import app.diurna.ai.GrokCardioReader
 import app.diurna.ai.GrokLabelReader
@@ -28,6 +33,7 @@ import app.diurna.alarm.AlarmScheduler
 import app.diurna.checkin.CheckInReminder
 import app.diurna.data.AppDatabase
 import app.diurna.data.Backups
+import app.diurna.data.ChangelogFiles
 import app.diurna.data.DataTransfer
 import app.diurna.data.ImportApply
 import app.diurna.data.DayFinalizer
@@ -44,6 +50,8 @@ import app.diurna.data.RoutineRepository
 import app.diurna.data.SettingsStore
 import app.diurna.data.fdc.AminoResolver
 import app.diurna.data.fdc.FdcClient
+import app.diurna.data.density.IngredientDensityResolver
+import app.diurna.data.density.DensityLookupWorker
 import app.diurna.data.recipe.RecipeImporter
 import app.diurna.data.StepCounter
 import app.diurna.data.StepSource
@@ -70,6 +78,8 @@ class AppContainer(context: Context) {
     val photoImporter = PhotoImporter(context, foodPhotos)
     val library = LibraryRepository(db, photoStore = foodPhotoStore)
     val backups = Backups(context, db, foodPhotos)
+    /** What's new entries, read from assets once. */
+    val changelog by lazy { ChangelogFiles.load(context.assets) }
     val transfer = DataTransfer(
         backups, foodPhotos,
         versionCode = context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toInt(),
@@ -164,6 +174,29 @@ class AppContainer(context: Context) {
             configured = openAiConfigured,
         ),
     ))
+
+    val densityEstimator: DensityEstimator = SelectedDensityEstimator({ aiProvider.get() }, mapOf(
+        AiProvider.ANTHROPIC to ClaudeDensityEstimator(
+            apiKey = { apiKeys.getValue(AiProvider.ANTHROPIC).get() },
+            baseUrl = { gateway.anthropicBaseOrNull() },
+        ),
+        AiProvider.XAI to GrokDensityEstimator(
+            apiKey = { apiKeys.getValue(AiProvider.XAI).get() },
+            modelProvider = { GrokFoodEstimator.DEFAULT_MODEL },
+            transportProvider = { xaiTransport },
+        ),
+        AiProvider.OPENAI_COMPAT to OpenAiCompatDensityEstimator(
+            apiKey = { apiKeys.getValue(AiProvider.OPENAI_COMPAT).get() },
+            modelProvider = { gateway.get().openAiModel.trim() },
+            transportProvider = { openAiTransport },
+            configured = openAiConfigured,
+        ),
+    ))
+    val densityResolver = IngredientDensityResolver(
+        fdc = fdcClient,
+        cache = db.ingredientDensityCacheDao(),
+        ai = densityEstimator,
+    )
     val selectedDate = SelectedDate()
     val nutrition = NutritionRepository(db, settings.profile)
     val stepSensor = AndroidStepSensor(context)
@@ -198,6 +231,7 @@ class DiurnaApp : Application() {
             container.settings.ensureSecret()
             container.finalizer.catchUp()
             EstimateWorker.enqueue(this@DiurnaApp) // anything logged while offline
+            DensityLookupWorker.enqueue(this@DiurnaApp) // blocked recipe densities
             StepSampling.schedule(this@DiurnaApp)
             CheckInReminder.schedule(this@DiurnaApp)
             container.backups.scheduleDaily()

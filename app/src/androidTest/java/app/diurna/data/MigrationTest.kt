@@ -425,4 +425,38 @@ class MigrationTest {
         }
         db.close()
     }
+
+
+    @Test fun v15ToV16AddsIngredientDensityCache() {
+        helper.createDatabase(dbName + "-16", 15).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-11-04', 0)")
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind) " +
+                    "VALUES (1, 'Soup', 200, 10, 20, 5, 'recipe')"
+            )
+        }
+        // AutoMigration 15→16 creates ingredient_density_cache; schemas validate columns.
+        val db = helper.runMigrationsAndValidate(dbName + "-16", 16, true)
+        db.query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='ingredient_density_cache'"
+        ).use {
+            assertTrue(it.moveToFirst())
+            assertEquals("ingredient_density_cache", it.getString(0))
+        }
+        db.query("SELECT COUNT(*) FROM meal").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("existing meals kept", 1, it.getInt(0))
+        }
+        db.execSQL(
+            "INSERT INTO ingredient_density_cache " +
+                "(query_key, normalized_name, unit_kind, g_per_ml, grams_per_each, source, fdc_id, basis, description, cached_at, retry_after) " +
+                "VALUES ('flour|volume', 'flour', 'volume', 0.53, NULL, 'builtin', NULL, 'AP flour', NULL, 1, NULL)"
+        )
+        db.query("SELECT g_per_ml, source FROM ingredient_density_cache WHERE query_key='flour|volume'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(0.53, it.getDouble(0), 1e-9)
+            assertEquals("builtin", it.getString(1))
+        }
+        db.close()
+    }
 }

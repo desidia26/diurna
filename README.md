@@ -54,6 +54,7 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Food estimates: one AI call per entry (structured JSON) when logged or its text changes, to the provider picked in Setup: Claude (`claude-haiku-5-5`, the default), Grok (`grok-4.20-non-reasoning` via xAI's chat completions), or an OpenAI-compatible gateway (user base URL + model + optional key); optional Anthropic/xAI endpoint overrides; retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); keys encrypted with the Android Keystore | `ai/` |
 | Meal photos: optional photo on a food entry from the camera (`TakePicture` into a FileProvider scratch file) or the system photo picker, so no storage permission; decoded straight to at most 1568 px, saved as JPEG under 3.5 MB in `files/food-photos`, sent with the text as a base64 image (Claude image block, xAI `image_url` data URI). Kept out of cloud backup (its 25 MB cap), mirrored into self-backups; unused files swept at startup | `data/FoodPhotos.kt`, `data/PhotoImporter.kt`, `domain/PhotoSizing.kt`, `ui/FoodPhotoUi.kt` |
 | Barcode scanning: EAN/UPC codes looked up on Open Food Facts and checked in the meal form before saving; rescans come from the library and work offline. Answers are treated as untrusted: HTTPS only, no redirects, size and time caps, sanity limits on numbers, plain short text | `data/BarcodeLookup.kt`, `ui/BarcodeScanDialog.kt` |
+| Recipes (Library): import from a schema.org link or build by hand; ingredient lines convert volume/`each` to grams via USDA FoodData Central portions when a key is set, else a short AI density estimate, with a shared Room cache and WorkManager backfill; AI estimates are marked; manual density is never overwritten | `domain/IngredientDensity.kt`, `data/density/`, `ai/DensityPrompt.kt`, `data/recipe/`, `ui/RecipeEditor.kt` |
 | Library: saved meals (exact numbers, tap to log, servings, optional barcode) and the exercise catalog (seeded with common lifts and a typical Planet Fitness lineup; rename, hide, delete if unused), under Setup | `data/LibraryRepository.kt`, `data/ExerciseSeed.kt`, `ui/LibraryScreens.kt` |
 | Cardio (optional; Setup → Library → "Cardio exercises"): exercises of kind `cardio` are logged as pieces instead of weight × reps, every field optional (distance, time, avg pace, best split, avg W, Cal, avg HR). Each has a style (`Cardio.Style`: rowing /500m, run or walk /km or /mi, cycling km/h or mph, time and calories) that picks the fields and units; pace is stored as seconds per 500 m and converted for display. "Log from photo" sends a machine or app summary screen to the selected AI provider (strict JSON with units, 0 = not shown, values capped) and shows the numbers to check before saving. With the setting off, cardio stays out of suggestions and Library; kept out of lifting volume and e1RM | `domain/Cardio.kt`, `ai/CardioReader.kt`, `ui/CardioUi.kt` |
 | Workout logging: Enter walks weight → reps → next set; an empty field's grey hint (the set above, else last time) is accepted with Enter; exercises can be moved or removed; tapping an exercise name folds it to one line, and finished exercises turn green | `ui/DayScreen.kt`, `domain/SetHints.kt` |
@@ -65,7 +66,7 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Self-backups: a consistent copy of the database and settings daily (keeps 14) in the app's shared-storage folder, readable over `adb`; meal photos mirrored once into `backups/food-photos` | `data/Backups.kt` |
 | Export and import: Setup → Backups writes one zip (manifest, a consistent database copy, settings with the porch code, meal photos; never API keys or AI provider settings) wherever the person picks, and imports one on a fresh install. Imports are checked entry by entry (known names only, size caps, `integrity_check`, schema no newer than the app), staged, backed up against, then swapped in at the next start before anything opens the database; older exports migrate as usual | `domain/ExportArchive.kt`, `data/DataTransfer.kt` |
 | Shared one-line summaries for the Day screen and lock screen | `domain/DayText.kt` |
-| What's new: user-facing notes in `Changelog.kt` (numbered entries, not versions), shown once as a dialog on the first launcher open after an update (not from the check-in notification or the alarm); a fresh install starts caught up. The last seen id lives in settings; Setup lists recent entries | `domain/Changelog.kt`, `ui/WhatsNew.kt` |
+| What's new: user-facing notes, one file per change in `assets/changelog` (`yyyy-MM-dd-short-name.md`: title line, then body), so parallel PRs never conflict and there's nothing to number. Shown once as a dialog on the first launcher open after an update (not from the check-in notification or the alarm); a fresh install starts caught up. Settings keep the set of entry names already shown, so an entry that merges late still appears; installs from when entries were numbered carry over. Setup lists recent entries. CI (`changelog.yml`) asks app-changing PRs for an entry or the `no-changelog` label | `domain/Changelog.kt`, `data/ChangelogFiles.kt`, `ui/WhatsNew.kt` |
 | UI: Compose, five tabs (Day, Week, Metrics, Routine, Setup), one ViewModel per screen | `ui/` |
 
 Key data rules:
@@ -75,6 +76,15 @@ Key data rules:
 - Food text is the source of truth. Estimates (calorie range, macros, assumptions, model) are derived from it and, when attached, its photo; editing the text or changing the photo re-estimates. A photo needs text with it; where they disagree, the model is told the text wins.
 - A saved meal's numbers are copied onto the entry when it's logged (× servings), so editing or deleting the meal never changes past days. Changing a meal entry's text turns it back into an AI entry.
 - Every schema change ships with a migration test (`MigrationTest`); never a destructive fallback.
+
+## Installing and updating
+
+Releases are published from `main` once a day (when something changed and the tests passed) on the [Releases page](https://github.com/desidia26/diurna/releases), signed with Diurna's release key.
+
+1. Install [Obtainium](https://github.com/ImranR98/Obtainium).
+2. In Obtainium, **Add app** → `https://github.com/desidia26/diurna`, then install. Obtainium checks for new releases and offers each update.
+
+**Moving from a build signed with another key** (an older build, or one you built yourself): Android only installs an update signed with the key the app already has, so this is a reinstall, once. In the old app, **Setup → Backups → Export everything** and save the file somewhere that survives uninstalling (Downloads or a cloud drive). Uninstall it, install from Obtainium, then **Setup → Backups → Import…** and pick the file. API keys and the AI provider aren't in the export, so set them up again under Food estimates, and grant the permissions Setup asks for.
 
 ## Building it yourself
 
@@ -105,7 +115,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 
 | Command | What it does |
 |---|---|
-| `scripts/release` | **Ship to the phone:** tests, release build, backup, install as an update, check no data was lost, check the alarm, tag `release-N` and push the tag. Warns if the app changed but `Changelog.kt` didn't. Needs a clean working tree. |
+| `scripts/release` | **Ship to the phone:** tests, release build, backup, install as an update, check no data was lost, check the alarm, tag `release-N` and push the tag. Warns if the app changed but no `assets/changelog` entry was added. Needs a clean working tree. |
 | `scripts/install` | Build, install and open a **debug** build (`--no-launch` to skip opening) |
 | `scripts/test` | Unit tests, plus device tests if an emulator is running (`unit` or `device` for just one) |
 | `scripts/emulator` | Start the emulator and wait until it's ready (`--headless` for no window, `--stop` to shut it down) |
@@ -113,6 +123,9 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 | `scripts/screenshot` | Capture the device screen to `~/Downloads` (`--last` copies the newest screenshot taken on the phone) |
 | `scripts/demo-data` | **Emulator only:** clear the app's data and fill it with 12 weeks of made-up history (or `scripts/demo-data <weeks>`), for screenshots |
 | `scripts/backup-db` | Copy the database off the device into `backups/<timestamp>/`, which git ignores |
+| `scripts/new-release-key` | **Once, ever:** create the release key in `signing/` and store it in the GitHub environment `release` for the nightly workflow (refuses if it exists) |
+| `scripts/smoke <apk>` | **Emulator only:** install a minified build (`./gradlew assembleRelease -PsmokeTest`, which adds x86_64) and make the test alarm go off with the screen asleep, failing if the app crashes. The tests never run R8's output; this does |
+| `scripts/backup-signing-keys` | Encrypt `signing/` (both keys and their passwords) with a passphrase into `~/diurna-signing-keys-<date>.tar.gz.gpg`, and check it opens again; keep the file off this machine |
 | `scripts/alarm-check` | Show the armed alarm and permissions (`--doze` or `--reboot` to stress-test it) |
 | `LIVE_API=1 ./gradlew testDebugUnitTest --tests '*LiveApiErrorTest*'` | Check a real API error end to end, using a deliberately invalid key (free) |
 
@@ -120,7 +133,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 
 **Device tests never run on a real phone.** Gradle uninstalls the app after them, which deletes all of Diurna's data, so `scripts/test` refuses anything but the emulator. Run `./gradlew connectedDebugAndroidTest` by hand only if you know which device it will hit.
 
-**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key.
+**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key. `.github/workflows/nightly.yml` runs from `main` daily at 04:00 UTC (midnight Eastern, away from morning alarms): it first runs `scripts/smoke` on the minified build in an emulator, then builds the release, checks its certificate against `RELEASE_CERT_SHA256`, its version, its CPU type (arm64 only) and its size (30 MB at most), and publishes it as `v0.N` with the new What's new entries as release notes. It only runs on `main` and is the only job given the release key.
 
 **Wireless debugging** works with the scripts too: pair once in Developer options → Wireless debugging, and `adb` reconnects whenever it's turned on. Keep it on trusted networks only, and off when not in use.
 

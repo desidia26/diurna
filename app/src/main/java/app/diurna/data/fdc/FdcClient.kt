@@ -45,6 +45,17 @@ class FdcClient(
         }
     }
 
+
+    /**
+     * Raw food JSON for [fdcId] (includes foodPortions when present). Null without a key /
+     * network fail. Prefer Foundation / SR Legacy ids from [search].
+     */
+    suspend fun foodJson(fdcId: Int): JSONObject? = withContext(Dispatchers.IO) {
+        val key = apiKey()?.takeIf { it.isNotBlank() } ?: return@withContext null
+        val body = transport.get("/fdc/v1/food/$fdcId", key) ?: return@withContext null
+        runCatching { JSONObject(body) }.getOrNull()
+    }
+
     /** Per-100g amino profile for [fdcId], or null if missing / no key / network fail. */
     suspend fun aminoProfile(fdcId: Int): AminoProfile? = withContext(Dispatchers.IO) {
         val key = apiKey()?.takeIf { it.isNotBlank() } ?: return@withContext null

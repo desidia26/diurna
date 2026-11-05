@@ -10,12 +10,18 @@ data class IntRangeExpect(val min: Int, val max: Int) {
     fun contains(v: Int): Boolean = v in min..max
 }
 
+/** Inclusive double band for density / grams-per-each. */
+data class DoubleRangeExpect(val min: Double, val max: Double) {
+    fun contains(v: Double): Boolean = v in min..max
+}
+
 /**
  * What a case checks. [outcome] is one of:
  * - estimate / reading: a successful structured reply in expected bands
  * - not_food: note mentions not food (or similar) and macros near zero
  * - not_food_or_zeros: not_food, or all-zero macros/kcal
- * - reject: parser or model fails (cardio non-screen, etc.)
+ * - reject: parser or model fails (cardio non-screen, label non-panel, etc.)
+ * - ingredients: barcode_ingredients prompt returned a usable list
  */
 data class CaseExpect(
     val outcome: String,
@@ -34,6 +40,14 @@ data class CaseExpect(
     val minIngredients: Int? = null,
     /** barcode_ingredients: each listed substring must appear in some ingredient name. */
     val nameContainsAny: List<String> = emptyList(),
+    /** Food detailed path: at least one sub-macro field present (nullable ints). */
+    val requireDetail: Boolean = false,
+    /** Food ingredients path: non-empty ingredient list. */
+    val requireIngredients: Boolean = false,
+    /** Density prompt: expected g/ml band. */
+    val gPerMl: DoubleRangeExpect? = null,
+    /** Density prompt: expected grams-per-each band. */
+    val gramsPerEach: DoubleRangeExpect? = null,
 )
 
 data class CaseInput(
@@ -48,11 +62,18 @@ data class CaseInput(
     val proteinG: Int? = null,
     val carbsG: Int? = null,
     val fatG: Int? = null,
+    /** When true, call EstimatePrompt.system/schema(detailed=true). */
+    val detailed: Boolean = false,
+    /** When true, also request ingredients (implies detailed in the app). */
+    val ingredients: Boolean = false,
+    /** Density prompt: "volume" or "each". */
+    val unitKind: String? = null,
 )
 
 data class EvalCase(
     val id: String,
-    val prompt: String, // "food" | "cardio" | "barcode_ingredients"
+    /** "food" | "cardio" | "label" | "density" | "barcode_ingredients" */
+    val prompt: String,
     val tags: List<String> = emptyList(),
     val input: CaseInput,
     val expect: CaseExpect,
@@ -103,22 +124,26 @@ object EvalCases {
         if (!node.isArray) return emptyList()
         return (node as ArrayNode).map { c ->
             val expect = c.path("expect")
+            val input = c.path("input")
             EvalCase(
                 id = c.path("id").asText(),
                 prompt = c.path("prompt").asText(),
                 tags = c.path("tags").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
                 input = CaseInput(
-                    text = c.path("input").path("text").takeIf { !it.isMissingNode && !it.isNull }?.asText(),
-                    image = c.path("input").path("image").takeIf { it.isTextual }?.asText(),
-                    productName = c.path("input").path("productName").takeIf { it.isTextual }?.asText(),
-                    brand = c.path("input").path("brand").takeIf { it.isTextual }?.asText(),
-                    servingGrams = c.path("input").path("servingGrams").takeIf { it.isNumber }?.asDouble(),
-                    servingSize = c.path("input").path("servingSize").takeIf { it.isTextual }?.asText(),
-                    ingredientsText = c.path("input").path("ingredientsText").takeIf { it.isTextual }?.asText(),
-                    kcal = c.path("input").path("kcal").takeIf { it.isNumber }?.asInt(),
-                    proteinG = c.path("input").path("proteinG").takeIf { it.isNumber }?.asInt(),
-                    carbsG = c.path("input").path("carbsG").takeIf { it.isNumber }?.asInt(),
-                    fatG = c.path("input").path("fatG").takeIf { it.isNumber }?.asInt(),
+                    text = input.path("text").takeIf { !it.isMissingNode && !it.isNull }?.asText(),
+                    image = input.path("image").takeIf { it.isTextual }?.asText(),
+                    productName = input.path("productName").takeIf { it.isTextual }?.asText(),
+                    brand = input.path("brand").takeIf { it.isTextual }?.asText(),
+                    servingGrams = input.path("servingGrams").takeIf { it.isNumber }?.asDouble(),
+                    servingSize = input.path("servingSize").takeIf { it.isTextual }?.asText(),
+                    ingredientsText = input.path("ingredientsText").takeIf { it.isTextual }?.asText(),
+                    kcal = input.path("kcal").takeIf { it.isNumber }?.asInt(),
+                    proteinG = input.path("proteinG").takeIf { it.isNumber }?.asInt(),
+                    carbsG = input.path("carbsG").takeIf { it.isNumber }?.asInt(),
+                    fatG = input.path("fatG").takeIf { it.isNumber }?.asInt(),
+                    detailed = input.path("detailed").asBoolean(false),
+                    ingredients = input.path("ingredients").asBoolean(false),
+                    unitKind = input.path("unitKind").takeIf { it.isTextual }?.asText(),
                 ),
                 expect = CaseExpect(
                     outcome = expect.path("outcome").asText("estimate"),
@@ -135,6 +160,10 @@ object EvalCases {
                     avgHr = intRange(expect.path("avgHr")),
                     minIngredients = expect.path("minIngredients").takeIf { it.isNumber }?.asInt(),
                     nameContainsAny = expect.path("nameContainsAny").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
+                    requireDetail = expect.path("requireDetail").asBoolean(false),
+                    requireIngredients = expect.path("requireIngredients").asBoolean(false),
+                    gPerMl = doubleRange(expect.path("gPerMl")),
+                    gramsPerEach = doubleRange(expect.path("gramsPerEach")),
                 ),
             )
         }
@@ -143,5 +172,10 @@ object EvalCases {
     private fun intRange(node: JsonNode): IntRangeExpect? {
         if (!node.isObject) return null
         return IntRangeExpect(node.path("min").asInt(), node.path("max").asInt())
+    }
+
+    private fun doubleRange(node: JsonNode): DoubleRangeExpect? {
+        if (!node.isObject) return null
+        return DoubleRangeExpect(node.path("min").asDouble(), node.path("max").asDouble())
     }
 }
