@@ -66,4 +66,7 @@ class SelectedFoodEstimator(
         return estimator.estimate(text, photo, detailed, ingredients)
             .let { it.copy(model = it.model ?: estimator.model) }
     }
+
+    override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext) =
+        current().guessBarcodeIngredients(ctx)
 }

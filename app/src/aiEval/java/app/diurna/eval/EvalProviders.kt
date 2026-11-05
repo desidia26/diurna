@@ -4,8 +4,11 @@ import app.diurna.ai.CardioPrompt
 import app.diurna.ai.CardioReading
 import app.diurna.ai.ClaudeCardioReader
 import app.diurna.ai.ClaudeFoodEstimator
+import app.diurna.ai.BarcodeIngredientsContext
+import app.diurna.ai.BarcodeIngredientsPrompt
 import app.diurna.ai.ClaudeLabelReader
 import app.diurna.ai.EstimatePrompt
+import app.diurna.domain.FoodIngredient
 import app.diurna.ai.FoodEstimate
 import app.diurna.ai.GrokCardioReader
 import app.diurna.ai.GrokFoodEstimator
@@ -59,6 +62,7 @@ interface EvalFoodClient {
         detailed: Boolean = false,
         ingredients: Boolean = false,
     ): FoodEstimate
+    suspend fun guessBarcodeIngredients(ctx: app.diurna.ai.BarcodeIngredientsContext): List<app.diurna.domain.FoodIngredient>
 }
 
 interface EvalCardioClient {
@@ -110,6 +114,8 @@ object EvalProviders {
                     detailed: Boolean,
                     ingredients: Boolean,
                 ) = est.estimate(text, photo, detailed, ingredients)
+                override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext) =
+                    est.guessBarcodeIngredients(ctx)
             }
             val cardio = object : EvalCardioClient {
                 override val providerId = id.id
@@ -146,6 +152,8 @@ object EvalProviders {
                     detailed: Boolean,
                     ingredients: Boolean,
                 ) = est.estimate(text, photo, detailed, ingredients)
+                override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext) =
+                    est.guessBarcodeIngredients(ctx)
             }
             val cardio = object : EvalCardioClient {
                 override val providerId = id.id
@@ -198,6 +206,17 @@ object EvalProviders {
                         schema = EstimatePrompt.schema(detailed, ingredients),
                     )
                     return EstimatePrompt.parse(OllamaChat.call(transport, key, body))
+                }
+                override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext): List<FoodIngredient> {
+                    val body = OllamaChat.request(
+                        model,
+                        BarcodeIngredientsPrompt.SYSTEM,
+                        BarcodeIngredientsPrompt.userMessage(ctx),
+                        photoJpeg = null,
+                        schemaName = "barcode_ingredients",
+                        schema = BarcodeIngredientsPrompt.SCHEMA,
+                    )
+                    return BarcodeIngredientsPrompt.parse(OllamaChat.call(transport, key, body))
                 }
             }
             val cardio = object : EvalCardioClient {

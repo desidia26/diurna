@@ -39,6 +39,25 @@ class OpenAiCompatFoodEstimator(
         }
     }
 
+    override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext): List<app.diurna.domain.FoodIngredient> {
+        if (!configured()) throw NoApiKey(NO_CONFIG)
+        val key = apiKey().orEmpty()
+        val json = XaiChat.call(
+            transportProvider(), key, model,
+            XaiChat.request(
+                model,
+                BarcodeIngredientsPrompt.SYSTEM,
+                BarcodeIngredientsPrompt.userMessage(ctx),
+                photoJpeg = null,
+                schemaName = "barcode_ingredients",
+                schema = BarcodeIngredientsPrompt.SCHEMA,
+                maxCompletionTokens = XaiChat.MAX_COMPLETION_TOKENS,
+            ),
+            classify = OpenAiCompatErrors::classify,
+        )
+        return BarcodeIngredientsPrompt.parse(json)
+    }
+
     companion object {
         const val NO_CONFIG = "Set a base URL and model for OpenAI-compatible in Setup to estimate food"
     }
