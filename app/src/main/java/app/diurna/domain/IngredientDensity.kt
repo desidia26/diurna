@@ -137,6 +137,17 @@ object IngredientDensity {
         }
     }
 
+    /**
+     * True when [fdcDescription] shares a meaningful token (≥3 letters) with [ingredientName].
+     * Used before filling nutrition from the same FDC food that supplied density.
+     */
+    fun isGoodFdcNameMatch(ingredientName: String, fdcDescription: String): Boolean {
+        val want = normalizeName(ingredientName).split(' ').filter { it.length >= 3 }.toSet()
+        if (want.isEmpty()) return false
+        val hay = normalizeName(fdcDescription).split(' ').filter { it.length >= 3 }.toSet()
+        return want.any { it in hay }
+    }
+
     // ---- internals ----
 
     private data class Ranked(val value: Double, val unitRank: Int, val modScore: Int, val portion: FdcPortion)

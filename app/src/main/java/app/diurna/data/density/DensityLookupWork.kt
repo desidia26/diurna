@@ -11,8 +11,6 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import app.diurna.container
 import app.diurna.data.MealEntity
-import app.diurna.domain.DensityUnitKind
-import app.diurna.domain.IngredientUnit
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -37,15 +35,12 @@ class DensityLookupWorker(context: Context, params: WorkerParameters) : Coroutin
             for (id in mealIds) {
                 if (isStopped) break
                 val lines = db.recipeIngredientDao().forMeal(id)
-                if (lines.none { it.needsDensityLookup() }) continue
+                if (lines.none { it.needsDensityLookup() || it.needsEnrichment() }) continue
                 var changed = false
                 val updated = lines.map { line ->
-                    if (!line.needsDensityLookup()) return@map line
-                    val kind = DensityUnitKind.of(IngredientUnit.of(line.unit)) ?: return@map line
-                    val lookup = resolver.resolve(line.name, kind) ?: return@map line
-                    val next = resolver.applyToLine(line, lookup)
-                    if (next.grams != null && line.grams == null) {
-                        filled++
+                    val next = resolver.enrichLine(line)
+                    if (next != line) {
+                        if (next.grams != null && line.grams == null) filled++
                         changed = true
                     }
                     next

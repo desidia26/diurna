@@ -151,6 +151,8 @@ data class RecipeIngredientEntity(
     @ColumnInfo(name = "density_id") val densityId: String? = null,
     /** For unit=each: grams per one item used to resolve [grams]. */
     @ColumnInfo(name = "grams_per_each") val gramsPerEach: Double? = null,
+    /** Persisted g/ml used to resolve [grams] for volume units (USDA/AI/builtin/manual). */
+    @ColumnInfo(name = "g_per_ml") val gPerMl: Double? = null,
     @ColumnInfo(name = "protein_g") val proteinG: Int = 0,
     @ColumnInfo(name = "carbs_g") val carbsG: Int = 0,
     @ColumnInfo(name = "fat_g") val fatG: Int = 0,

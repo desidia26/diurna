@@ -427,15 +427,21 @@ class MigrationTest {
     }
 
 
-    @Test fun v15ToV16AddsIngredientDensityCache() {
+    @Test fun v15ToV16AddsIngredientDensityCacheAndGPerMl() {
         helper.createDatabase(dbName + "-16", 15).use { db ->
             db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-11-04', 0)")
             db.execSQL(
                 "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind) " +
                     "VALUES (1, 'Soup', 200, 10, 20, 5, 'recipe')"
             )
+            db.execSQL(
+                "INSERT INTO recipe_ingredient " +
+                    "(id, meal_id, position, name, amount, unit, grams, density_id, grams_per_each, " +
+                    "protein_g, carbs_g, fat_g, kcal) " +
+                    "VALUES (1, 1, 0, 'broth', 1.0, 'cup', 240.0, 'usda', NULL, 0, 0, 0, 0)"
+            )
         }
-        // AutoMigration 15→16 creates ingredient_density_cache; schemas validate columns.
+        // AutoMigration 15→16 creates ingredient_density_cache and adds recipe_ingredient.g_per_ml.
         val db = helper.runMigrationsAndValidate(dbName + "-16", 16, true)
         db.query(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='ingredient_density_cache'"
@@ -446,6 +452,13 @@ class MigrationTest {
         db.query("SELECT COUNT(*) FROM meal").use {
             assertTrue(it.moveToFirst())
             assertEquals("existing meals kept", 1, it.getInt(0))
+        }
+        db.query("SELECT name, grams, g_per_ml, density_id FROM recipe_ingredient WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("broth", it.getString(0))
+            assertEquals(240.0, it.getDouble(1), 0.0)
+            assertTrue("g_per_ml starts null for pre-v16 rows", it.isNull(2))
+            assertEquals("usda", it.getString(3))
         }
         db.execSQL(
             "INSERT INTO ingredient_density_cache " +
