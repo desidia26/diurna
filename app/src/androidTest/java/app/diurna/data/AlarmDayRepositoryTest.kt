@@ -36,11 +36,13 @@ class AlarmDayRepositoryTest {
     }
 
     @Test fun alarmInputsFeedNextOccurrence() = runTest {
-        t.now = mon.atTime(5, 0)
+        // Overrides must be set while each day is still unlocked (before 22:00 the day before).
+        t.now = mon.minusDays(1).atTime(12, 0)
         days.setAlarmOverride(mon, "06:00")
         days.setAlarmOverride(tue, AlarmRules.OFF)
         val wed = tue.plusDays(1)
         days.setAlarmOverride(wed, "05:30")
+        t.now = mon.atTime(5, 0)
         val inputs = (0L until AlarmRules.LOOKAHEAD_DAYS).associate { i ->
             val d = mon.plusDays(i)
             d to days.alarmInputs(d)
