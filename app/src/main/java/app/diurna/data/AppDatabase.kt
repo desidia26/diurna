@@ -28,10 +28,11 @@ import app.diurna.domain.DailyMetrics
         FoodPhotoEntity::class,
         FdcFoodCacheEntity::class,
         IngredientDensityCacheEntity::class,
+        IngredientNutritionCacheEntity::class,
         DailyMetricEntity::class,
         DailyMetricValueEntity::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -61,9 +62,11 @@ import app.diurna.domain.DailyMetrics
         // v15: food_photo gallery (data copy of food_entry.photo is in MIGRATION_14_15).
         // v16: ingredient density / grams-per-each lookup cache.
         AutoMigration(from = 15, to = 16),
-        // v17: a standing note on each exercise.
+        // v17: a standing note on each exercise (#45).
         AutoMigration(from = 16, to = 17),
-        // v18: check-in metrics defined in Setup; mood and energy move into them (MIGRATION_17_18).
+        // v18 is idempotent: see MIGRATION_17_18 (g_per_ml + nutrition cache, and
+        // exercise.note when upgrading from an earlier #48 preview build at v17).
+        // v19: check-in metrics defined in Setup; mood and energy move into them (MIGRATION_18_19).
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -77,6 +80,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun foodPhotoDao(): FoodPhotoDao
     abstract fun fdcFoodCacheDao(): FdcFoodCacheDao
     abstract fun ingredientDensityCacheDao(): IngredientDensityCacheDao
+    abstract fun ingredientNutritionCacheDao(): IngredientNutritionCacheDao
     abstract fun dailyMetricDao(): DailyMetricDao
 
     /** v2: food estimates, body weight, finalized-day snapshots. The v1 estimate columns were never written. */
@@ -101,7 +105,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        /** A new install starts with Mood and Energy; upgrades get them from [MIGRATION_17_18]. */
+        /** A new install starts with Mood and Energy; upgrades get them from [MIGRATION_18_19]. */
         val seedCheckIn = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) = seedCheckInMetrics(db)
         }
@@ -120,10 +124,10 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * v18: check-in metrics. Seeds Mood and Energy and copies every day's ratings into them.
+         * v19: check-in metrics. Seeds Mood and Energy and copies every day's ratings into them.
          * day.mood and day.energy are left in place, unread, until this has run everywhere.
          */
-        val MIGRATION_17_18 = object : Migration(17, 18) {
+        val MIGRATION_18_19 = object : Migration(18, 19) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(CREATE_DAILY_METRIC)
                 db.execSQL(CREATE_DAILY_METRIC_NAME_INDEX)
@@ -189,9 +193,60 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v18: recipe_ingredient.g_per_ml + ingredient_nutrition_cache (#48), and exercise.note (#45)
+         * when missing. Idempotent so both a #45 v17 device (note only) and Larry's build-142 v17
+         * (g_per_ml + nutrition cache, no note) end up at the same schema.
+         */
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!columnExists(db, "exercise", "note")) {
+                    db.execSQL("ALTER TABLE `exercise` ADD COLUMN `note` TEXT")
+                }
+                if (!columnExists(db, "recipe_ingredient", "g_per_ml")) {
+                    db.execSQL("ALTER TABLE `recipe_ingredient` ADD COLUMN `g_per_ml` REAL")
+                }
+                if (!tableExists(db, "ingredient_nutrition_cache")) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `ingredient_nutrition_cache` (" +
+                            "`normalized_name` TEXT NOT NULL, " +
+                            "`source` TEXT NOT NULL, " +
+                            "`fdc_id` INTEGER, " +
+                            "`kcal_per_100` INTEGER NOT NULL, " +
+                            "`protein_g_per_100` INTEGER NOT NULL, " +
+                            "`carbs_g_per_100` INTEGER NOT NULL, " +
+                            "`fat_g_per_100` INTEGER NOT NULL, " +
+                            "`fiber_g_per_100` INTEGER, " +
+                            "`sugars_g_per_100` INTEGER, " +
+                            "`basis` TEXT, " +
+                            "`description` TEXT, " +
+                            "`cached_at` INTEGER NOT NULL, " +
+                            "`retry_after` INTEGER, " +
+                            "PRIMARY KEY(`normalized_name`))"
+                    )
+                }
+            }
+        }
+
+        private fun tableExists(db: SupportSQLiteDatabase, table: String): Boolean =
+            db.query(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                arrayOf(table),
+            ).use { it.moveToFirst() }
+
+        private fun columnExists(db: SupportSQLiteDatabase, table: String, column: String): Boolean {
+            db.query("PRAGMA table_info(`$table`)").use { cursor ->
+                val nameIdx = cursor.getColumnIndex("name")
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIdx) == column) return true
+                }
+            }
+            return false
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_5_6, MIGRATION_14_15, MIGRATION_17_18)
+                .addMigrations(MIGRATION_5_6, MIGRATION_14_15, MIGRATION_17_18, MIGRATION_18_19)
                 .addCallback(seedRoutine)
                 .addCallback(seedCheckIn)
                 .addCallback(seedCatalog)
@@ -199,7 +254,7 @@ abstract class AppDatabase : RoomDatabase() {
     }
 }
 
-// Room's own CREATE statements for v18 (app/schemas/.../18.json), so the migrated schema validates.
+// Room's own CREATE statements for v19 (app/schemas/.../19.json), so the migrated schema validates.
 private const val CREATE_DAILY_METRIC = "CREATE TABLE IF NOT EXISTS `daily_metric` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
     "`name` TEXT NOT NULL, `kind` TEXT NOT NULL, `scale_max` INTEGER, `words` TEXT, `unit` TEXT, `key` TEXT, " +
     "`position` INTEGER NOT NULL, `archived` INTEGER NOT NULL DEFAULT 0)"

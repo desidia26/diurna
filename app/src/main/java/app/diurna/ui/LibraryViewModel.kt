@@ -12,9 +12,6 @@ import app.diurna.data.MealEntity
 import app.diurna.data.RecipeIngredientEntity
 import app.diurna.data.recipe.RecipeImportResult
 import app.diurna.data.density.DensityLookupWorker
-import app.diurna.data.density.needsDensityLookup
-import app.diurna.domain.DensityUnitKind
-import app.diurna.domain.IngredientUnit
 import app.diurna.data.fdc.FdcNutritionProfile
 import app.diurna.data.fdc.FdcSearchHit
 import app.diurna.domain.Cardio
@@ -169,12 +166,7 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoIm
      */
     suspend fun resolveDensities(lines: List<RecipeIngredientEntity>): List<RecipeIngredientEntity> {
         val resolver = c.densityResolver
-        return lines.map { line ->
-            if (!line.needsDensityLookup()) return@map line
-            val kind = DensityUnitKind.of(IngredientUnit.of(line.unit)) ?: return@map line
-            val lookup = resolver.resolve(line.name, kind) ?: return@map line
-            resolver.applyToLine(line, lookup)
-        }
+        return lines.map { line -> resolver.enrichLine(line) }
     }
 
     /** Kick a WorkManager pass for blocked lines on a saved recipe (or all recipes when id=0). */

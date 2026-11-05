@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 18,
-    "identityHash": "583bd77d17bce89e84c22fcbe9730921",
+    "identityHash": "dcc9e8aafa55785e713f2076342e98d6",
     "entities": [
       {
         "tableName": "exercise",
@@ -1120,7 +1120,7 @@
       },
       {
         "tableName": "recipe_ingredient",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `meal_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `unit` TEXT NOT NULL, `grams` REAL, `density_id` TEXT, `grams_per_each` REAL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `kcal` INTEGER NOT NULL, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `source` TEXT, `fdc_id` INTEGER, `barcode` TEXT, `source_meal_id` INTEGER, FOREIGN KEY(`meal_id`) REFERENCES `meal`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `meal_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `unit` TEXT NOT NULL, `grams` REAL, `density_id` TEXT, `grams_per_each` REAL, `g_per_ml` REAL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `kcal` INTEGER NOT NULL, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `source` TEXT, `fdc_id` INTEGER, `barcode` TEXT, `source_meal_id` INTEGER, FOREIGN KEY(`meal_id`) REFERENCES `meal`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -1171,6 +1171,11 @@
           {
             "fieldPath": "gramsPerEach",
             "columnName": "grams_per_each",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "gPerMl",
+            "columnName": "g_per_ml",
             "affinity": "REAL"
           },
           {
@@ -1601,142 +1606,93 @@
         }
       },
       {
-        "tableName": "daily_metric",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `kind` TEXT NOT NULL, `scale_max` INTEGER, `words` TEXT, `unit` TEXT, `key` TEXT, `position` INTEGER NOT NULL, `archived` INTEGER NOT NULL DEFAULT 0)",
+        "tableName": "ingredient_nutrition_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`normalized_name` TEXT NOT NULL, `source` TEXT NOT NULL, `fdc_id` INTEGER, `kcal_per_100` INTEGER NOT NULL, `protein_g_per_100` INTEGER NOT NULL, `carbs_g_per_100` INTEGER NOT NULL, `fat_g_per_100` INTEGER NOT NULL, `fiber_g_per_100` INTEGER, `sugars_g_per_100` INTEGER, `basis` TEXT, `description` TEXT, `cached_at` INTEGER NOT NULL, `retry_after` INTEGER, PRIMARY KEY(`normalized_name`))",
         "fields": [
           {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "name",
-            "columnName": "name",
+            "fieldPath": "normalizedName",
+            "columnName": "normalized_name",
             "affinity": "TEXT",
             "notNull": true
           },
           {
-            "fieldPath": "kind",
-            "columnName": "kind",
+            "fieldPath": "source",
+            "columnName": "source",
             "affinity": "TEXT",
             "notNull": true
           },
           {
-            "fieldPath": "scaleMax",
-            "columnName": "scale_max",
+            "fieldPath": "fdcId",
+            "columnName": "fdc_id",
             "affinity": "INTEGER"
           },
           {
-            "fieldPath": "words",
-            "columnName": "words",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "unit",
-            "columnName": "unit",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "key",
-            "columnName": "key",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "position",
-            "columnName": "position",
+            "fieldPath": "kcalPer100",
+            "columnName": "kcal_per_100",
             "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "archived",
-            "columnName": "archived",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": true,
-          "columnNames": [
-            "id"
-          ]
-        },
-        "indices": [
-          {
-            "name": "index_daily_metric_name",
-            "unique": true,
-            "columnNames": [
-              "name"
-            ],
-            "orders": [],
-            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_daily_metric_name` ON `${TABLE_NAME}` (`name`)"
-          }
-        ]
-      },
-      {
-        "tableName": "daily_metric_value",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`date` TEXT NOT NULL, `metric_id` INTEGER NOT NULL, `value` REAL, `text` TEXT, PRIMARY KEY(`date`, `metric_id`), FOREIGN KEY(`metric_id`) REFERENCES `daily_metric`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-        "fields": [
-          {
-            "fieldPath": "date",
-            "columnName": "date",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "metricId",
-            "columnName": "metric_id",
+            "fieldPath": "proteinGPer100",
+            "columnName": "protein_g_per_100",
             "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "value",
-            "columnName": "value",
-            "affinity": "REAL"
+            "fieldPath": "carbsGPer100",
+            "columnName": "carbs_g_per_100",
+            "affinity": "INTEGER",
+            "notNull": true
           },
           {
-            "fieldPath": "text",
-            "columnName": "text",
+            "fieldPath": "fatGPer100",
+            "columnName": "fat_g_per_100",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fiberGPer100",
+            "columnName": "fiber_g_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sugarsGPer100",
+            "columnName": "sugars_g_per_100",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "basis",
+            "columnName": "basis",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cachedAt",
+            "columnName": "cached_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retryAfter",
+            "columnName": "retry_after",
+            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
           "autoGenerate": false,
           "columnNames": [
-            "date",
-            "metric_id"
+            "normalized_name"
           ]
-        },
-        "indices": [
-          {
-            "name": "index_daily_metric_value_metric_id",
-            "unique": false,
-            "columnNames": [
-              "metric_id"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_daily_metric_value_metric_id` ON `${TABLE_NAME}` (`metric_id`)"
-          }
-        ],
-        "foreignKeys": [
-          {
-            "table": "daily_metric",
-            "onDelete": "CASCADE",
-            "onUpdate": "NO ACTION",
-            "columns": [
-              "metric_id"
-            ],
-            "referencedColumns": [
-              "id"
-            ]
-          }
-        ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '583bd77d17bce89e84c22fcbe9730921')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'dcc9e8aafa55785e713f2076342e98d6')"
     ]
   }
 }

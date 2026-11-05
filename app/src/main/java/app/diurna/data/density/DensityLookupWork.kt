@@ -11,12 +11,10 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import app.diurna.container
 import app.diurna.data.MealEntity
-import app.diurna.domain.DensityUnitKind
-import app.diurna.domain.IngredientUnit
 import kotlinx.coroutines.CancellationException
 
 /**
- * Background fill of density / grams-per-each on recipe lines that still lack grams.
+ * Background fill of density / grams and empty nutrition on recipe lines.
  * Idempotent: skips lines that already have grams. Manual density_id is never overwritten
  * by [IngredientDensityResolver.applyToLine].
  */
@@ -30,22 +28,21 @@ class DensityLookupWorker(context: Context, params: WorkerParameters) : Coroutin
             val mealIds: List<Long> = if (mealId > 0L) {
                 listOf(mealId)
             } else {
-                db.recipeIngredientDao().blockedNeedingDensity()
-                    .map { it.mealId }.distinct()
+                (
+                    db.recipeIngredientDao().blockedNeedingDensity() +
+                        db.recipeIngredientDao().needingNutritionFill()
+                    ).map { it.mealId }.distinct()
             }
             var filled = 0
             for (id in mealIds) {
                 if (isStopped) break
                 val lines = db.recipeIngredientDao().forMeal(id)
-                if (lines.none { it.needsDensityLookup() }) continue
+                if (lines.none { it.needsDensityLookup() || it.needsEnrichment() }) continue
                 var changed = false
                 val updated = lines.map { line ->
-                    if (!line.needsDensityLookup()) return@map line
-                    val kind = DensityUnitKind.of(IngredientUnit.of(line.unit)) ?: return@map line
-                    val lookup = resolver.resolve(line.name, kind) ?: return@map line
-                    val next = resolver.applyToLine(line, lookup)
-                    if (next.grams != null && line.grams == null) {
-                        filled++
+                    val next = resolver.enrichLine(line)
+                    if (next != line) {
+                        if (next.grams != null && line.grams == null) filled++
                         changed = true
                     }
                     next
