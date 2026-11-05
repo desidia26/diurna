@@ -17,6 +17,7 @@ class EvalCasesTest {
         assertTrue(set.cases.any { it.prompt == "food" })
         assertTrue(set.cases.any { it.prompt == "cardio" })
         assertTrue(set.cases.any { it.prompt == "label" })
+        assertTrue(set.cases.any { it.prompt == "density" })
         assertTrue(set.cases.any { it.input.detailed })
         assertTrue(set.cases.any { it.input.ingredients })
         assertTrue(set.passThreshold in 0.0..1.0)
@@ -34,11 +35,21 @@ class EvalCasesTest {
 
     @Test fun smokeIsTinyAndTextOnly() {
         val set = EvalCases.load(resolveCasesDir(), "smoke")
-        assertEquals(5, set.cases.size)
+        assertTrue("smoke stays small", set.cases.size in 5..12)
         assertTrue(set.cases.all { it.input.image == null })
-        assertTrue(set.cases.all { it.prompt == "food" })
+        assertTrue(set.cases.all { it.prompt in setOf("food", "density") })
+        assertTrue(set.cases.any { it.prompt == "food" })
+        assertTrue(set.cases.any { it.prompt == "density" })
         assertTrue(set.cases.any { it.input.detailed && !it.input.ingredients })
         assertTrue(set.cases.any { it.input.ingredients })
+    }
+
+    @Test fun defaultIncludesDensity() {
+        val set = EvalCases.load(resolveCasesDir(), "default")
+        assertTrue(set.cases.any { it.prompt == "density" && it.input.unitKind == "volume" })
+        assertTrue(set.cases.any { it.prompt == "density" && it.input.unitKind == "each" })
+        assertTrue(set.cases.any { it.expect.gPerMl != null })
+        assertTrue(set.cases.any { it.expect.gramsPerEach != null })
     }
 
     private fun resolveCasesDir(): File {

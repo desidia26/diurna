@@ -527,3 +527,30 @@ data class FdcFoodCacheEntity(
     @ColumnInfo(name = "tyr_mg_per_100") val tyrMgPer100: Int? = null,
     @ColumnInfo(name = "cached_at") val cachedAt: Long,
 )
+
+/**
+ * Cached density / grams-per-each lookup for a normalized ingredient name + unit kind.
+ * Shared across recipes. Negative results use [retryAfter] so a missing key or network
+ * blip does not permanently poison the cache.
+ */
+@Entity(tableName = "ingredient_density_cache")
+data class IngredientDensityCacheEntity(
+    /** normalized_name + "|" + unit_kind — see [app.diurna.domain.IngredientDensity.cacheKey]. */
+    @PrimaryKey @ColumnInfo(name = "query_key") val queryKey: String,
+    @ColumnInfo(name = "normalized_name") val normalizedName: String,
+    /** [app.diurna.domain.DensityUnitKind.key]: volume | each */
+    @ColumnInfo(name = "unit_kind") val unitKind: String,
+    /** g per ml when [unitKind] is volume; null for each / miss. */
+    @ColumnInfo(name = "g_per_ml") val gPerMl: Double? = null,
+    /** Grams for one item when [unitKind] is each. */
+    @ColumnInfo(name = "grams_per_each") val gramsPerEach: Double? = null,
+    /** usda / ai / builtin / miss / pending — see [app.diurna.domain.IngredientDensity.Source]. */
+    val source: String,
+    @ColumnInfo(name = "fdc_id") val fdcId: Int? = null,
+    /** Short AI / USDA basis text for display. */
+    val basis: String? = null,
+    val description: String? = null,
+    @ColumnInfo(name = "cached_at") val cachedAt: Long,
+    /** Epoch millis; null means usable now. Pending/miss rows wait until this time. */
+    @ColumnInfo(name = "retry_after") val retryAfter: Long? = null,
+)

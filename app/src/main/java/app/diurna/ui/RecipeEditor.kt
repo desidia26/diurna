@@ -51,6 +51,8 @@ data class IngredientDraft(
     val amount: Double = 0.0,
     val unit: IngredientUnit = IngredientUnit.G,
     val densityId: String? = null,
+    /** Session-only g/ml from USDA/AI lookup so amount edits can recompute grams. */
+    val gPerMl: Double? = null,
     val gramsPerEach: Double? = null,
     val grams: Double? = null,
     val nutrition: RecipeMath.IngredientNutrition = RecipeMath.IngredientNutrition(),
@@ -110,6 +112,7 @@ fun RecipeIngredientEntity.toDraft() = IngredientDraft(
     amount = amount,
     unit = IngredientUnit.of(unit),
     densityId = densityId,
+    gPerMl = IngredientDensities.byId(densityId)?.gPerMl,
     gramsPerEach = gramsPerEach,
     grams = grams,
     nutrition = RecipeMath.IngredientNutrition(
@@ -141,6 +144,7 @@ fun RecipeDialog(
     searchFdc: suspend (String) -> List<FdcSearchHit>,
     loadFdcNutrition: suspend (Int) -> app.diurna.data.fdc.FdcNutritionProfile?,
     scanBarcode: suspend (String, Boolean) -> app.diurna.data.LibraryRepository.ScanResult,
+    fillDensities: (suspend (List<RecipeIngredientEntity>) -> List<RecipeIngredientEntity>)? = null,
     onDismiss: () -> Unit,
     onSave: suspend (MealEntity, List<RecipeIngredientEntity>) -> Result,
 ) {
@@ -156,6 +160,45 @@ fun RecipeDialog(
     }
     var problem by remember { mutableStateOf<String?>(null) }
     var addMode by remember { mutableStateOf<String?>(null) } // manual / fdc / barcode / meal
+    var lookingUp by remember { mutableStateOf(false) }
+
+    // Auto-resolve blocked volume/each lines (USDA → builtin → AI) once on open.
+    androidx.compose.runtime.LaunchedEffect(initial.id, initialLines) {
+        val filler = fillDensities ?: return@LaunchedEffect
+        if (lines.none { it.grams == null && (it.unit.needsDensity || it.unit.needsGramsPerEach) }) return@LaunchedEffect
+        lookingUp = true
+        try {
+            val entities = lines.mapIndexed { i, d -> d.toEntity(initial.id, i) }
+            val filled = filler(entities)
+            filled.forEachIndexed { i, ent ->
+                if (i in lines.indices) {
+                    val d = ent.toDraft()
+                    // Preserve session gPerMl for usda/ai from resolved grams when possible.
+                    val gPerMl = when {
+                        d.gPerMl != null -> d.gPerMl
+                        ent.densityId == app.diurna.domain.IngredientDensity.Source.USDA ||
+                            ent.densityId == app.diurna.domain.IngredientDensity.Source.AI -> {
+                            val u = IngredientUnit.of(ent.unit)
+                            val g = ent.grams
+                            if (g != null && ent.amount > 0) {
+                                when (u) {
+                                    IngredientUnit.ML -> g / ent.amount
+                                    IngredientUnit.CUP -> g / (ent.amount * IngredientUnits.ML_PER_CUP)
+                                    IngredientUnit.TBSP -> g / (ent.amount * IngredientUnits.ML_PER_TBSP)
+                                    IngredientUnit.TSP -> g / (ent.amount * IngredientUnits.ML_PER_TSP)
+                                    else -> null
+                                }
+                            } else null
+                        }
+                        else -> null
+                    }
+                    lines[i] = d.copy(gPerMl = gPerMl)
+                }
+            }
+        } finally {
+            lookingUp = false
+        }
+    }
 
     val yield = yieldStr.toDoubleOrNull()?.takeIf { it > 0 } ?: 1.0
     val totals = remember(lines.toList(), yield) {
@@ -211,10 +254,21 @@ fun RecipeDialog(
                                 style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
                             )
                             if (line.grams == null && line.unit.needsDensity) {
-                                Text("Needs density", style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
+                                Text(
+                                    if (lookingUp) "Looking up density…" else "Needs density",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LocalStatusColors.current.warn,
+                                )
                             }
                             if (line.grams == null && line.unit.needsGramsPerEach) {
-                                Text("Needs g per each", style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
+                                Text(
+                                    if (lookingUp) "Looking up g per each…" else "Needs g per each",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LocalStatusColors.current.warn,
+                                )
+                            }
+                            if (line.densityId == app.diurna.domain.IngredientDensity.Source.AI && line.grams != null) {
+                                Text("AI estimate", style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
                             }
                         }
                         TextButton(onClick = { lines.removeAt(i) }) { Text("Remove") }
