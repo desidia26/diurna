@@ -460,15 +460,34 @@ class MigrationTest {
         db.close()
     }
 
-    @Test fun v16ToV17MovesMoodAndEnergyIntoCheckInMetrics() {
+    @Test fun v16ToV17AddsExerciseNoteAndExistingExercisesHaveNone() {
         helper.createDatabase(dbName + "-17", 16).use { db ->
+            db.execSQL("INSERT INTO exercise (id, name, hidden, kind, cardio_style) VALUES (1, 'Bench press', 0, 'strength', NULL)")
+            db.execSQL("INSERT INTO exercise (id, name, hidden, kind, cardio_style) VALUES (2, 'Row', 1, 'cardio', '500m')")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-17", 17, true)
+        db.query("SELECT name, hidden, kind, cardio_style, note FROM exercise ORDER BY id").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Bench press", it.getString(0))
+            assertTrue("existing exercises start without a note", it.isNull(4))
+            assertTrue(it.moveToNext())
+            assertEquals(1, it.getInt(1))
+            assertEquals("cardio", it.getString(2))
+            assertEquals("500m", it.getString(3))
+            assertTrue(it.isNull(4))
+        }
+        db.close()
+    }
+
+    @Test fun v17ToV18MovesMoodAndEnergyIntoCheckInMetrics() {
+        helper.createDatabase(dbName + "-18", 17).use { db ->
             db.execSQL("INSERT INTO day (date, finalized, mood, energy) VALUES ('2026-11-01', 1, 4, 2)")
             db.execSQL("INSERT INTO day (date, finalized, mood, energy) VALUES ('2026-11-02', 1, 5, NULL)")
             db.execSQL("INSERT INTO day (date, finalized, mood, energy) VALUES ('2026-11-03', 0, NULL, NULL)")
             // Out of range: never written by the app, and not copied.
             db.execSQL("INSERT INTO day (date, finalized, mood, energy) VALUES ('2026-11-04', 0, 9, 0)")
         }
-        val db = helper.runMigrationsAndValidate(dbName + "-17", 17, true, AppDatabase.MIGRATION_16_17)
+        val db = helper.runMigrationsAndValidate(dbName + "-18", 18, true, AppDatabase.MIGRATION_17_18)
         db.query("SELECT name, kind, scale_max, words, `key`, position, archived FROM daily_metric ORDER BY position").use {
             assertTrue(it.moveToNext())
             assertEquals("Mood", it.getString(0))

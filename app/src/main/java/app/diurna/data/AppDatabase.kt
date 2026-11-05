@@ -31,7 +31,7 @@ import app.diurna.domain.DailyMetrics
         DailyMetricEntity::class,
         DailyMetricValueEntity::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -61,7 +61,9 @@ import app.diurna.domain.DailyMetrics
         // v15: food_photo gallery (data copy of food_entry.photo is in MIGRATION_14_15).
         // v16: ingredient density / grams-per-each lookup cache.
         AutoMigration(from = 15, to = 16),
-        // v17: check-in metrics defined in Setup; mood and energy move into them (MIGRATION_16_17).
+        // v17: a standing note on each exercise.
+        AutoMigration(from = 16, to = 17),
+        // v18: check-in metrics defined in Setup; mood and energy move into them (MIGRATION_17_18).
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -99,7 +101,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        /** A new install starts with Mood and Energy; upgrades get them from [MIGRATION_16_17]. */
+        /** A new install starts with Mood and Energy; upgrades get them from [MIGRATION_17_18]. */
         val seedCheckIn = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) = seedCheckInMetrics(db)
         }
@@ -118,10 +120,10 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * v17: check-in metrics. Seeds Mood and Energy and copies every day's ratings into them.
+         * v18: check-in metrics. Seeds Mood and Energy and copies every day's ratings into them.
          * day.mood and day.energy are left in place, unread, until this has run everywhere.
          */
-        val MIGRATION_16_17 = object : Migration(16, 17) {
+        val MIGRATION_17_18 = object : Migration(17, 18) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(CREATE_DAILY_METRIC)
                 db.execSQL(CREATE_DAILY_METRIC_NAME_INDEX)
@@ -189,7 +191,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_5_6, MIGRATION_14_15, MIGRATION_16_17)
+                .addMigrations(MIGRATION_5_6, MIGRATION_14_15, MIGRATION_17_18)
                 .addCallback(seedRoutine)
                 .addCallback(seedCheckIn)
                 .addCallback(seedCatalog)
@@ -197,7 +199,7 @@ abstract class AppDatabase : RoomDatabase() {
     }
 }
 
-// Room's own CREATE statements for v17 (app/schemas/.../17.json), so the migrated schema validates.
+// Room's own CREATE statements for v18 (app/schemas/.../18.json), so the migrated schema validates.
 private const val CREATE_DAILY_METRIC = "CREATE TABLE IF NOT EXISTS `daily_metric` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
     "`name` TEXT NOT NULL, `kind` TEXT NOT NULL, `scale_max` INTEGER, `words` TEXT, `unit` TEXT, `key` TEXT, " +
     "`position` INTEGER NOT NULL, `archived` INTEGER NOT NULL DEFAULT 0)"

@@ -86,6 +86,7 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoIm
     suspend fun addExercise(name: String, cardio: Cardio.Style? = null): Result = c.library.addExercise(name, cardio)
     suspend fun setExerciseCardio(id: Long, cardio: Cardio.Style?): Result = c.library.setExerciseCardio(id, cardio)
     suspend fun renameExercise(id: Long, name: String): Result = c.library.renameExercise(id, name)
+    suspend fun setExerciseNote(id: Long, note: String) = c.library.setExerciseNote(id, note)
 
     fun deleteMeal(id: Long) = io { c.library.deleteMeal(id) }
     fun setExerciseHidden(id: Long, hidden: Boolean) = io { c.library.setExerciseHidden(id, hidden) }

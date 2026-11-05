@@ -1,6 +1,7 @@
 package app.diurna.ui
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -10,6 +11,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
+import app.diurna.domain.ExerciseNote
 import app.diurna.domain.SetHints
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -336,6 +338,8 @@ private fun ExerciseBlock(
     val complete = sets.isNotEmpty() && done == sets.size
     var menu by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
+    var editingNote by remember { mutableStateOf(false) }
+    val note = logged.exercise.note
     // "+ Set" puts the cursor in the new row once it arrives from the database.
     var focusWhenMoreThan by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(sets.size) {
@@ -370,6 +374,7 @@ private fun ExerciseBlock(
                     Text("⋮", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text(if (note == null) "Add note" else "Edit note") }, onClick = { menu = false; editingNote = true })
                     DropdownMenuItem(text = { Text("Move up") }, enabled = !isFirst, onClick = { menu = false; vm.moveExercise(logged.logged.id, up = true) })
                     DropdownMenuItem(text = { Text("Move down") }, enabled = !isLast, onClick = { menu = false; vm.moveExercise(logged.logged.id, up = false) })
                     // Only offered once Metrics has a session to show; otherwise it would open nothing.
@@ -384,6 +389,14 @@ private fun ExerciseBlock(
                     })
                 }
             }
+        }
+        // The note stays out of a folded exercise; the editor shows either way, since the menu can open it there.
+        if (editingNote) {
+            NoteEditor(logged.exercise.name, note.orEmpty(), onDismiss = { editingNote = false }) {
+                vm.setExerciseNote(logged.exercise.id, it); editingNote = false
+            }
+        } else if (note != null && !collapsed) {
+            NoteStrip(note) { editingNote = true }
         }
         if (isCardio) {
             CardioPieces(ex, vm, collapsed)
@@ -421,6 +434,41 @@ private fun ExerciseBlock(
             "Remove ${logged.exercise.name}?", "This deletes the ${if (isCardio) "pieces" else "sets"} logged for it today.", "Remove",
             onDismiss = { confirmRemove = false },
         ) { vm.removeExercise(logged.logged.id); confirmRemove = false }
+    }
+}
+
+/** The exercise's standing note, above "Last time"; tapping it edits it. */
+@Composable
+private fun NoteStrip(note: String, onEdit: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = "Edit note", onClick = onEdit),
+    ) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(
+                painterResource(R.drawable.ic_note), contentDescription = null,
+                Modifier.size(16.dp).padding(top = 2.dp), tint = MaterialTheme.colorScheme.primary,
+            )
+            Text(note, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun NoteEditor(exercise: String, initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    Column {
+        OutlinedTextField(
+            text, { text = it.take(ExerciseNote.MAX_CHARS) }, Modifier.fillMaxWidth(),
+            label = { Text("Note for $exercise") }, minLines = 2, maxLines = ExerciseNote.MAX_LINES,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Hint("${text.length} / ${ExerciseNote.MAX_CHARS} · shows every workout", Modifier.weight(1f).padding(start = 4.dp))
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = { onSave(text) }) { Text("Save") }
+        }
     }
 }
 

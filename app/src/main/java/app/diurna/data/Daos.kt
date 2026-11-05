@@ -87,7 +87,7 @@ interface ExerciseDao {
 
     /** The whole catalog for the Library page, with how often each is used. */
     @Query(
-        """SELECT e.id, e.name, e.hidden, e.kind, e.cardio_style AS cardioStyle,
+        """SELECT e.id, e.name, e.hidden, e.kind, e.cardio_style AS cardioStyle, e.note,
              (SELECT COUNT(*) FROM logged_exercise le WHERE le.exercise_id = e.id) AS logged,
              (SELECT COUNT(*) FROM template_exercise te WHERE te.exercise_id = e.id) AS inRoutine
            FROM exercise e ORDER BY e.hidden, e.name COLLATE NOCASE"""
@@ -99,6 +99,9 @@ interface ExerciseDao {
 
     @Query("UPDATE exercise SET name = :name WHERE id = :id")
     suspend fun rename(id: Long, name: String)
+
+    @Query("UPDATE exercise SET note = :note WHERE id = :id")
+    suspend fun setNote(id: Long, note: String?)
 
     @Query("UPDATE exercise SET hidden = :hidden WHERE id = :id")
     suspend fun setHidden(id: Long, hidden: Boolean)

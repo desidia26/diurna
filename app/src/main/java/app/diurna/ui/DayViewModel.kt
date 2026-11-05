@@ -205,6 +205,7 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoImport
     fun removeWorkout() = io { c.days.removeWorkout(date) }
     fun removeExercise(loggedId: Long) = io { c.days.removeExercise(loggedId) }
     fun moveExercise(loggedId: Long, up: Boolean) = io { c.days.moveExercise(loggedId, up) }
+    fun setExerciseNote(exerciseId: Long, note: String) = io { c.library.setExerciseNote(exerciseId, note) }
 
     // Food
     fun addFood(text: String, photo: String? = null) = io { if (text.isNotBlank()) c.food.add(date, text, photo) }
