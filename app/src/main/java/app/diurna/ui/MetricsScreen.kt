@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.diurna.R
 import app.diurna.domain.Cardio
+import app.diurna.domain.DailyMetrics
 import app.diurna.domain.Metrics
 import androidx.compose.runtime.remember
 import app.diurna.domain.AminoAcids
@@ -80,7 +81,7 @@ fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues, onClose: 
         }
         item { RangeChips(m.range, vm::setRange) }
         item { WeightCardView(m.weight, m.showDots, m.from, m.to) }
-        item { MoodCardView(m.mood, m.from, m.to) }
+        items(m.checkIn, key = { "checkin-${it.def.id}" }) { DailyMetricCardView(it, m.from, m.to) }
         m.macros?.let { card -> item { MacroCardView(card, m.from, m.to, vm::setMacroChartMode) } }
         m.carbs?.let { card -> item { CarbDetailCardView(card, m.from, m.to) } }
         m.fats?.let { card -> item { FatDetailCardView(card, m.from, m.to) } }
@@ -136,31 +137,42 @@ private fun WeightCardView(w: WeightCard, showDots: Boolean, from: LocalDate, to
 }
 
 @Composable
-private fun MoodCardView(card: MoodCard, from: LocalDate, to: LocalDate) {
-    val sum = card.summary
-    SectionCard("Mood & energy", chip = { Hint("${sum.rated} of ${sum.days} rated") }) {
-        if (sum.rated == 0) {
-            Hint("No check-ins in this range. Rate mood and energy on the Day screen in the evening.")
+private fun DailyMetricCardView(card: DailyMetricCard, from: LocalDate, to: LocalDate) {
+    val def = card.def
+    val verb = if (def.kind == DailyMetrics.Kind.SCALE) "rated" else "logged"
+    SectionCard(def.name, chip = { Hint("${card.logged} of ${card.days} $verb") }) {
+        if (card.logged == 0) {
+            Hint("Nothing $verb in this range. Fill it in on the Day screen's Check-in card in the evening.")
             return@SectionCard
         }
         val c = MaterialTheme.colorScheme
-        Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-            Stat(sum.mood?.let { "%.1f".format(it) } ?: "—", "mood avg", c.primary)
-            Stat(sum.energy?.let { "%.1f".format(it) } ?: "—", "energy avg", c.onSurface)
+        val avg = card.average
+        val range = "from ${from.short()} to ${to.short()}"
+        if (def.kind == DailyMetrics.Kind.YES_NO) {
+            Stat(avg?.let { "${it.roundToInt()}%" } ?: "—", "of answered days yes", c.primary)
+            BarChart(card.series.map { it ?: 0.0 }, description = "${def.name}, percent yes per week, $range", label = { "${it.roundToInt()}%" })
+            ChartDates(from.short(), to.short())
+            Hint("One bar per week; a week with no answers shows empty.")
+            return@SectionCard
         }
+        val scale = def.kind == DailyMetrics.Kind.SCALE
+        val unit = def.unit?.takeIf { it.isNotBlank() }
+        Stat(
+            avg?.let { if (scale) "%.1f".format(it) else DailyMetrics.number(it) }?.let { v -> listOfNotNull(v, unit).joinToString(" ") } ?: "—",
+            "avg" + (if (scale) DailyMetrics.word(def, avg)?.let { " · $it" } ?: "" else ""),
+            c.primary,
+        )
         LineChart(
-            listOf(
-                LineSeries(card.energy, c.onSurface, width = 1.5.dp, dashed = true),
-                LineSeries(card.mood, c.primary),
-            ),
-            description = "Mood and energy, 1 to 5, from ${from.short()} to ${to.short()}",
-            yRange = 1.0..5.0,
+            listOf(LineSeries(card.series, c.primary)),
+            description = "${def.name}${if (scale) ", 1 to ${def.scaleMax}," else ""} $range",
+            yRange = if (scale) 1.0..def.scaleMax.toDouble() else null,
+            label = if (scale) ({ it.roundToInt().toString() }) else DailyMetrics::number,
         )
         ChartDates(from.short(), to.short())
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Legend("Mood", c.primary)
-            Legend("Energy (dashed)", c.onSurface)
-            Hint(if (card.smoothed) "7-day averages" else "Gaps are unrated days")
+        when {
+            card.smoothed && card.series.all { it == null } -> Hint("The 7-day average appears once a week has ${Metrics.AVG_MIN_POINTS} days $verb.")
+            card.smoothed -> Hint("7-day averages")
+            else -> Hint("Gaps are days not $verb")
         }
     }
 }

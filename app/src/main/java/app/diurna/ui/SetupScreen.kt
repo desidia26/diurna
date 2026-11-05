@@ -58,7 +58,7 @@ import java.time.format.DateTimeFormatter
 
 private data class Check(val label: String, val detail: String, val ok: Boolean, val fix: () -> Unit)
 
-/** Setup, plus the Library's Meals and Exercises pages, which open over it with a way back. */
+/** Setup, plus the pages that open over it with a way back: Meals, Exercises, Daily metrics, What's new. */
 @Composable
 fun SetupScreen(vm: SetupViewModel, library: LibraryViewModel, contentPadding: PaddingValues) {
     var page by rememberSaveable { mutableStateOf<String?>(null) }
@@ -67,6 +67,7 @@ fun SetupScreen(vm: SetupViewModel, library: LibraryViewModel, contentPadding: P
         "meals" -> MealsPage(library) { page = null }
         "exercises" -> ExercisesPage(library) { page = null }
         "changes" -> ChangesPage(vm.changelog) { page = null }
+        "checkin" -> DailyMetricsPage(vm) { page = null }
         else -> SetupMain(vm, library, contentPadding, onOpen = { page = it })
     }
 }
@@ -119,6 +120,7 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
                 onMeals = { onOpen("meals") }, onExercises = { onOpen("exercises") },
             )
         }
+        item { CheckInSetupCard(vm) { onOpen("checkin") } }
         item { StepsCard(vm) }
         item { BackupsCard(vm) }
         item { TargetsCard(vm) }

@@ -18,8 +18,8 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 
 /**
- * A 9pm notification asking for the day's mood and energy. Skipped if both are already rated,
- * and withdrawn as soon as they are. Tapping it opens that day, even if it's opened after midnight.
+ * A 9pm notification asking for the day's check-in metrics. Skipped if every active one (text aside)
+ * is already filled in, and withdrawn as soon as they are. Tapping it opens that day, even if it's opened after midnight.
  */
 object CheckInReminder {
     const val HOUR = 21
@@ -45,7 +45,7 @@ object CheckInReminder {
         }
     }
 
-    fun show(context: Context, date: LocalDate) {
+    fun show(context: Context, date: LocalDate, missing: List<String>) {
         val nm = context.getSystemService(NotificationManager::class.java)
         if (!nm.areNotificationsEnabled()) return
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Evening check-in", NotificationManager.IMPORTANCE_DEFAULT))
@@ -61,7 +61,7 @@ object CheckInReminder {
             NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(R.drawable.ic_day)
                 .setContentTitle("How was today?")
-                .setContentText("Rate your mood and energy")
+                .setContentText("Still to fill in: ${missing.joinToString(", ")}")
                 .setContentIntent(open)
                 .setAutoCancel(true)
                 .build(),
@@ -80,7 +80,8 @@ class CheckInReceiver : BroadcastReceiver() {
         c.appScope.launch {
             try {
                 val today = LocalDate.now()
-                if (!c.days.isRated(today)) CheckInReminder.show(context, today)
+                val missing = c.dailyMetrics.missing(today)
+                if (missing.isNotEmpty()) CheckInReminder.show(context, today, missing.map { it.name })
                 CheckInReminder.schedule(context)
             } finally {
                 pending.finish()

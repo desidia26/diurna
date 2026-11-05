@@ -459,4 +459,46 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v16ToV17MovesMoodAndEnergyIntoCheckInMetrics() {
+        helper.createDatabase(dbName + "-17", 16).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized, mood, energy) VALUES ('2026-11-01', 1, 4, 2)")
+            db.execSQL("INSERT INTO day (date, finalized, mood, energy) VALUES ('2026-11-02', 1, 5, NULL)")
+            db.execSQL("INSERT INTO day (date, finalized, mood, energy) VALUES ('2026-11-03', 0, NULL, NULL)")
+            // Out of range: never written by the app, and not copied.
+            db.execSQL("INSERT INTO day (date, finalized, mood, energy) VALUES ('2026-11-04', 0, 9, 0)")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-17", 17, true, AppDatabase.MIGRATION_16_17)
+        db.query("SELECT name, kind, scale_max, words, `key`, position, archived FROM daily_metric ORDER BY position").use {
+            assertTrue(it.moveToNext())
+            assertEquals("Mood", it.getString(0))
+            assertEquals("scale", it.getString(1))
+            assertEquals(5, it.getInt(2))
+            assertEquals("rough\nmeh\nfine\ngood\ngreat", it.getString(3))
+            assertEquals("mood", it.getString(4))
+            assertEquals(0, it.getInt(5))
+            assertEquals(0, it.getInt(6))
+            assertTrue(it.moveToNext())
+            assertEquals("Energy", it.getString(0))
+            assertEquals("drained\nlow\nokay\ngood\nhigh", it.getString(3))
+            assertEquals(1, it.getInt(5))
+            assertTrue("just the two", !it.moveToNext())
+        }
+        db.query(
+            "SELECT v.date, m.`key`, v.value, v.text FROM daily_metric_value v JOIN daily_metric m ON m.id = v.metric_id " +
+                "ORDER BY v.date, m.position"
+        ).use {
+            val rows = buildList { while (it.moveToNext()) add("${it.getString(0)} ${it.getString(1)} ${it.getDouble(2)} ${it.isNull(3)}") }
+            assertEquals(
+                listOf("2026-11-01 mood 4.0 true", "2026-11-01 energy 2.0 true", "2026-11-02 mood 5.0 true"),
+                rows,
+            )
+        }
+        db.query("SELECT COUNT(*), SUM(mood IS NOT NULL) FROM day").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("days kept", 4, it.getInt(0))
+            assertEquals("old columns left as they were", 3, it.getInt(1))
+        }
+        db.close()
+    }
 }
