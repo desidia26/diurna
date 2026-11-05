@@ -93,8 +93,11 @@ class PhotoImporterTest {
             val stored = decodeStored(name!!)
             assertEquals(800, stored.width)
             assertEquals(600, stored.height)
-            assertEquals(Color.BLUE, stored.getPixel(10, 10))
-            assertEquals(Color.GREEN, stored.getPixel(790, 10))
+            // JPEG round-trip softens exact ARGB; check the dominant channel instead.
+            val left = stored.getPixel(10, 10)
+            val right = stored.getPixel(790, 10)
+            assertTrue("left should stay blue-ish", Color.blue(left) > Color.red(left) + 40 && Color.blue(left) > Color.green(left) + 40)
+            assertTrue("right should stay green-ish", Color.green(right) > Color.red(right) + 40 && Color.green(right) > Color.blue(right) + 40)
             stored.recycle()
         } finally {
             src.delete()
