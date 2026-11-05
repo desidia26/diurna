@@ -459,4 +459,23 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v16ToV17AddsExerciseNoteAndExistingExercisesHaveNone() {
+        helper.createDatabase(dbName + "-17", 16).use { db ->
+            db.execSQL("INSERT INTO exercise (id, name, hidden, kind, cardio_style) VALUES (1, 'Bench press', 0, 'strength', NULL)")
+            db.execSQL("INSERT INTO exercise (id, name, hidden, kind, cardio_style) VALUES (2, 'Row', 1, 'cardio', '500m')")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-17", 17, true)
+        db.query("SELECT name, hidden, kind, cardio_style, note FROM exercise ORDER BY id").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Bench press", it.getString(0))
+            assertTrue("existing exercises start without a note", it.isNull(4))
+            assertTrue(it.moveToNext())
+            assertEquals(1, it.getInt(1))
+            assertEquals("cardio", it.getString(2))
+            assertEquals("500m", it.getString(3))
+            assertTrue(it.isNull(4))
+        }
+        db.close()
+    }
 }

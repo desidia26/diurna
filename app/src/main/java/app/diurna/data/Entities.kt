@@ -29,6 +29,8 @@ data class ExerciseEntity(
      * since stored values don't depend on it.
      */
     @ColumnInfo(name = "cardio_style") val cardioStyle: String? = null,
+    /** Shown on the exercise in every workout; not history, so editing it changes past days too. See [app.diurna.domain.ExerciseNote]. */
+    val note: String? = null,
 ) {
     val isCardio: Boolean get() = kind == KIND_CARDIO
     val style: Cardio.Style get() = Cardio.Style.of(cardioStyle)
@@ -474,6 +476,7 @@ data class CatalogExercise(
     val id: Long, val name: String, val hidden: Boolean, val logged: Int, val inRoutine: Int,
     val kind: String = ExerciseEntity.KIND_STRENGTH,
     val cardioStyle: String? = null,
+    val note: String? = null,
 ) {
     val inUse: Boolean get() = logged > 0 || inRoutine > 0
     val isCardio: Boolean get() = kind == ExerciseEntity.KIND_CARDIO

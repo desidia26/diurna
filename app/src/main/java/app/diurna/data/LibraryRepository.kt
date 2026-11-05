@@ -3,6 +3,7 @@ package app.diurna.data
 import androidx.room.withTransaction
 import app.diurna.domain.AminoAcids
 import app.diurna.domain.Cardio
+import app.diurna.domain.ExerciseNote
 import app.diurna.domain.RecipeMath
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -376,6 +377,9 @@ class LibraryRepository(
     }
 
     suspend fun setExerciseHidden(id: Long, hidden: Boolean) = exercises.setHidden(id, hidden)
+
+    /** Blank clears it. */
+    suspend fun setExerciseNote(id: Long, raw: String) = exercises.setNote(id, ExerciseNote.clean(raw))
 
     /**
      * Strength (null) or cardio in a [Cardio.Style]. Switching between strength and cardio is
