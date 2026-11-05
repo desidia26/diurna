@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 17,
-    "identityHash": "8153b4a0da2db14d5a2a9b8be172c1a8",
+    "identityHash": "122d1aed6999eb088c5b4d3658195ccb",
     "entities": [
       {
         "tableName": "exercise",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `hidden` INTEGER NOT NULL DEFAULT 0, `kind` TEXT NOT NULL DEFAULT 'strength', `cardio_style` TEXT)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `hidden` INTEGER NOT NULL DEFAULT 0, `kind` TEXT NOT NULL DEFAULT 'strength', `cardio_style` TEXT, `note` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -37,6 +37,11 @@
           {
             "fieldPath": "cardioStyle",
             "columnName": "cardio_style",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
             "affinity": "TEXT"
           }
         ],
@@ -1115,7 +1120,7 @@
       },
       {
         "tableName": "recipe_ingredient",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `meal_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `unit` TEXT NOT NULL, `grams` REAL, `density_id` TEXT, `grams_per_each` REAL, `g_per_ml` REAL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `kcal` INTEGER NOT NULL, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `source` TEXT, `fdc_id` INTEGER, `barcode` TEXT, `source_meal_id` INTEGER, FOREIGN KEY(`meal_id`) REFERENCES `meal`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `meal_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `unit` TEXT NOT NULL, `grams` REAL, `density_id` TEXT, `grams_per_each` REAL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `kcal` INTEGER NOT NULL, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `source` TEXT, `fdc_id` INTEGER, `barcode` TEXT, `source_meal_id` INTEGER, FOREIGN KEY(`meal_id`) REFERENCES `meal`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -1166,11 +1171,6 @@
           {
             "fieldPath": "gramsPerEach",
             "columnName": "grams_per_each",
-            "affinity": "REAL"
-          },
-          {
-            "fieldPath": "gPerMl",
-            "columnName": "g_per_ml",
             "affinity": "REAL"
           },
           {
@@ -1599,95 +1599,11 @@
             "query_key"
           ]
         }
-      },
-      {
-        "tableName": "ingredient_nutrition_cache",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`normalized_name` TEXT NOT NULL, `source` TEXT NOT NULL, `fdc_id` INTEGER, `kcal_per_100` INTEGER NOT NULL, `protein_g_per_100` INTEGER NOT NULL, `carbs_g_per_100` INTEGER NOT NULL, `fat_g_per_100` INTEGER NOT NULL, `fiber_g_per_100` INTEGER, `sugars_g_per_100` INTEGER, `basis` TEXT, `description` TEXT, `cached_at` INTEGER NOT NULL, `retry_after` INTEGER, PRIMARY KEY(`normalized_name`))",
-        "fields": [
-          {
-            "fieldPath": "normalizedName",
-            "columnName": "normalized_name",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "source",
-            "columnName": "source",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "fdcId",
-            "columnName": "fdc_id",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "kcalPer100",
-            "columnName": "kcal_per_100",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "proteinGPer100",
-            "columnName": "protein_g_per_100",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "carbsGPer100",
-            "columnName": "carbs_g_per_100",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "fatGPer100",
-            "columnName": "fat_g_per_100",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "fiberGPer100",
-            "columnName": "fiber_g_per_100",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "sugarsGPer100",
-            "columnName": "sugars_g_per_100",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "basis",
-            "columnName": "basis",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "description",
-            "columnName": "description",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "cachedAt",
-            "columnName": "cached_at",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "retryAfter",
-            "columnName": "retry_after",
-            "affinity": "INTEGER"
-          }
-        ],
-        "primaryKey": {
-          "autoGenerate": false,
-          "columnNames": [
-            "normalized_name"
-          ]
-        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8153b4a0da2db14d5a2a9b8be172c1a8')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '122d1aed6999eb088c5b4d3658195ccb')"
     ]
   }
 }

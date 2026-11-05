@@ -29,7 +29,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         IngredientDensityCacheEntity::class,
         IngredientNutritionCacheEntity::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -59,8 +59,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         // v15: food_photo gallery (data copy of food_entry.photo is in MIGRATION_14_15).
         // v16: ingredient density / grams-per-each lookup cache.
         AutoMigration(from = 15, to = 16),
-        // v17: per-100g ingredient nutrition cache (USDA / AI).
+        // v17: a standing note on each exercise (#45).
         AutoMigration(from = 16, to = 17),
+        // v18 is idempotent: see MIGRATION_17_18 (g_per_ml + nutrition cache, and
+        // exercise.note when upgrading from an earlier #48 preview build at v17).
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -147,9 +149,60 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v18: recipe_ingredient.g_per_ml + ingredient_nutrition_cache (#48), and exercise.note (#45)
+         * when missing. Idempotent so both a #45 v17 device (note only) and Larry's build-142 v17
+         * (g_per_ml + nutrition cache, no note) end up at the same schema.
+         */
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!columnExists(db, "exercise", "note")) {
+                    db.execSQL("ALTER TABLE `exercise` ADD COLUMN `note` TEXT")
+                }
+                if (!columnExists(db, "recipe_ingredient", "g_per_ml")) {
+                    db.execSQL("ALTER TABLE `recipe_ingredient` ADD COLUMN `g_per_ml` REAL")
+                }
+                if (!tableExists(db, "ingredient_nutrition_cache")) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `ingredient_nutrition_cache` (" +
+                            "`normalized_name` TEXT NOT NULL, " +
+                            "`source` TEXT NOT NULL, " +
+                            "`fdc_id` INTEGER, " +
+                            "`kcal_per_100` INTEGER NOT NULL, " +
+                            "`protein_g_per_100` INTEGER NOT NULL, " +
+                            "`carbs_g_per_100` INTEGER NOT NULL, " +
+                            "`fat_g_per_100` INTEGER NOT NULL, " +
+                            "`fiber_g_per_100` INTEGER, " +
+                            "`sugars_g_per_100` INTEGER, " +
+                            "`basis` TEXT, " +
+                            "`description` TEXT, " +
+                            "`cached_at` INTEGER NOT NULL, " +
+                            "`retry_after` INTEGER, " +
+                            "PRIMARY KEY(`normalized_name`))"
+                    )
+                }
+            }
+        }
+
+        private fun tableExists(db: SupportSQLiteDatabase, table: String): Boolean =
+            db.query(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                arrayOf(table),
+            ).use { it.moveToFirst() }
+
+        private fun columnExists(db: SupportSQLiteDatabase, table: String, column: String): Boolean {
+            db.query("PRAGMA table_info(`$table`)").use { cursor ->
+                val nameIdx = cursor.getColumnIndex("name")
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIdx) == column) return true
+                }
+            }
+            return false
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_5_6, MIGRATION_14_15)
+                .addMigrations(MIGRATION_5_6, MIGRATION_14_15, MIGRATION_17_18)
                 .addCallback(seedRoutine)
                 .addCallback(seedCatalog)
                 .build()

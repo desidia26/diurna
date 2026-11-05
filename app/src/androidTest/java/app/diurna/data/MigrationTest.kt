@@ -427,21 +427,15 @@ class MigrationTest {
     }
 
 
-    @Test fun v15ToV16AddsIngredientDensityCacheAndGPerMl() {
+    @Test fun v15ToV16AddsIngredientDensityCache() {
         helper.createDatabase(dbName + "-16", 15).use { db ->
             db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-11-04', 0)")
             db.execSQL(
                 "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind) " +
                     "VALUES (1, 'Soup', 200, 10, 20, 5, 'recipe')"
             )
-            db.execSQL(
-                "INSERT INTO recipe_ingredient " +
-                    "(id, meal_id, position, name, amount, unit, grams, density_id, grams_per_each, " +
-                    "protein_g, carbs_g, fat_g, kcal) " +
-                    "VALUES (1, 1, 0, 'broth', 1.0, 'cup', 240.0, 'usda', NULL, 0, 0, 0, 0)"
-            )
         }
-        // AutoMigration 15→16 creates ingredient_density_cache and adds recipe_ingredient.g_per_ml.
+        // AutoMigration 15→16 creates ingredient_density_cache; schemas validate columns.
         val db = helper.runMigrationsAndValidate(dbName + "-16", 16, true)
         db.query(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='ingredient_density_cache'"
@@ -453,13 +447,6 @@ class MigrationTest {
             assertTrue(it.moveToFirst())
             assertEquals("existing meals kept", 1, it.getInt(0))
         }
-        db.query("SELECT name, grams, g_per_ml, density_id FROM recipe_ingredient WHERE id = 1").use {
-            assertTrue(it.moveToFirst())
-            assertEquals("broth", it.getString(0))
-            assertEquals(240.0, it.getDouble(1), 0.0)
-            assertTrue("g_per_ml starts null for pre-v16 rows", it.isNull(2))
-            assertEquals("usda", it.getString(3))
-        }
         db.execSQL(
             "INSERT INTO ingredient_density_cache " +
                 "(query_key, normalized_name, unit_kind, g_per_ml, grams_per_each, source, fdc_id, basis, description, cached_at, retry_after) " +
@@ -469,6 +456,175 @@ class MigrationTest {
             assertTrue(it.moveToFirst())
             assertEquals(0.53, it.getDouble(0), 1e-9)
             assertEquals("builtin", it.getString(1))
+        }
+        db.close()
+    }
+
+    @Test fun v16ToV17AddsExerciseNoteAndExistingExercisesHaveNone() {
+        helper.createDatabase(dbName + "-17", 16).use { db ->
+            db.execSQL("INSERT INTO exercise (id, name, hidden, kind, cardio_style) VALUES (1, 'Bench press', 0, 'strength', NULL)")
+            db.execSQL("INSERT INTO exercise (id, name, hidden, kind, cardio_style) VALUES (2, 'Row', 1, 'cardio', '500m')")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-17", 17, true)
+        db.query("SELECT name, hidden, kind, cardio_style, note FROM exercise ORDER BY id").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Bench press", it.getString(0))
+            assertTrue("existing exercises start without a note", it.isNull(4))
+            assertTrue(it.moveToNext())
+            assertEquals(1, it.getInt(1))
+            assertEquals("cardio", it.getString(2))
+            assertEquals("500m", it.getString(3))
+            assertTrue(it.isNull(4))
+        }
+        db.close()
+    }
+
+    /** Main's shipped v16 → v18: exercise.note (#45) plus g_per_ml + nutrition cache (#48). */
+    @Test fun v16ToV18AddsExerciseNoteGPerMlAndNutritionCache() {
+        helper.createDatabase(dbName + "-16to18", 16).use { db ->
+            db.execSQL("INSERT INTO exercise (id, name, hidden, kind, cardio_style) VALUES (1, 'Squat', 0, 'strength', NULL)")
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind) " +
+                    "VALUES (1, 'Soup', 200, 10, 20, 5, 'recipe')"
+            )
+            db.execSQL(
+                "INSERT INTO recipe_ingredient " +
+                    "(id, meal_id, position, name, amount, unit, grams, density_id, grams_per_each, " +
+                    "protein_g, carbs_g, fat_g, kcal) " +
+                    "VALUES (1, 1, 0, 'broth', 1.0, 'cup', 240.0, 'usda', NULL, 0, 0, 0, 0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(
+            dbName + "-16to18", 18, true, AppDatabase.MIGRATION_17_18,
+        )
+        db.query("SELECT note FROM exercise WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertTrue("exercise.note starts null", it.isNull(0))
+        }
+        db.query("SELECT name, grams, g_per_ml, density_id FROM recipe_ingredient WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("broth", it.getString(0))
+            assertEquals(240.0, it.getDouble(1), 0.0)
+            assertTrue("g_per_ml starts null for pre-v18 rows", it.isNull(2))
+            assertEquals("usda", it.getString(3))
+        }
+        db.query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='ingredient_nutrition_cache'"
+        ).use {
+            assertTrue(it.moveToFirst())
+            assertEquals("ingredient_nutrition_cache", it.getString(0))
+        }
+        db.close()
+    }
+
+    /** #45's v17 (exercise.note, no g_per_ml / nutrition cache) → v18. */
+    @Test fun v17FromExerciseNotesToV18AddsGPerMlAndNutritionCache() {
+        helper.createDatabase(dbName + "-45to18", 17).use { db ->
+            db.execSQL(
+                "INSERT INTO exercise (id, name, hidden, kind, cardio_style, note) " +
+                    "VALUES (1, 'Bench press', 0, 'strength', NULL, 'elbows in')"
+            )
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind) " +
+                    "VALUES (1, 'Soup', 200, 10, 20, 5, 'recipe')"
+            )
+            db.execSQL(
+                "INSERT INTO recipe_ingredient " +
+                    "(id, meal_id, position, name, amount, unit, grams, density_id, grams_per_each, " +
+                    "protein_g, carbs_g, fat_g, kcal) " +
+                    "VALUES (1, 1, 0, 'broth', 1.0, 'cup', 240.0, 'usda', NULL, 0, 0, 0, 0)"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(
+            dbName + "-45to18", 18, true, AppDatabase.MIGRATION_17_18,
+        )
+        db.query("SELECT note FROM exercise WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("elbows in", it.getString(0))
+        }
+        db.query("SELECT g_per_ml FROM recipe_ingredient WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertTrue(it.isNull(0))
+        }
+        db.query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='ingredient_nutrition_cache'"
+        ).use {
+            assertTrue(it.moveToFirst())
+        }
+        db.close()
+    }
+
+    /**
+     * Larry's build 142 shipped a divergent v17: g_per_ml + ingredient_nutrition_cache, no
+     * exercise.note. Shape a v16 DB into that preview schema, then migrate 17→18 and confirm
+     * note is added without dropping the preview columns/table.
+     */
+    @Test fun v17FromBuild142ToV18AddsExerciseNoteIdempotently() {
+        helper.createDatabase(dbName + "-142to18", 16).use { db ->
+            db.execSQL("INSERT INTO exercise (id, name, hidden, kind, cardio_style) VALUES (1, 'Row', 0, 'cardio', '500m')")
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind) " +
+                    "VALUES (1, 'Soup', 200, 10, 20, 5, 'recipe')"
+            )
+            db.execSQL(
+                "INSERT INTO recipe_ingredient " +
+                    "(id, meal_id, position, name, amount, unit, grams, density_id, grams_per_each, " +
+                    "protein_g, carbs_g, fat_g, kcal) " +
+                    "VALUES (1, 1, 0, 'broth', 1.0, 'cup', 240.0, 'usda', NULL, 0, 0, 0, 0)"
+            )
+            // Reshape to build 142's v17 (b8b7cc5): g_per_ml + nutrition cache, no exercise.note.
+            db.execSQL("ALTER TABLE `recipe_ingredient` ADD COLUMN `g_per_ml` REAL")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `ingredient_nutrition_cache` (" +
+                    "`normalized_name` TEXT NOT NULL, " +
+                    "`source` TEXT NOT NULL, " +
+                    "`fdc_id` INTEGER, " +
+                    "`kcal_per_100` INTEGER NOT NULL, " +
+                    "`protein_g_per_100` INTEGER NOT NULL, " +
+                    "`carbs_g_per_100` INTEGER NOT NULL, " +
+                    "`fat_g_per_100` INTEGER NOT NULL, " +
+                    "`fiber_g_per_100` INTEGER, " +
+                    "`sugars_g_per_100` INTEGER, " +
+                    "`basis` TEXT, " +
+                    "`description` TEXT, " +
+                    "`cached_at` INTEGER NOT NULL, " +
+                    "`retry_after` INTEGER, " +
+                    "PRIMARY KEY(`normalized_name`))"
+            )
+            db.execSQL(
+                "UPDATE recipe_ingredient SET g_per_ml = 1.0 WHERE id = 1"
+            )
+            db.execSQL(
+                "INSERT INTO ingredient_nutrition_cache " +
+                    "(normalized_name, source, fdc_id, kcal_per_100, protein_g_per_100, " +
+                    "carbs_g_per_100, fat_g_per_100, fiber_g_per_100, sugars_g_per_100, " +
+                    "basis, description, cached_at, retry_after) " +
+                    "VALUES ('broth', 'usda', 9, 10, 1, 1, 0, NULL, NULL, 'test', NULL, 1, NULL)"
+            )
+            // Match build 142's room identity hash so this looks like that install.
+            db.execSQL("DELETE FROM room_master_table")
+            db.execSQL(
+                "INSERT INTO room_master_table (id, identity_hash) " +
+                    "VALUES (42, '8153b4a0da2db14d5a2a9b8be172c1a8')"
+            )
+            db.version = 17
+        }
+        val db = helper.runMigrationsAndValidate(
+            dbName + "-142to18", 18, true, AppDatabase.MIGRATION_17_18,
+        )
+        db.query("SELECT note FROM exercise WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertTrue("build-142 exercises gain a null note", it.isNull(0))
+        }
+        db.query("SELECT g_per_ml FROM recipe_ingredient WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(1.0, it.getDouble(0), 0.0)
+        }
+        db.query(
+            "SELECT kcal_per_100 FROM ingredient_nutrition_cache WHERE normalized_name='broth'"
+        ).use {
+            assertTrue(it.moveToFirst())
+            assertEquals(10, it.getInt(0))
         }
         db.close()
     }
