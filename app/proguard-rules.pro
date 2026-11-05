@@ -2,7 +2,14 @@
 # what reaches code only through reflection.
 
 # Anthropic SDK: models are (de)serialized by Jackson via reflection, including Kotlin metadata.
--keep class com.anthropic.** { *; }
+# Only what the app calls (Messages) is kept whole; keeping all of com.anthropic.** made SDK 3.x
+# add 14 MB (beta, organization and the async services, none of which the app reaches).
+-keep class com.anthropic.client.** { *; }
+-keep class com.anthropic.core.** { *; }
+-keep class com.anthropic.errors.** { *; }
+-keep class com.anthropic.internal.** { *; }
+-keep class com.anthropic.models.* { *; }
+-keep class com.anthropic.models.messages.** { *; }
 -keep class com.fasterxml.jackson.** { *; }
 -keep class kotlin.Metadata { *; }
 -keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*, RuntimeVisible*Annotations, KotlinMetadata
