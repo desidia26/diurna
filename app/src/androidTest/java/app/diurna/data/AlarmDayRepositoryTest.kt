@@ -72,6 +72,6 @@ class AlarmDayRepositoryTest {
         assertFalse(days.alarmInputs(mon).scanned)
         days.recordMorning(mon, "06:55", "scan")
         assertTrue(days.alarmInputs(mon).scanned)
-        assertEquals("scan", t.db.dayDao().get(mon.toString())?.scanSource)
+        assertEquals("scan", t.db.dayDao().get(mon.toString())?.morningSource)
     }
 }
