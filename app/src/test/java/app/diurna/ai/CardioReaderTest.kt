@@ -138,7 +138,7 @@ class CardioReaderTest {
     @Test fun claudeRequestUsesTheCardioPrompt() {
         val p = ClaudeRequest.params("claude-test", CardioPrompt.USER_TEXT, byteArrayOf(1, 2), CardioPrompt.SYSTEM, CardioPrompt.SCHEMA)
         assertEquals(CardioPrompt.SYSTEM, p.system().get().asString())
-        val blocks = p.messages().single().content().asBlockParams()
+        val blocks = p.messages().single().content().asContentBlockParams()
         assertTrue(blocks[0].isImage())
         assertEquals(CardioPrompt.USER_TEXT, blocks[1].asText().text())
         assertTrue(p.outputConfig().get().format().isPresent)

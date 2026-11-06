@@ -140,7 +140,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       N: ${{ needs.check.outputs.n }}
       TAG: ${{ needs.check.outputs.tag }}
-      # Release APKs are about 26.5 MB; a jump past this is a dependency to look at, not ship.
+      # Release APKs are about 18 MB; a jump past this is a dependency to look at, not ship.
       MAX_APK_BYTES: 31457280
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

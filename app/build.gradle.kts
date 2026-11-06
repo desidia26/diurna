@@ -150,13 +150,11 @@ afterEvaluate {
     tasks.register<JavaExec>("aiEval") {
         group = "verification"
         description = "Run AI prompt evals against Grok, Claude, and/or Ollama"
-        // AGP wires these only after evaluate; compile + process puts AiEvalMain on the test classpath.
-        dependsOn(
-            "compileDebugUnitTestKotlin",
-            "processDebugUnitTestJavaRes",
-            "bundleDebugClassesToRuntimeJar",
-        )
-        classpath = tasks.named<Test>("testDebugUnitTest").get().classpath
+        // The unit-test classpath carries the tasks that build it (AiEvalMain lives in the test
+        // source set), so AGP task names aren't hard-coded here: AGP 9.5 dropped processDebugUnitTestJavaRes.
+        val testClasspath = tasks.named<Test>("testDebugUnitTest").get().classpath
+        dependsOn(testClasspath)
+        classpath = testClasspath
         mainClass.set("app.diurna.eval.AiEvalMainKt")
         workingDir = rootProject.projectDir
         systemProperty("root", rootProject.projectDir.absolutePath)
