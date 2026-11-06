@@ -148,6 +148,9 @@ private fun ReportDialog(c: AppContainer, screen: Screen, dismiss: () -> Unit) {
                     TextButton(onClick = dismiss, enabled = !sharing) { Text("Cancel") }
                     Button(enabled = !loading && !sharing && problem == null, onClick = {
                         sharing = true
+                        val reviewedActions = if (includeLog) actions.toList() else emptyList()
+                        val reviewedAttachments = attachments.filter { it.id !in removed }
+                        val reviewedNote = note
                         scope.launch {
                             var out: File? = null
                             try {
@@ -161,8 +164,8 @@ private fun ReportDialog(c: AppContainer, screen: Screen, dismiss: () -> Unit) {
                                     out = file
                                     val data = ReportData(info.versionName ?: "unknown", info.longVersionCode,
                                         "${Build.MANUFACTURER} ${Build.MODEL}", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
-                                        screen, capturedAt, Redaction.text(note, c.debug.recorder.knownSecrets()))
-                                    DebugReport.write(file, data, if (includeLog) actions else emptyList(), attachments.filter { it.id !in removed })
+                                        screen, capturedAt, Redaction.text(reviewedNote, c.debug.recorder.knownSecrets()))
+                                    DebugReport.write(file, data, reviewedActions, reviewedAttachments)
                                     file
                                 }
                                 check(!keyguard.isDeviceLocked && c.debug.enabled.value)
