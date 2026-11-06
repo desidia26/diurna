@@ -2,5 +2,6 @@
 <!-- Android 11 and older: same exclusions as data_extraction_rules.xml's cloud backup. -->
 <full-backup-content>
     <exclude domain="sharedpref" path="secure.xml" />
+        <exclude domain="sharedpref" path="debug-log.xml" />
     <exclude domain="file" path="food-photos/" />
 </full-backup-content>

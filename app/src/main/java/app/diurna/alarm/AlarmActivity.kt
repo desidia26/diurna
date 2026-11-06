@@ -55,6 +55,7 @@ class AlarmActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this) { /* no escaping by back button */ }
 
         val c = container
+        c.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.ALARM, "alarm.open"))
         setContent {
             DiurnaTheme {
                 val ring by AlarmService.ringing.collectAsStateWithLifecycle()
@@ -67,6 +68,7 @@ class AlarmActivity : ComponentActivity() {
                     hasCamera = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
                     onCode = { code ->
                         lifecycleScope.launch {
+                            c.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.ALARM, "alarm.code_attempt"))
                             if (stopping) return@launch
                             if (!AlarmDismiss.matchesPorch(code, c.settings.secret())) return@launch
                             stopping = true
@@ -84,6 +86,7 @@ class AlarmActivity : ComponentActivity() {
     }
 
     private fun stop() {
+        container.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.ALARM, "alarm.stop"))
         startService(Intent(this, AlarmService::class.java).setAction(AlarmService.ACTION_STOP))
         finish()
     }
