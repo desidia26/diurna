@@ -54,3 +54,17 @@ Tests cover recorder redaction/retention/size/enable transitions and archive con
 plus the independent toggle behavior in a CI-only emulator Compose test. End-to-end share chooser,
 keyguard transitions during an actual ringing alarm, and arbitrary OEM camera behavior remain
 manual/emulator integration gaps.
+
+### Food scanner diagnostics
+With Record debug actions enabled, each scan dialog has one correlation ID (Day or Library).
+`scan.permission`, `scan.camera_bind`, `scan.frames` (first/every 120 frames and final total),
+`scan.live` (sampled candidate format/checksum, never raw frame pixels), `scan.capture`,
+`scan.decode.<original|crop|rotate|contrast|threshold|sharpen>`, `scan.ocr`, `scan.outcome`,
+and `scan.lookup` record outcomes; decode/OCR/lookup carry elapsed milliseconds.
+Denied permission, model unavailable, no-code, unreadable, timeout, lookup not-found and errors
+are non-OK, not successful scans. Camera bind failures include bounded/redacted exception class
+and message in allowlisted event details. Captured metadata-free original and failed final sharpen
+variant are copied before scratch cleanup; valid decoded numbers are BARCODE attachments.
+All use the existing private 20 MiB/7-day store. Debug-off callbacks perform no I/O, encoding or
+retention; disabling debug erases the store. Images are unredacted: review/remove before Share ZIP.
+No image upload, new permission, alarm-QR change or automatic export is introduced.

@@ -1,5 +1,7 @@
 package app.diurna.ui
 
+import app.diurna.container
+import app.diurna.scan.DebugScanDiagnostics
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -45,10 +47,27 @@ fun BarcodeScanDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val container = context.container
+    val diagnostics = remember(container) { DebugScanDiagnostics(
+        { container.debug.enabled.value }, container.debug.currentScreen.value,
+        { container.actions.dispatch(it) },
+        { file, kind, id -> container.debug.registerAttachment(file, kind, correlationId = id); Unit },
+        { bytes, kind, id -> container.debug.registerAttachment(bytes, kind, correlationId = id); Unit },
+        { pixels, id ->
+            val bitmap = android.graphics.Bitmap.createBitmap(pixels.argb, pixels.width, pixels.height, android.graphics.Bitmap.Config.ARGB_8888)
+            try {
+                val bytes = java.io.ByteArrayOutputStream()
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, bytes)
+                container.debug.registerAttachment(bytes.toByteArray(), app.diurna.debug.AttachmentKind.IMAGE,
+                    mapOf("format" to "SHARPEN"), id)
+            } finally { bitmap.recycle() }
+        },
+    ) }
     var hasCamera by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
     val askCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { hasCamera = it }
+    LaunchedEffect(hasCamera) { diagnostics.onEvent("permission", if (hasCamera) "granted" else "denied") }
     LaunchedEffect(Unit) { if (!hasCamera) askCamera.launch(Manifest.permission.CAMERA) }
 
     var looking by remember { mutableStateOf(false) }
@@ -62,7 +81,15 @@ fun BarcodeScanDialog(
             candidates = emptyList()
             scope.launch {
                 try {
-                    when (val result = scan(code.digits, code.upcE)) {
+                    diagnostics.onResult("barcode", listOf(code))
+                    diagnostics.onEvent("lookup", "start")
+                    val started = System.nanoTime()
+                    val result = scan(code.digits, code.upcE)
+                    diagnostics.onEvent("lookup", when (result) {
+                        is ScanResult.Known -> "known"; is ScanResult.Found -> "found"
+                        is ScanResult.NotFound -> "not_found"; is ScanResult.Failed -> "failed"
+                    }, latencyMs = (System.nanoTime() - started) / 1_000_000)
+                    when (result) {
                         is ScanResult.Known -> onKnown(result.meal)
                         is ScanResult.Found -> onFound(result.draft)
                         is ScanResult.NotFound -> {
@@ -77,6 +104,7 @@ fun BarcodeScanDialog(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
+                    diagnostics.onEvent("lookup", "failed")
                     problem = "Barcode read, but the product lookup couldn't connect. Check your connection and try again."
                 } finally { looking = false }
             }
@@ -115,6 +143,7 @@ fun BarcodeScanDialog(
                         onProblem = { problem = it },
                         modifier = Modifier.fillMaxWidth().aspectRatio(3f / 4f),
                         torch = torch,
+                        diagnostics = diagnostics,
                     )
                 }
             }
