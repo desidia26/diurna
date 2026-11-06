@@ -2,14 +2,14 @@
 <!--
   Custom AVD hardware profiles for CI (and local use via ~/.android/devices.xml).
 
-  Why custom: avdmanager's built-in list stops at the pixel_9 family (verified with
-  cmdline-tools latest). Emulator skins under android-36 include pixel_10* but not
-  as avdmanager --device ids.
+  Why custom: avdmanager built-ins stop at the pixel_9 family (cmdline-tools latest).
+  Emulator skins under android-36 include pixel_10 variants, but not as avdmanager
+  device ids.
 
   Specs (both phones share the same display):
-    Pixel 11  — 6.3" Actua, 1080 x 2424 OLED @ 422 PPI
+    Pixel 11  - 6.3 in Actua, 1080 x 2424 OLED at 422 PPI
                 https://store.google.com/product/pixel_11_specs
-    Pixel 10a — 6.3" Actua, 1080 x 2424 pOLED @ 422.2 PPI
+    Pixel 10a - 6.3 in Actua, 1080 x 2424 pOLED at 422.2 PPI
                 https://store.google.com/product/pixel_10a_specs
 
   Density bucket is 420dpi (same as built-in pixel_9). Skin reuses pixel_9.
