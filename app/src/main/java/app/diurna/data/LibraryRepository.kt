@@ -16,6 +16,7 @@ class LibraryRepository(
     private val db: AppDatabase,
     private val products: ProductSource = OpenFoodFacts(),
     private val photoStore: FoodPhotoStore? = null,
+    private val nutrients: NutrientRepository? = null,
     private val now: () -> LocalDateTime = LocalDateTime::now,
 ) {
     private val meals = db.mealDao()
@@ -46,7 +47,11 @@ class LibraryRepository(
     suspend fun saveMeal(meal: MealEntity): Result = when (val v = validate(meal)) {
         is Validated.Bad -> v.problem
         is Validated.Good -> {
-            if (meal.id == 0L) meals.insert(v.meal) else meals.update(v.meal)
+            val id = if (meal.id == 0L) meals.insert(v.meal) else {
+                meals.update(v.meal)
+                meal.id
+            }
+            nutrients?.syncMealFromOff(id, OffSnapshot.decode(v.meal.offSnapshotJson))
             Result.Ok
         }
     }
@@ -63,6 +68,7 @@ class LibraryRepository(
                     meals.update(v.meal)
                     meal.id
                 }
+                nutrients?.syncMealFromOff(id, OffSnapshot.decode(v.meal.offSnapshotJson))
                 photoStore?.replaceAll(FoodPhotoEntity.OWNER_MEAL, id, photos)
                 return Result.Ok
             }
@@ -348,6 +354,15 @@ class LibraryRepository(
         // Keep barcode/snapshot on the logged entry (setMeal does not touch them).
         if (meal.barcode != null || meal.offSnapshotJson != null) {
             food.setBarcodeSnapshot(entryId, meal.barcode, meal.offSnapshotJson)
+        }
+        nutrients?.let { n ->
+            if (meal.id > 0L) n.copyMealToEntry(meal.id, entryId, servings)
+            else {
+                val snap = OffSnapshot.decode(meal.offSnapshotJson) ?: return@let
+                val profile = OffMicrosBackfill.profileForGrams(snap, snap.servingGrams() * servings)
+                    ?: return@let
+                n.replace(NutrientOwner.FOOD_ENTRY, entryId, profile, NutrientSource.OFF)
+            }
         }
     }
 

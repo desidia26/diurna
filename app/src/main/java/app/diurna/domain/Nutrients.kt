@@ -15,6 +15,21 @@ enum class NutrientUnit {
     MG,
     /** Micrograms (µg). */
     UG,
+    ;
+
+    /** Lowercase unit stored on nutrient_value.unit rows. */
+    val wire: String get() = when (this) {
+        MG -> "mg"
+        UG -> "ug"
+    }
+
+    companion object {
+        fun fromWire(s: String): NutrientUnit? = when (s.lowercase()) {
+            "mg" -> MG
+            "ug", "µg", "mcg" -> UG
+            else -> null
+        }
+    }
 }
 
 enum class NutrientId(val id: String, val displayName: String, val unit: NutrientUnit) {
@@ -212,6 +227,28 @@ data class MicronutrientAggregate(
                 contributing = contributing,
                 total = items.size,
             )
+        }
+    }
+}
+
+/**
+ * One day's micronutrient totals from already-scaled per-entry profiles.
+ * Null when nothing contributed — callers hide the card.
+ */
+data class DailyMicros(
+    val profile: MicronutrientProfile,
+    val contributing: Int,
+    val total: Int,
+) {
+    val partial: Boolean get() = contributing > 0 && contributing < total
+    val completenessLabel: String get() = "from $contributing of $total items"
+
+    companion object {
+        fun forEntries(entries: List<MicronutrientProfile>): DailyMicros? {
+            if (entries.isEmpty()) return null
+            val agg = MicronutrientAggregate.of(entries)
+            if (!agg.profile.hasAny) return null
+            return DailyMicros(agg.profile, agg.contributing, agg.total)
         }
     }
 }
