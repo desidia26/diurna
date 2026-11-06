@@ -68,3 +68,32 @@ variant are copied before scratch cleanup; valid decoded numbers are BARCODE att
 All use the existing private 20 MiB/7-day store. Debug-off callbacks perform no I/O, encoding or
 retention; disabling debug erases the store. Images are unredacted: review/remove before Share ZIP.
 No image upload, new permission, alarm-QR change or automatic export is introduced.
+
+### Live-read recovery / OCR validation
+A valid live read is retained only in its camera-binding session (up to eight products, five-second
+freshness before capture). A captured snapshot survives image retries, OCR unavailability and
+timeout. Live-only recovery always presents the printed-number confirmation list; even repeated
+matching live reads do not silently bypass confirmation. A conflicting photo/live read also needs
+selection. Stop/background, disposal, camera retry and retake invalidate old sessions/callbacks.
+A synchronized capture/completion gate and a separate terminal lookup gate prevent duplicate work.
+
+`scan.image_outcome.*` now describes ONLY the saved-image pipeline. `scan.outcome.*` is its resolved
+result, with `source=live_confirmation|combined_confirmation|saved_photo|none`. Thus an unreadable
+photo can correctly precede a successful confirmation fallback. `scan.decode_counts.summary`
+reports parsed/accepted decoder candidates by variant (accepted counts are before canonical deduplication); `scan.still_detector.summary` counts all ML Kit detections before null-value filtering; sampled `scan.live_counts.summary` does likewise.
+`scan.ocr_text.summary` reports detected lines, numeric runs and individually rejected runs;
+`scan.ocr.ready` reports accepted codes after spatial grouping. Rejected runs can participate in a
+valid aligned-fragment group, so these counts are not interchangeable. No raw OCR label text is
+recorded (even with typed-text consent); no new default text-retention channel is introduced.
+
+OCR groups bounded numeric-only fragments on an overlapping baseline with small gaps, including
+UPC outer digits split into separate recognizer blocks. It does not concatenate arbitrary text
+lines, repair letters, guess missing digits or manufacture a checksum. All OCR results require
+confirmation. Blur, occlusion and model delivery remain real limitations.
+
+CI's known-digit OCR test requests/checks the existing Play Services Latin module (no new engine
+or dependency), then strictly asserts recognition if ready. If Google Play cannot supply it on the
+existing google_apis emulator, this test is explicitly SKIPPED with “OCR correctness NOT VALIDATED”.
+That is an open engine-validation gap, NOT passing OCR correctness. Test XML/reports are retained
+on success as well as failure so skipped tests can be inspected. The sanitized blurry-photo replay
+is separately a safe-failure/live-fallback test, regardless of OCR availability.

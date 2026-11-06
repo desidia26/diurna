@@ -39,10 +39,23 @@ class DebugScanDiagnostics(
         runCatching { image(file, AttachmentKind.IMAGE, correlation) }
         onEvent("capture", "ok")
     }
+    override fun onResolved(resolution: ScanResolution) {
+        if (!enabled) return
+        val codes = when (val result = resolution.outcome) {
+            is ScanOutcome.Decoded -> listOf(result.code)
+            is ScanOutcome.Confirm -> result.codes
+            else -> emptyList()
+        }
+        codes.forEach { code -> runCatching { barcode(code.digits.toByteArray(), AttachmentKind.BARCODE, correlation) } }
+        onEvent("outcome", when (resolution.outcome) {
+            is ScanOutcome.Decoded -> "decoded"; is ScanOutcome.Confirm -> "confirm"
+            ScanOutcome.Unreadable -> "unreadable"; ScanOutcome.TextModelNotReady -> "ocr_model_not_ready"
+        }, mapOf("source" to resolution.source, "candidates" to codes.size.toString()))
+    }
     override fun onResult(result: String, codes: List<ProductCode>) {
         if (!enabled) return
         codes.forEach { code -> runCatching { barcode(code.digits.toByteArray(), AttachmentKind.BARCODE, correlation) } }
-        onEvent("outcome", when (result) { "barcode" -> "decoded"; "ocr_confirm" -> "confirm"; else -> result },
+        onEvent("image_outcome", when (result) { "barcode" -> "decoded"; "ocr_confirm" -> "confirm"; else -> result },
             mapOf("candidates" to codes.size.toString()))
     }
 }

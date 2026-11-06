@@ -23,6 +23,17 @@ class DebugScanDiagnosticsTest {
         assertTrue(events.all { it.screen == Screen.LIBRARY })
         assertEquals(listOf(AttachmentKind.IMAGE, AttachmentKind.BARCODE), kinds)
     }
+    @Test fun distinguishesFailedPhotoFromLiveConfirmationAndRecordsNoRawOcrText() {
+        val events = mutableListOf<Action.Event>()
+        val d = DebugScanDiagnostics({ true }, Screen.DAY, { events += it }, { _, _, _ -> }, { _, _, _ -> })
+        d.onResult("unreadable", emptyList())
+        d.onResolved(ScanResolution(ScanOutcome.Confirm(listOf(ProductCode("4006381333931"))),"live_confirmation"))
+        assertEquals("scan.image_outcome.unreadable",events[0].name)
+        assertEquals("scan.outcome.confirm",events[1].name)
+        assertEquals("live_confirmation",events[1].details["source"])
+        assertEquals(Action.Result.OK,events[1].result)
+        assertFalse(events.toString().contains("4006381333931"))
+    }
     @Test fun disabledHasNoCallbacksEvenAfterToggleOff() {
         var enabled = false
         var calls = 0
@@ -32,6 +43,6 @@ class DebugScanDiagnosticsTest {
         d.onEvent("permission", "denied"); d.onAttempt(ScanVariant.ORIGINAL, "no_code", 0)
         assertEquals(0, calls)
         enabled = true; d.onEvent("camera_bind", "ok"); enabled = false
-        d.onCaptured(File("does-not-exist")); assertEquals(1, calls)
+        d.onCaptured(File("does-not-exist")); d.onResolved(ScanResolution(ScanOutcome.Confirm(listOf(ProductCode("4006381333931"))), "live_confirmation")); assertEquals(1, calls)
     }
 }
