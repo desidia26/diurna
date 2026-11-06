@@ -109,6 +109,7 @@ fun BarcodeScanDialog(
                                 is ScanOutcome.Decoded -> lookup(result.code)
                                 is ScanOutcome.Confirm -> candidates = result.codes
                                 ScanOutcome.Unreadable -> problem = "Couldn't read a valid barcode after the saved photo and five retries, or from its printed digits. Try moving closer, tapping to focus, or changing the light."
+                                ScanOutcome.TextModelNotReady -> problem = "Text recognition model not ready. Barcode scanning still works; try again after Google Play finishes downloading the OCR model, or capture a clearer barcode."
                             }
                         },
                         onProblem = { problem = it },

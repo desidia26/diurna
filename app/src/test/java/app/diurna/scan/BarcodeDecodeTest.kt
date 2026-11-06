@@ -3,6 +3,7 @@ package app.diurna.scan
 import app.diurna.domain.ProductCode
 import app.diurna.domain.ScanDiagnostics
 import app.diurna.domain.ScanOutcome
+import app.diurna.domain.TextRecognitionNotReady
 import app.diurna.domain.ScanPixels
 import app.diurna.domain.ScanVariant
 import app.diurna.domain.decodeProductImage
@@ -89,6 +90,26 @@ class BarcodeDecodeTest {
 
     @Test fun ocrFailureNeverReachesLookup() = runTest {
         assertEquals(ScanOutcome.Unreadable, decodeProductImage(image, { _, _ -> emptyList() }, { error("OCR unavailable") }))
+    }
+
+    @Test fun ocrModelNotReadyIsDistinctAndBarcodePathStillRuns() = runTest {
+        val attempts = mutableListOf<ScanVariant>()
+        val results = mutableListOf<String>()
+        val diagnostics = object : ScanDiagnostics {
+            override fun onAttempt(variant: ScanVariant, result: String) { attempts += variant }
+            override fun onResult(result: String, codes: List<ProductCode>) { results += result }
+        }
+        assertEquals(
+            ScanOutcome.TextModelNotReady,
+            decodeProductImage(
+                image,
+                { _, _ -> emptyList() },
+                { throw TextRecognitionNotReady() },
+                diagnostics,
+            ),
+        )
+        assertEquals(ScanVariant.entries, attempts) // every barcode variant still tried first
+        assertEquals(listOf("ocr_model_not_ready"), results)
     }
 
     @Test fun retryGeometryIsDeterministicAndOriginalIsNotMutated() {

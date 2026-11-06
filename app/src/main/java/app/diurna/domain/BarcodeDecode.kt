@@ -36,7 +36,12 @@ sealed interface ScanOutcome {
     data class Decoded(val code: ProductCode) : ScanOutcome
     data class Confirm(val codes: List<ProductCode>) : ScanOutcome
     data object Unreadable : ScanOutcome
+    /** Play Services OCR model is not downloaded yet; barcode decoding itself still works. */
+    data object TextModelNotReady : ScanOutcome
 }
+
+/** Raised by the OCR adapter when Google Play has not finished delivering the text model. */
+class TextRecognitionNotReady(message: String = "text recognition model not ready") : Exception(message)
 
 private fun List<ProductCode>.validDistinct() = filter { it.isValid() }.distinctBy { it.key }.take(8)
 
@@ -75,6 +80,9 @@ suspend fun decodeProductImage(
         ocrProductCodes(recognizeText(image))
     } catch (e: CancellationException) {
         throw e
+    } catch (e: TextRecognitionNotReady) {
+        diagnostics.onResult("ocr_model_not_ready", emptyList())
+        return ScanOutcome.TextModelNotReady
     } catch (_: Exception) {
         diagnostics.onResult("ocr_error", emptyList())
         emptyList()

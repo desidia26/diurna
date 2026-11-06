@@ -108,7 +108,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.barcode.scanning)
-    implementation(libs.mlkit.text.recognition) // Bundled: digits OCR works offline from the first scan.
+    implementation(libs.mlkit.text.recognition) // Unbundled Play Services OCR; model downloads at install via DEPENDENCIES=ocr.
     implementation(libs.zxing.core)
     implementation(libs.anthropic.java)
     // Raises the SDK's Jackson (it parses every AI reply) to a release with the security fixes.

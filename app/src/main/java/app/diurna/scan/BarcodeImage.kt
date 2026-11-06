@@ -4,6 +4,7 @@ import app.diurna.domain.ProductCode
 import app.diurna.domain.ScanDiagnostics
 import app.diurna.domain.ScanOutcome
 import app.diurna.domain.ScanPixels
+import app.diurna.domain.TextRecognitionNotReady
 import app.diurna.domain.decodeProductImage
 
 import android.graphics.Bitmap
@@ -11,6 +12,7 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.google.android.gms.tasks.Task
+import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -82,7 +84,12 @@ suspend fun readBarcodePixels(pixels: ScanPixels, diagnostics: ScanDiagnostics =
                     barcode.rawValue?.let { ProductCode(it, barcode.format == Barcode.FORMAT_UPC_E) }
                 }
             }, { image ->
-                image.processBitmap { text.process(it) }.textBlocks.flatMap { block -> block.lines.map { it.text } }
+                try {
+                    image.processBitmap { text.process(it) }.textBlocks.flatMap { block -> block.lines.map { it.text } }
+                } catch (e: Exception) {
+                    if (e.isTextModelNotReady()) throw TextRecognitionNotReady()
+                    throw e
+                }
             }, diagnostics)
         } finally {
             scanner.close()
@@ -107,3 +114,14 @@ private suspend fun <T> ScanPixels.processBitmap(process: (InputImage) -> Task<T
             continuation.resumeWithException(e)
         }
     }
+
+private fun Throwable.isTextModelNotReady(): Boolean {
+    var cur: Throwable? = this
+    while (cur != null) {
+        if (cur is MlKitException && cur.errorCode == MlKitException.UNAVAILABLE) return true
+        val message = cur.message.orEmpty().lowercase()
+        if ("optional module" in message || "model is not available" in message || "waiting for the text" in message) return true
+        cur = cur.cause
+    }
+    return false
+}

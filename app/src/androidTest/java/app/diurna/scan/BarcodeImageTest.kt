@@ -23,7 +23,7 @@ import org.junit.runner.RunWith
 class BarcodeImageTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    @Test fun bundledBarcodeDecoderReadsSavedImageAndRemovesScratchFiles() = runBlocking {
+    @Test fun barcodeDecoderReadsSavedImageAndRemovesScratchFiles() = runBlocking {
         val matrix = EAN13Writer().encode("4006381333931", BarcodeFormat.EAN_13, 600, 250)
         val bitmap = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
         for (y in 0 until matrix.height) for (x in 0 until matrix.width) bitmap.setPixel(x, y, if (matrix[x,y]) Color.BLACK else Color.WHITE)
@@ -44,7 +44,7 @@ class BarcodeImageTest {
         assertFalse(attached!!.exists())
     }
 
-    @Test fun bundledOcrReadsPrintedDigitsOfflineAndAlwaysAsksForConfirmation() = runBlocking {
+    @Test fun playServicesOcrReadsPrintedDigitsAndAlwaysAsksForConfirmation() = runBlocking {
         val bitmap = Bitmap.createBitmap(1100, 220, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.WHITE)
