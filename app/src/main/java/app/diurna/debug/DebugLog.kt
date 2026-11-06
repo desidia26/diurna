@@ -22,7 +22,7 @@ class DebugLog(context: Context) {
     private val _screen = MutableStateFlow(Screen.DAY)
     val currentScreen = _screen.asStateFlow()
     val actions = Store(listOf(Middleware { a, next ->
-        if (a is Action.Event && (a.name == "navigation.tab" || a.name.startsWith("setup.page.") || a.name == "alarm.open")) _screen.value = a.screen
+        if (a is Action.Event && (a.name == "navigation.tab" || a.name.startsWith("setup.page."))) _screen.value = a.screen
         val epoch = generation
         if (_enabled.value && (a !is Action.Text || _includeText.value)) writer.execute {
             if (epoch == generation) recorder.store.dispatch(a)
