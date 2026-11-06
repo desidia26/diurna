@@ -19,14 +19,14 @@ import android.os.Vibrator
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import app.diurna.R
-import app.diurna.domain.AlarmRules
+import app.diurna.domain.AlarmNotice
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalDate
 
 /**
  * Rings until told to stop. Only [AlarmActivity] sends [ACTION_STOP], after a porch-code
- * scan (or the stop button on a test alarm). Gives up after [MAX_RING_MS] so a forgotten
+ * scan (or the stop button on a test alarm). Gives up after [AlarmNotice.maxRingMs] so a forgotten
  * trip doesn't mean a phone ringing all day.
  */
 class AlarmService : Service() {
@@ -35,10 +35,7 @@ class AlarmService : Service() {
     companion object {
         const val EXTRA_DATE = "date"
         const val EXTRA_TEST = "test"
-        const val ACTION_STOP = "app.diurna.STOP_ALARM"
-        private const val CHANNEL = "alarm"
-        private const val NOTIFICATION_ID = 1
-        private val MAX_RING_MS = AlarmRules.RING_MINUTES * 60_000L
+        const val ACTION_STOP = AlarmNotice.STOP_ACTION
 
         private val _ringing = MutableStateFlow<Ring?>(null)
         val ringing: StateFlow<Ring?> = _ringing
@@ -51,29 +48,29 @@ class AlarmService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
+        if (AlarmNotice.isStopAction(intent?.action)) {
             stopSelf()
             return START_NOT_STICKY
         }
         val ring = Ring(
-            date = intent?.getStringExtra(EXTRA_DATE)?.let(LocalDate::parse),
+            date = AlarmNotice.ringDate(intent?.getStringExtra(EXTRA_DATE)),
             test = intent?.getBooleanExtra(EXTRA_TEST, false) ?: false,
         )
         _ringing.value = ring
         ServiceCompat.startForeground(
-            this, NOTIFICATION_ID, notification(),
+            this, AlarmNotice.NOTIFICATION_ID, notification(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
         )
         if (player == null) startSoundAndVibration()
         handler.removeCallbacksAndMessages(null)
-        handler.postDelayed({ stopSelf() }, MAX_RING_MS)
+        handler.postDelayed({ stopSelf() }, AlarmNotice.maxRingMs)
         return START_NOT_STICKY
     }
 
     private fun notification(): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Alarm", NotificationManager.IMPORTANCE_HIGH).apply {
+            NotificationChannel(AlarmNotice.CHANNEL_ID, AlarmNotice.CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(null, null) // the service plays the sound itself
             }
         )
@@ -82,10 +79,10 @@ class AlarmService : Service() {
             Intent(this, AlarmActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        return NotificationCompat.Builder(this, CHANNEL)
+        return NotificationCompat.Builder(this, AlarmNotice.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_day)
-            .setContentTitle("Time to get up")
-            .setContentText("Scan your porch code to stop the alarm")
+            .setContentTitle(AlarmNotice.TITLE)
+            .setContentText(AlarmNotice.TEXT)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOngoing(true)

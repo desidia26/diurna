@@ -37,6 +37,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import app.diurna.container
+import app.diurna.domain.AlarmDismiss
 import app.diurna.data.hhmm
 import app.diurna.scan.QrScanner
 import app.diurna.ui.theme.DiurnaTheme
@@ -67,11 +68,11 @@ class AlarmActivity : ComponentActivity() {
                     onCode = { code ->
                         lifecycleScope.launch {
                             if (stopping) return@launch
-                            if (code != c.settings.secret()) return@launch
+                            if (!AlarmDismiss.matchesPorch(code, c.settings.secret())) return@launch
                             stopping = true
                             val date = current.date
-                            if (!current.test && date != null) {
-                                c.days.recordMorning(date, LocalDateTime.now().hhmm(), "scan")
+                            if (AlarmDismiss.recordsMorning(current.test, date)) {
+                                c.days.recordMorning(date!!, LocalDateTime.now().hhmm(), "scan")
                             }
                             stop()
                         }

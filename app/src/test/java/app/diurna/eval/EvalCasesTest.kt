@@ -1,6 +1,5 @@
 package app.diurna.eval
 
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -37,9 +36,10 @@ class EvalCasesTest {
         val set = EvalCases.load(resolveCasesDir(), "smoke")
         assertTrue("smoke stays small", set.cases.size in 5..12)
         assertTrue(set.cases.all { it.input.image == null })
-        assertTrue(set.cases.all { it.prompt in setOf("food", "density") })
+        assertTrue(set.cases.all { it.prompt in setOf("food", "density", "barcode_ingredients") })
         assertTrue(set.cases.any { it.prompt == "food" })
         assertTrue(set.cases.any { it.prompt == "density" })
+        assertTrue(set.cases.any { it.prompt == "barcode_ingredients" })
         assertTrue(set.cases.any { it.input.detailed && !it.input.ingredients })
         assertTrue(set.cases.any { it.input.ingredients })
     }
@@ -50,6 +50,12 @@ class EvalCasesTest {
         assertTrue(set.cases.any { it.prompt == "density" && it.input.unitKind == "each" })
         assertTrue(set.cases.any { it.expect.gPerMl != null })
         assertTrue(set.cases.any { it.expect.gramsPerEach != null })
+    }
+
+    @Test fun defaultIncludesBarcodeIngredients() {
+        val set = EvalCases.load(resolveCasesDir(), "default")
+        assertTrue(set.cases.any { it.prompt == "barcode_ingredients" })
+        assertTrue(set.cases.any { it.expect.minIngredients != null })
     }
 
     private fun resolveCasesDir(): File {

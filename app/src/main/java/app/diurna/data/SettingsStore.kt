@@ -222,4 +222,12 @@ class SettingsStore(private val context: Context) : StepStateStore {
     suspend fun setConfirmed() {
         context.dataStore.edit { it[confirmedKey] = true }
     }
+
+    /** Test helper: put back whatever porch state a device test found on entry. */
+    suspend fun restorePorchForTest(secret: String?, confirmed: Boolean) {
+        context.dataStore.edit {
+            if (secret == null) it.remove(secretKey) else it[secretKey] = secret
+            it[confirmedKey] = confirmed
+        }
+    }
 }

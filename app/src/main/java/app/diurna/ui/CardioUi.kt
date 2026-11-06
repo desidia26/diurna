@@ -99,11 +99,8 @@ private fun PieceRow(n: Int, set: ExerciseSetEntity, style: Cardio.Style, showNu
         scope.launch {
             val r = vm.readCardioPhoto(name)
             reading = false
-            editing = when (r) {
-                is CardioPhotoResult.Read -> CardioEdit(r.reading.piece, fromPhoto = true, note = r.reading.note)
-                // Fall back to typing: same dialog, the problem shown at the top.
-                is CardioPhotoResult.Problem -> CardioEdit(set.piece(), fromPhoto = true, problem = r.message)
-            }
+            // Fall back to typing on Problem: same dialog, the problem shown at the top.
+            editing = PhotoAiReads.cardioEditFrom(r, set.piece())
         }
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

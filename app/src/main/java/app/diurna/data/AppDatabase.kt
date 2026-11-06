@@ -28,7 +28,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FdcFoodCacheEntity::class,
         IngredientDensityCacheEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -58,6 +58,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         // v15: food_photo gallery (data copy of food_entry.photo is in MIGRATION_14_15).
         // v16: ingredient density / grams-per-each lookup cache.
         AutoMigration(from = 15, to = 16),
+        // v17: a standing note on each exercise.
+        AutoMigration(from = 16, to = 17),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
