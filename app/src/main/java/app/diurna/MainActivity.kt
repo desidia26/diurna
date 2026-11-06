@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
                 var showWhatsNew by rememberSaveable { mutableStateOf(launcherOpen) }
                 if (showWhatsNew) WhatsNewDialog(whatsNewVm) { showWhatsNew = false }
                 var tab by rememberSaveable { mutableStateOf(Tab.Day) }
+                LaunchedEffect(tab) { c.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.valueOf(tab.name.uppercase()), "navigation.tab")) }
                 LaunchedEffect(showDayRequests) { if (showDayRequests > 0) tab = Tab.Day }
                 // An exercise opened from Day's menu goes back to Day, not to the Metrics list.
                 var backToDay by rememberSaveable { mutableStateOf(false) }

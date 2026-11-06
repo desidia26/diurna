@@ -16,7 +16,7 @@ import java.io.File
  * [PhotoSizing.MAX_EDGE] (so a huge or hostile image never loads at full size), turned upright from
  * its EXIF orientation by [ImageDecoder], and saved as a JPEG under [PhotoSizing.MAX_BYTES].
  */
-class PhotoImporter(private val context: Context, private val photos: FoodPhotos) {
+class PhotoImporter(private val context: Context, private val photos: FoodPhotos, private val debug: app.diurna.debug.DebugLog? = null) {
 
     /** Where the camera app writes its shot; shared with it through the FileProvider in the manifest. */
     val captureFile: File get() = File(context.cacheDir, "camera/capture.jpg").apply { parentFile?.mkdirs() }
@@ -25,10 +25,13 @@ class PhotoImporter(private val context: Context, private val photos: FoodPhotos
     suspend fun import(uri: Uri): String? = import(ImageDecoder.createSource(context.contentResolver, uri))
 
     /** The camera's shot in [captureFile], which is then removed. */
-    suspend fun importCapture(): String? =
-        import(ImageDecoder.createSource(captureFile)).also { withContext(Dispatchers.IO) { captureFile.delete() } }
+    suspend fun importCapture(): String? = withContext(Dispatchers.IO) {
+        val id = java.util.UUID.randomUUID().toString()
+        debug?.registerAttachment(captureFile, app.diurna.debug.AttachmentKind.IMAGE, correlationId = id)
+        import(ImageDecoder.createSource(captureFile), id).also { captureFile.delete() }
+    }
 
-    private suspend fun import(source: ImageDecoder.Source): String? = withContext(Dispatchers.IO) {
+    private suspend fun import(source: ImageDecoder.Source, correlationId: String = java.util.UUID.randomUUID().toString()): String? = withContext(Dispatchers.IO) {
         runCatching {
             val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
                 val (w, h) = PhotoSizing.fit(info.size.width, info.size.height)
@@ -38,11 +41,15 @@ class PhotoImporter(private val context: Context, private val photos: FoodPhotos
                 decoder.setOnPartialImageListener { false }
             }
             val bytes = try { compress(bitmap) } finally { bitmap.recycle() } ?: return@runCatching null
+            debug?.registerAttachment(bytes, app.diurna.debug.AttachmentKind.IMAGE, correlationId = correlationId)
+            debug?.actions?.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.BACKGROUND, "photo.import", correlationId, result = app.diurna.debug.Action.Result.OK))
             photos.dir.mkdirs()
             val name = photos.newName()
             File(photos.dir, name).writeBytes(bytes)
             name
-        }.onFailure { Log.w(TAG, "couldn't import photo", it) }.getOrNull()
+        }.onFailure {
+            debug?.actions?.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.BACKGROUND, "photo.import", correlationId, result = app.diurna.debug.Action.Result.FAILED))
+            Log.w(TAG, "couldn't import photo", it) }.getOrNull()
     }
 
     private fun compress(bitmap: Bitmap): ByteArray? {
