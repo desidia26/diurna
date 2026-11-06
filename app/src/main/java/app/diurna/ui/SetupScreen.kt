@@ -45,7 +45,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.diurna.alarm.ArmedState
+import app.diurna.domain.ArmedState
 import app.diurna.scan.QrScanner
 import app.diurna.scan.qrBitmap
 import app.diurna.ui.theme.LocalStatusColors

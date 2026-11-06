@@ -107,4 +107,49 @@ class AlarmRulesTest {
         assertEquals(Morning.OFF, off.status)
         assertFalse(off.scored)
     }
+
+
+    @Test fun nextAlarmRespectsPerDayRoutineTimes() {
+        // Different wake times across the week (Mon off, Tue 06:30, Wed 07:00, ...).
+        val now = mon.atTime(8, 0) // Monday morning already past any alarm
+        val byDay = mapOf(
+            mon to DayAlarmInputs(AlarmRules.OFF, false),
+            tue to DayAlarmInputs("06:30", false),
+            tue.plusDays(1) to DayAlarmInputs("07:00", false),
+            tue.plusDays(2) to DayAlarmInputs("05:45", false),
+        )
+        fun inputs(date: java.time.LocalDate) = byDay[date] ?: DayAlarmInputs(AlarmRules.OFF, false)
+        val next = AlarmRules.nextAlarm(now, ::inputs)
+        assertEquals(tue, next?.date)
+        assertEquals(LocalTime.of(6, 30), next?.time)
+        val afterTue = AlarmRules.nextAlarm(tue.atTime(7, 0), ::inputs)
+        assertEquals(tue.plusDays(1), afterTue?.date)
+        assertEquals(LocalTime.of(7, 0), afterTue?.time)
+    }
+
+    @Test fun nextAlarmReturnsNullPastLookaheadEvenIfLaterDaysHaveAlarms() {
+        val now = mon.atTime(5, 0)
+        val next = AlarmRules.nextAlarm(now) { date ->
+            val daysAhead = java.time.temporal.ChronoUnit.DAYS.between(mon, date)
+            if (daysAhead < AlarmRules.LOOKAHEAD_DAYS) DayAlarmInputs(AlarmRules.OFF, false)
+            else DayAlarmInputs("06:30", false)
+        }
+        assertNull(next)
+    }
+
+    @Test fun nextAlarmTodayRightAfterAlarmTimeGoesToTomorrow() {
+        val next = AlarmRules.nextAlarm(mon.atTime(6, 30, 1)) { DayAlarmInputs("06:30", false) }
+        assertEquals(tue, next?.date)
+    }
+
+    @Test fun frozenOffStaysOffAfterLock() {
+        assertEquals(
+            AlarmRules.OFF,
+            AlarmRules.effective(tue, mon.atTime(22, 0), null, "06:30", frozen = AlarmRules.OFF),
+        )
+    }
+
+    @Test fun lookaheadCoversAFullWeekPlusToday() {
+        assertEquals(8L, AlarmRules.LOOKAHEAD_DAYS)
+    }
 }

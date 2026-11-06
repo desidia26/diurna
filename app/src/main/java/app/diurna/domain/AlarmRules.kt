@@ -15,7 +15,7 @@ object AlarmRules {
     const val OFF = "off"
     const val LOCK_HOUR = 22
     const val ON_TIME_MINUTES = 10
-    private const val LOOKAHEAD_DAYS = 8L
+    const val LOOKAHEAD_DAYS = 8L
 
     fun lockTime(date: LocalDate): LocalDateTime = date.minusDays(1).atTime(LOCK_HOUR, 0)
 

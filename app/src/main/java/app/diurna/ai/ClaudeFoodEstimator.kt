@@ -137,7 +137,7 @@ internal object ClaudeRequest {
                     addUserMessage(text)
                 } else {
                     // Image before text, as Anthropic recommends; the text stays the main description.
-                    addUserMessageOfBlockParams(
+                    addUserMessageOfContentBlockParams(
                         listOf(
                             ContentBlockParam.ofImage(
                                 ImageBlockParam.builder()

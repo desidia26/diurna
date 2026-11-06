@@ -56,7 +56,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.diurna.alarm.ArmedState
+import app.diurna.domain.ArmedState
 import app.diurna.data.ExerciseSetEntity
 import app.diurna.domain.AlarmRules
 import app.diurna.domain.DayText

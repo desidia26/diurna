@@ -21,7 +21,7 @@ class ClaudeRequestTest {
     @Test fun photoGoesFirstAsBase64JpegThenTheText() {
         val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 4, 5, 6)
         val p = ClaudeRequest.params("claude-test", "chicken salad, half eaten", jpeg)
-        val blocks = p.messages().single().content().asBlockParams()
+        val blocks = p.messages().single().content().asContentBlockParams()
         assertEquals(2, blocks.size)
         val source = blocks[0].asImage().source().asBase64()
         assertEquals(Base64ImageSource.MediaType.IMAGE_JPEG, source.mediaType())

@@ -6,6 +6,7 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import app.diurna.container
 import app.diurna.checkin.CheckInReminder
+import app.diurna.domain.AlarmReschedule
 import app.diurna.steps.StepSampling
 import kotlinx.coroutines.launch
 
@@ -24,11 +25,8 @@ class AlarmReceiver : BroadcastReceiver() {
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         // Exported for the system broadcasts below; ignore anything else another app might send.
-        when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_TIME_CHANGED,
-            Intent.ACTION_TIMEZONE_CHANGED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> rescheduleAsync(context, alsoWallpaper = true)
+        if (AlarmReschedule.shouldReschedule(intent.action)) {
+            rescheduleAsync(context, alsoWallpaper = true)
         }
     }
 }
