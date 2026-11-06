@@ -1,6 +1,6 @@
 # Offline Svelte Week preview
 
-Stacked on the action-log foundation (#55). This is one opt-in read-only screen, not a replacement data layer. Compose, ViewModels and Room remain authoritative. The native Previous/Next controls only change the selected week; the web client cannot write anything.
+Stacked on the action-log foundation (#55). This is one debug-only, opt-in read-only screen, not a replacement data layer. The Setup toggle appears only while `DebugLog.enabled` is on (the Setup debug card from the stacked debug-report PR); with debug off the preference is ignored and Compose Week is always shown. Compose, ViewModels and Room remain authoritative. The native Previous/Next controls only change the selected week; the web client cannot write anything.
 
 `web/` uses pinned Svelte/Vite/TypeScript dependencies and a committed npm lockfile. Gradle's `preBuild` runs `npm ci --ignore-scripts` and the production build into `app/build/generated/webAssets/web`. Generated bundles are not committed. CI sets up Node 24.22.1 in every Android build job. Local builds require Node >=22.12 and npm on PATH; missing npm fails explicitly in `webInstall` (no silently incomplete APK). Node is never required on the phone. npm needs network on a clean build; the installed APK does not.
 
@@ -15,7 +15,7 @@ Reply: `{ "v": 1, "id": "web-1", "data": { ... } }` or `data: null` while loadin
 ## Tests and review
 
 - `cd web && npm ci --ignore-scripts && npm test`: fake bridge component rendering, escaping, failure callback and version rejection.
-- `./gradlew testDebugUnitTest`: DTO mapping, command validation, origin/subframe rejection, URL policy and action logging.
+- `./gradlew testDebugUnitTest`: DTO mapping, command validation, origin/subframe rejection, URL policy, action logging, and debug-mode gating (toggle hidden / native Week when debug is off).
 - CI emulator: actual bundled Svelte page loads and performs `week.get`; foreign-origin content gets no injected bridge.
 - `npm audit --audit-level=high`: no high/moderate findings with the selected versions. Two low build-only findings remain for deepmerge/plugin, with no upstream fix. The app ships compiled assets, not npm packages or a dev server; no untrusted Vite config is consumed.
 

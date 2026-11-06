@@ -90,6 +90,8 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
     val confirmed by vm.porchConfirmed.collectAsStateWithLifecycle()
     val armed by vm.armed.collectAsStateWithLifecycle()
     val detailed by library.detailedNutrition.collectAsStateWithLifecycle()
+    val debugEnabled by context.container.debug.enabled.collectAsStateWithLifecycle()
+    val svelteWeekEnabled by context.container.settings.svelteWeek.collectAsStateWithLifecycle(false)
     var scanning by remember { mutableStateOf(false) }
     var confirmReplace by remember { mutableStateOf(false) }
 
@@ -106,20 +108,21 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            val enabled by context.container.settings.svelteWeek.collectAsStateWithLifecycle(false)
-            val scope = rememberCoroutineScope()
-            SectionCard("Experimental Week client") {
-                Row {
-                    Text("Svelte Week (read only)", Modifier.weight(1f))
-                    androidx.compose.material3.Switch(checked = enabled, onCheckedChange = { value ->
-                        scope.launch {
-                            context.container.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.SETUP, "web.toggle"))
-                            context.container.settings.setSvelteWeek(value)
-                        }
-                    })
+        if (app.diurna.ui.web.SvelteWeekGate.toggleVisible(debugEnabled)) {
+            item {
+                val scope = rememberCoroutineScope()
+                SectionCard("Experimental Week client") {
+                    Row {
+                        Text("Svelte Week (read only)", Modifier.weight(1f))
+                        androidx.compose.material3.Switch(checked = svelteWeekEnabled, onCheckedChange = { value ->
+                            scope.launch {
+                                context.container.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.SETUP, "web.toggle"))
+                                context.container.settings.setSvelteWeek(value)
+                            }
+                        })
+                    }
+                    Text("Debug-only offline preview. Off when debug is off. Load failures use native Week automatically.")
                 }
-                Text("Offline preview. Load failures use native Week automatically.")
             }
         }
         item { Text("Setup", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
