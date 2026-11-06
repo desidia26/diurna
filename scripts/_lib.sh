@@ -9,6 +9,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDK="${ANDROID_HOME:-$HOME/Android/Sdk}"
 ADB="$SDK/platform-tools/adb"
 EMULATOR="$SDK/emulator/emulator"
+# Default local AVD name. CI uses custom pixel_11 from .github/avd/devices.xml (see tests.yml).
+# To match CI locally: cp .github/avd/devices.xml ~/.android/devices.xml
+#   && avdmanager create avd -n Pixel_11_API_33_x86_64 -k "system-images;android-33;google_apis;x86_64" -d pixel_11
+# then AVD=Pixel_11_API_33_x86_64 scripts/emulator --headless
 AVD="${AVD:-Pixel_3a_API_33_x86_64}"
 PKG="app.daybook"            # the app id; kept from the app's first name, never changes
 
