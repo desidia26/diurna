@@ -129,7 +129,7 @@ class MainActivity : ComponentActivity() {
                     // padding, the tab bar's space stayed reserved even with the keyboard covering
                     // it, so lists stopped scrolling one bar-height short of the keyboard.
                     val debugScreen by c.debug.currentScreen.collectAsStateWithLifecycle()
-                    app.diurna.debug.DebugHost(c, if (tab == Tab.Setup) debugScreen else app.diurna.debug.Screen.valueOf(tab.name.uppercase())) {
+                    app.diurna.debug.DebugHost(c, if (tab == Tab.Setup && debugScreen == app.diurna.debug.Screen.LIBRARY) debugScreen else app.diurna.debug.Screen.valueOf(tab.name.uppercase())) {
                     Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
                         val inner = PaddingValues()
                         when (tab) {
