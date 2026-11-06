@@ -15,6 +15,11 @@ import app.diurna.ai.SelectedDensityEstimator
 import app.diurna.ai.ClaudeDensityEstimator
 import app.diurna.ai.GrokDensityEstimator
 import app.diurna.ai.OpenAiCompatDensityEstimator
+import app.diurna.ai.NutritionEstimator
+import app.diurna.ai.SelectedNutritionEstimator
+import app.diurna.ai.ClaudeNutritionEstimator
+import app.diurna.ai.GrokNutritionEstimator
+import app.diurna.ai.OpenAiCompatNutritionEstimator
 import app.diurna.ai.GatewaySettingsStore
 import app.diurna.ai.GrokCardioReader
 import app.diurna.ai.GrokLabelReader
@@ -192,10 +197,29 @@ class AppContainer(context: Context) {
             configured = openAiConfigured,
         ),
     ))
+    val nutritionEstimator: NutritionEstimator = SelectedNutritionEstimator({ aiProvider.get() }, mapOf(
+        AiProvider.ANTHROPIC to ClaudeNutritionEstimator(
+            apiKey = { apiKeys.getValue(AiProvider.ANTHROPIC).get() },
+            baseUrl = { gateway.anthropicBaseOrNull() },
+        ),
+        AiProvider.XAI to GrokNutritionEstimator(
+            apiKey = { apiKeys.getValue(AiProvider.XAI).get() },
+            modelProvider = { GrokFoodEstimator.DEFAULT_MODEL },
+            transportProvider = { xaiTransport },
+        ),
+        AiProvider.OPENAI_COMPAT to OpenAiCompatNutritionEstimator(
+            apiKey = { apiKeys.getValue(AiProvider.OPENAI_COMPAT).get() },
+            modelProvider = { gateway.get().openAiModel.trim() },
+            transportProvider = { openAiTransport },
+            configured = openAiConfigured,
+        ),
+    ))
     val densityResolver = IngredientDensityResolver(
         fdc = fdcClient,
         cache = db.ingredientDensityCacheDao(),
         ai = densityEstimator,
+        nutritionAi = nutritionEstimator,
+        nutritionCache = db.ingredientNutritionCacheDao(),
     )
     val selectedDate = SelectedDate()
     val nutrition = NutritionRepository(db, settings.profile)

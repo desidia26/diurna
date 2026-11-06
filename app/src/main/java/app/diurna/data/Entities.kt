@@ -153,6 +153,8 @@ data class RecipeIngredientEntity(
     @ColumnInfo(name = "density_id") val densityId: String? = null,
     /** For unit=each: grams per one item used to resolve [grams]. */
     @ColumnInfo(name = "grams_per_each") val gramsPerEach: Double? = null,
+    /** Persisted g/ml used to resolve [grams] for volume units (USDA/AI/builtin/manual). */
+    @ColumnInfo(name = "g_per_ml") val gPerMl: Double? = null,
     @ColumnInfo(name = "protein_g") val proteinG: Int = 0,
     @ColumnInfo(name = "carbs_g") val carbsG: Int = 0,
     @ColumnInfo(name = "fat_g") val fatG: Int = 0,
@@ -555,5 +557,27 @@ data class IngredientDensityCacheEntity(
     val description: String? = null,
     @ColumnInfo(name = "cached_at") val cachedAt: Long,
     /** Epoch millis; null means usable now. Pending/miss rows wait until this time. */
+    @ColumnInfo(name = "retry_after") val retryAfter: Long? = null,
+)
+
+/**
+ * Cached per-100g nutrition for a normalized ingredient name (USDA or AI).
+ * Shared across recipes, independent of volume/each unit kind.
+ */
+@Entity(tableName = "ingredient_nutrition_cache")
+data class IngredientNutritionCacheEntity(
+    @PrimaryKey @ColumnInfo(name = "normalized_name") val normalizedName: String,
+    /** usda / ai / miss / pending */
+    val source: String,
+    @ColumnInfo(name = "fdc_id") val fdcId: Int? = null,
+    @ColumnInfo(name = "kcal_per_100") val kcalPer100: Int = 0,
+    @ColumnInfo(name = "protein_g_per_100") val proteinGPer100: Int = 0,
+    @ColumnInfo(name = "carbs_g_per_100") val carbsGPer100: Int = 0,
+    @ColumnInfo(name = "fat_g_per_100") val fatGPer100: Int = 0,
+    @ColumnInfo(name = "fiber_g_per_100") val fiberGPer100: Int? = null,
+    @ColumnInfo(name = "sugars_g_per_100") val sugarsGPer100: Int? = null,
+    val basis: String? = null,
+    val description: String? = null,
+    @ColumnInfo(name = "cached_at") val cachedAt: Long,
     @ColumnInfo(name = "retry_after") val retryAfter: Long? = null,
 )

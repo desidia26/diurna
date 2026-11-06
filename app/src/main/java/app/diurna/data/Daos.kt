@@ -198,6 +198,19 @@ interface RecipeIngredientDao {
              AND unit IN ('ml','cup','tbsp','tsp','each')"""
     )
     suspend fun blockedNeedingDensity(): List<RecipeIngredientEntity>
+
+    /**
+     * Lines that look like they still need nutrition fill: macros all zero, no detail,
+     * and source is blank / import (not manual / barcode / meal / already-filled fdc|ai).
+     */
+    @Query(
+        """SELECT * FROM recipe_ingredient
+           WHERE protein_g = 0 AND carbs_g = 0 AND fat_g = 0 AND kcal = 0
+             AND fiber_g IS NULL AND sugars_g IS NULL AND sat_fat_g IS NULL
+             AND (source IS NULL OR source = '' OR source = 'import')
+             AND grams IS NOT NULL AND grams > 0"""
+    )
+    suspend fun needingNutritionFill(): List<RecipeIngredientEntity>
 }
 
 @Dao
@@ -612,4 +625,16 @@ interface IngredientDensityCacheDao {
 
     @Query("DELETE FROM ingredient_density_cache WHERE query_key = :key")
     suspend fun delete(key: String)
+}
+
+@Dao
+interface IngredientNutritionCacheDao {
+    @Query("SELECT * FROM ingredient_nutrition_cache WHERE normalized_name = :name LIMIT 1")
+    suspend fun get(name: String): IngredientNutritionCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(row: IngredientNutritionCacheEntity)
+
+    @Query("DELETE FROM ingredient_nutrition_cache WHERE normalized_name = :name")
+    suspend fun delete(name: String)
 }

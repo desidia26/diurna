@@ -49,8 +49,10 @@ object IngredientDensity {
     fun normalizeName(raw: String): String {
         var s = raw.trim().lowercase(Locale.US)
         if (s.isEmpty()) return ""
-        // Drop parenthetical asides like "(optional)" but keep content that looks like prep.
+        // Recipe-blog noise: asterisks/footnotes, parenthetical asides ("(or a mix…)"),
+        // trailing "to taste" / "as needed". Prep words outside parens stay (chopped, sliced).
         s = s.replace(PAREN_ASIDE, " ")
+        s = s.replace(TO_TASTE, " ")
         s = s.replace(NON_ALNUM, " ")
         s = s.replace(WHITESPACE, " ").trim()
         return s
@@ -135,6 +137,36 @@ object IngredientDensity {
             val hay = normalizeName("$idTok $labelTok").split(' ').filter { it.length >= 3 }.toSet()
             hay.any { it in tokens }
         }
+    }
+
+    /**
+     * True when [fdcDescription] shares a meaningful token (≥3 letters) with [ingredientName].
+     * Also matches compound forms ("soy milk" ↔ "Soymilk") via concatenation / substring.
+     * Used before filling nutrition from the same FDC food that supplied density.
+     */
+    fun isGoodFdcNameMatch(ingredientName: String, fdcDescription: String): Boolean {
+        val want = normalizeName(ingredientName).split(' ').filter { it.length >= 3 }
+        if (want.isEmpty()) return false
+        val hay = normalizeName(fdcDescription).split(' ').filter { it.length >= 3 }
+        if (hay.isEmpty()) return false
+        val wantSet = want.toSet()
+        val haySet = hay.toSet()
+        if (wantSet.any { it in haySet }) return true
+        // "soy milk" ↔ "soymilk": joined tokens appear in / contain the other side.
+        val wantJoined = want.joinToString("")
+        val hayJoined = hay.joinToString("")
+        if (wantJoined.length >= 4 && (
+            hay.any { wantJoined in it || (it.length >= 4 && it in wantJoined) } ||
+                wantJoined in hayJoined || hayJoined in wantJoined
+            )
+        ) {
+            return true
+        }
+        // Token contained in the other side's token ("milk" in "soymilk")
+        for (w in want) {
+            if (w.length >= 4 && hay.any { h -> w in h || (h.length >= 4 && h in w) }) return true
+        }
+        return false
     }
 
     // ---- internals ----
@@ -223,7 +255,9 @@ object IngredientDensity {
     private const val MAX_G_PER_ML = 3.0 // denser than honey is suspicious for culinary volumes
     private const val MAX_G_EACH = 5_000.0
 
-    private val PAREN_ASIDE = Regex("""\([^)]*optional[^)]*\)""", RegexOption.IGNORE_CASE)
+    /** Any parenthetical aside — blog notes like "(or a mix of …)" / "(optional)". */
+    private val PAREN_ASIDE = Regex("""\([^)]*\)""")
+    private val TO_TASTE = Regex("""\b(to taste|as needed|as desired)\b""", RegexOption.IGNORE_CASE)
     private val NON_ALNUM = Regex("""[^a-z0-9+]+""")
     private val WHITESPACE = Regex("""\s+""")
 
