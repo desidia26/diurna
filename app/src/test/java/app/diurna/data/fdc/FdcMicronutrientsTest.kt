@@ -1,11 +1,9 @@
 package app.diurna.data.fdc
 
-import app.diurna.domain.MicronutrientProfile
 import app.diurna.domain.NutrientId
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FdcMicronutrientsTest {
@@ -182,6 +180,5 @@ class FdcMicronutrientsTest {
         // Micros available separately; profile type stays macro-focused in this PR.
         val micros = FdcClient.parseMicronutrients(food)!!
         assertEquals(80.0, micros[NutrientId.SODIUM]!!, 0.0)
-        assertTrue(micros is MicronutrientProfile)
     }
 }
