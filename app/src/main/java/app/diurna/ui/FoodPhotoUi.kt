@@ -50,6 +50,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import app.diurna.R
 import app.diurna.data.FoodPhotos
+import app.diurna.domain.PhotoCapture
 import app.diurna.domain.PhotoSizing
 import app.diurna.ui.theme.LocalStatusColors
 import kotlinx.coroutines.Dispatchers
@@ -100,14 +101,18 @@ fun rememberPhotoAttacher(host: PhotoImportHost, onAttached: (String) -> Unit): 
         scope.launch {
             val name = block()
             busy = false
-            if (name != null) onAttached(name) else error = "Couldn't read that photo"
+            if (name != null) onAttached(name) else error = PhotoAiReads.COULDNT_READ_PHOTO
         }
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
-        if (saved) import { host.importCapture() }
+        // Some camera apps write EXTRA_OUTPUT then return RESULT_CANCELED; trust a non-empty file.
+        if (PhotoCapture.shouldImport(saved, host.captureFile.length())) {
+            import { host.importCapture() }
+        }
     }
     fun launchCamera() {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.photos", host.captureFile)
+        val file = PhotoCapture.prepareScratch(host.captureFile)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.photos", file)
         try {
             camera.launch(uri)
         } catch (e: ActivityNotFoundException) {
