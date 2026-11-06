@@ -16,9 +16,10 @@ class TestDb {
 
     val db: AppDatabase = Room.inMemoryDatabaseBuilder(
         InstrumentationRegistry.getInstrumentation().targetContext, AppDatabase::class.java,
-    ).addCallback(AppDatabase.seedRoutine).build()
+    ).addCallback(AppDatabase.seedRoutine).addCallback(AppDatabase.seedCheckIn).build()
 
     val days = DayRepository(db) { now }
+    val dailyMetrics = DailyMetricRepository(db)
     val metrics = MetricsRepository(db)
     val profile = MutableStateFlow<Profile?>(null)
     val nutrition = NutritionRepository(db, profile)

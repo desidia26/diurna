@@ -10,6 +10,7 @@ import androidx.room.migration.Migration
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import app.diurna.domain.DailyMetrics
 
 @Database(
     entities = [
@@ -28,8 +29,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FdcFoodCacheEntity::class,
         IngredientDensityCacheEntity::class,
         IngredientNutritionCacheEntity::class,
+        DailyMetricEntity::class,
+        DailyMetricValueEntity::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -63,6 +66,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AutoMigration(from = 16, to = 17),
         // v18 is idempotent: see MIGRATION_17_18 (g_per_ml + nutrition cache, and
         // exercise.note when upgrading from an earlier #48 preview build at v17).
+        // v19: check-in metrics defined in Setup; mood and energy move into them (MIGRATION_18_19).
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -77,6 +81,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun fdcFoodCacheDao(): FdcFoodCacheDao
     abstract fun ingredientDensityCacheDao(): IngredientDensityCacheDao
     abstract fun ingredientNutritionCacheDao(): IngredientNutritionCacheDao
+    abstract fun dailyMetricDao(): DailyMetricDao
 
     /** v2: food estimates, body weight, finalized-day snapshots. The v1 estimate columns were never written. */
     @DeleteColumn(tableName = "food_entry", columnName = "kcal_estimate")
@@ -95,6 +100,45 @@ abstract class AppDatabase : RoomDatabase() {
                     db.execSQL(
                         "INSERT INTO routine_day (weekday, alarm_time, template_id) VALUES (?, ?, NULL)",
                         arrayOf<Any>(weekday, DEFAULT_ALARM),
+                    )
+                }
+            }
+        }
+
+        /** A new install starts with Mood and Energy; upgrades get them from [MIGRATION_18_19]. */
+        val seedCheckIn = object : Callback() {
+            override fun onCreate(db: SupportSQLiteDatabase) = seedCheckInMetrics(db)
+        }
+
+        private fun seedCheckInMetrics(db: SupportSQLiteDatabase) {
+            for ((i, m) in listOf(
+                Triple("Mood", DailyMetrics.MOOD_KEY, DailyMetrics.moodWords),
+                Triple("Energy", DailyMetrics.ENERGY_KEY, DailyMetrics.energyWords),
+            ).withIndex()) {
+                db.execSQL(
+                    "INSERT INTO daily_metric (name, kind, scale_max, words, unit, `key`, position, archived) " +
+                        "VALUES (?, ?, 5, ?, NULL, ?, ?, 0)",
+                    arrayOf<Any>(m.first, DailyMetrics.Kind.SCALE.key, DailyMetrics.joinWords(m.third)!!, m.second, i),
+                )
+            }
+        }
+
+        /**
+         * v19: check-in metrics. Seeds Mood and Energy and copies every day's ratings into them.
+         * day.mood and day.energy are left in place, unread, until this has run everywhere.
+         */
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(CREATE_DAILY_METRIC)
+                db.execSQL(CREATE_DAILY_METRIC_NAME_INDEX)
+                db.execSQL(CREATE_DAILY_METRIC_VALUE)
+                db.execSQL(CREATE_DAILY_METRIC_VALUE_INDEX)
+                seedCheckInMetrics(db)
+                for (column in listOf(DailyMetrics.MOOD_KEY, DailyMetrics.ENERGY_KEY)) {
+                    db.execSQL(
+                        "INSERT INTO daily_metric_value (date, metric_id, value, text) " +
+                            "SELECT date, (SELECT id FROM daily_metric WHERE `key` = '$column'), $column, NULL " +
+                            "FROM day WHERE $column BETWEEN 1 AND 5"
                     )
                 }
             }
@@ -202,9 +246,20 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_5_6, MIGRATION_14_15, MIGRATION_17_18)
+                .addMigrations(MIGRATION_5_6, MIGRATION_14_15, MIGRATION_17_18, MIGRATION_18_19)
                 .addCallback(seedRoutine)
+                .addCallback(seedCheckIn)
                 .addCallback(seedCatalog)
                 .build()
     }
 }
+
+// Room's own CREATE statements for v19 (app/schemas/.../19.json), so the migrated schema validates.
+private const val CREATE_DAILY_METRIC = "CREATE TABLE IF NOT EXISTS `daily_metric` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+    "`name` TEXT NOT NULL, `kind` TEXT NOT NULL, `scale_max` INTEGER, `words` TEXT, `unit` TEXT, `key` TEXT, " +
+    "`position` INTEGER NOT NULL, `archived` INTEGER NOT NULL DEFAULT 0)"
+private const val CREATE_DAILY_METRIC_NAME_INDEX = "CREATE UNIQUE INDEX IF NOT EXISTS `index_daily_metric_name` ON `daily_metric` (`name`)"
+private const val CREATE_DAILY_METRIC_VALUE = "CREATE TABLE IF NOT EXISTS `daily_metric_value` (`date` TEXT NOT NULL, `metric_id` INTEGER NOT NULL, " +
+    "`value` REAL, `text` TEXT, PRIMARY KEY(`date`, `metric_id`), FOREIGN KEY(`metric_id`) REFERENCES `daily_metric`(`id`) " +
+    "ON UPDATE NO ACTION ON DELETE CASCADE )"
+private const val CREATE_DAILY_METRIC_VALUE_INDEX = "CREATE INDEX IF NOT EXISTS `index_daily_metric_value_metric_id` ON `daily_metric_value` (`metric_id`)"

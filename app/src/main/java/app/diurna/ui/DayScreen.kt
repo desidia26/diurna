@@ -75,7 +75,9 @@ import app.diurna.domain.ArmedState
 import app.diurna.data.ExerciseSetEntity
 import app.diurna.domain.AlarmRules
 import app.diurna.domain.DayText
-import app.diurna.domain.Ratings
+import app.diurna.domain.DailyMetrics
+import androidx.compose.foundation.layout.RowScope
+import kotlin.math.roundToInt
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.height
@@ -591,43 +593,98 @@ fun rememberFold(vm: DayViewModel, section: String, summary: String): Fold {
 
 @Composable
 private fun CheckInCard(s: DayUi, vm: DayViewModel) {
-    val mood = s.day?.mood
-    val energy = s.day?.energy
-    val rated = mood != null && energy != null
+    val ui by vm.checkIn.collectAsStateWithLifecycle()
+    val ci = ui ?: return
+    // Everything archived: nothing to check in.
+    if (ci.metrics.isEmpty()) return
     SectionCard(
         "Check-in",
-        chip = { if (rated) Chip("Done", Tone.Good) },
-        fold = rememberFold(vm, "checkin", Ratings.summary(mood, energy)),
+        chip = { if (ci.done) Chip("Done", Tone.Good) },
+        fold = rememberFold(vm, "checkin", ci.summary),
     ) {
-        RatingRow("Mood", mood, Ratings.moodWords, vm::setMood)
-        RatingRow("Energy", energy, Ratings.energyWords, vm::setEnergy)
+        ci.metrics.forEach { m ->
+            val v = ci.values[m.id]
+            when (m.kind) {
+                DailyMetrics.Kind.SCALE -> RatingRow(m, v?.value?.roundToInt()) { vm.setMetric(m.id, it?.toDouble()) }
+                DailyMetrics.Kind.NUMBER -> NumberMetricRow(s.date, m, v?.value) { vm.setMetric(m.id, it) }
+                DailyMetrics.Kind.YES_NO -> YesNoRow(m, v?.value) { vm.setMetric(m.id, it) }
+                DailyMetrics.Kind.TEXT -> TextMetricRow(s.date, m, v?.text) { vm.setMetricText(m.id, it) }
+            }
+        }
     }
 }
 
-/** Five tap targets; tapping the chosen one again clears it. */
 @Composable
-private fun RatingRow(label: String, value: Int?, words: List<String>, onSet: (Int?) -> Unit) {
+private fun MetricLabel(label: String, shown: String?) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        shown?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+    }
+}
+
+/** A tap target per step; tapping the chosen one again clears it. */
+@Composable
+private fun RatingRow(m: DailyMetrics.Def, value: Int?, onSet: (Int?) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(Ratings.word(words, value) ?: "—", style = MaterialTheme.typography.bodyMedium)
+        MetricLabel(m.name, DailyMetrics.word(m, value?.toDouble()) ?: "—")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(if (m.scaleMax > 6) 4.dp else 8.dp)) {
+            (1..m.scaleMax).forEach { n -> StepButton("$n", n == value, mono = true) { onSet(if (n == value) null else n) } }
         }
+    }
+}
+
+@Composable
+private fun RowScope.StepButton(label: String, selected: Boolean, mono: Boolean = false, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.weight(1f).height(44.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(label, fontFamily = if (mono) FontFamily.Monospace else null, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** Yes and No; tapping the chosen one again clears it. */
+@Composable
+private fun YesNoRow(m: DailyMetrics.Def, value: Double?, onSet: (Double?) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        MetricLabel(m.name, null)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            (1..5).forEach { n ->
-                val selected = n == value
-                Surface(
-                    onClick = { onSet(if (selected) null else n) },
-                    modifier = Modifier.weight(1f).height(44.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                    border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("$n", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
+            StepButton("Yes", value == 1.0) { onSet(if (value == 1.0) null else 1.0) }
+            StepButton("No", value == 0.0) { onSet(if (value == 0.0) null else 0.0) }
         }
+    }
+}
+
+@Composable
+private fun NumberMetricRow(date: LocalDate, m: DailyMetrics.Def, value: Double?, onSet: (Double?) -> Unit) {
+    // Keyed by date only, like weight: the saved value echoes back on every keystroke and mustn't fight typing.
+    var text by remember(date, m.id) { mutableStateOf(value?.let(DailyMetrics::number) ?: "") }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(m.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(
+            text, { text = it; onSet(it.replace(',', '.').toDoubleOrNull()) },
+            Modifier.width(140.dp), singleLine = true, placeholder = { Text("—") },
+            suffix = m.unit?.takeIf { it.isNotBlank() }?.let { u -> { Text(u) } },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        )
+    }
+}
+
+@Composable
+private fun TextMetricRow(date: LocalDate, m: DailyMetrics.Def, value: String?, onSet: (String) -> Unit) {
+    var text by remember(date, m.id) { mutableStateOf(value ?: "") }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        MetricLabel(m.name, null)
+        OutlinedTextField(
+            text, { if (it.length <= DailyMetrics.TEXT_MAX) { text = it; onSet(it) } },
+            Modifier.fillMaxWidth(), minLines = 2, maxLines = 6,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+        )
     }
 }
