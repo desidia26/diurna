@@ -13,8 +13,10 @@
                 https://store.google.com/product/pixel_10a_specs
 
   Density bucket is 420dpi (same as built-in pixel_9). Skin reuses pixel_9.
-  CI runs one of these (not a matrix): the displays are identical, so a second
-  job would roughly double emulator time with no layout difference.
+  CI uses the built-in pixel_9 profile (same 1080x2424 at 420dpi). GitHub
+  Actions runners ship an older avdmanager that does not reliably load custom
+  ~/.android/devices.xml, so these pixel_11 / pixel_10a ids are for local use.
+  A matrix of both would roughly double emulator time with no layout difference.
 -->
 <d:devices xmlns:d="http://schemas.android.com/sdk/devices/8">
 <d:device>

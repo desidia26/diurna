@@ -1,6 +1,8 @@
 # Unit tests and device tests on every pull request and every push to main.
 # Device tests run on an emulator only (see AGENTS.md); the runner never has a phone attached.
-# Hardware profile: custom pixel_11 from .github/avd/devices.xml (Pixel 10a is display-identical).
+# Hardware profile: built-in pixel_9 (1080x2424 @ 420dpi), matching Pixel 11 and Pixel 10a displays.
+# Custom pixel_11/pixel_10a defs live in .github/avd/devices.xml for local use; CI avdmanager
+# on Actions runners does not reliably load custom ~/.android/devices.xml.
 name: Tests
 
 on:
@@ -40,12 +42,12 @@ jobs:
           path: app/build/reports/tests/testDebugUnitTest/
 
   device:
-    name: Device tests (emulator, Pixel 11)
+    name: Device tests (emulator, Pixel 9 ≈ 11/10a)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       API_LEVEL: 33
-      AVD_PROFILE: pixel_11
+      AVD_PROFILE: pixel_9
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,10 +62,6 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Install Pixel hardware profiles
-        run: |
-          mkdir -p ~/.android
-          cp .github/avd/devices.xml ~/.android/devices.xml
       - name: AVD cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: avd-cache
