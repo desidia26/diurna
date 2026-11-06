@@ -1,6 +1,6 @@
 # Diurna
 
-> An Android app for getting up on time, getting outside and keeping an honest record of each day. Open source under [MIT](LICENSE); the work list is [BACKLOG.md](BACKLOG.md).
+> An Android app for getting up on time, getting outside and keeping an honest record of each day. Open source under [MIT](LICENSE); bugs and plans are [GitHub issues](https://github.com/desidia26/diurna/issues).
 
 *Diurna* is Latin for "daily things": Rome's *Acta Diurna* were public notices of each day's events. The app was called Daybook at first. The code package is now `app.diurna`, but the app id stays `app.daybook` (changing it would make Android treat it as a different app, with none of the old one's data), as do the database and backup file names.
 
@@ -137,6 +137,6 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 
 **Wireless debugging** works with the scripts too: pair once in Developer options → Wireless debugging, and `adb` reconnects whenever it's turned on. Keep it on trusted networks only, and off when not in use.
 
-## Backlog
+## Issues
 
-Bugs, features and tech debt are tracked in [BACKLOG.md](BACKLOG.md).
+Bugs, features and tech debt are [GitHub issues](https://github.com/desidia26/diurna/issues), labelled `bug`, `enhancement` or `tech-debt` and P1 (next), P2 (soon) or P3 (someday).
