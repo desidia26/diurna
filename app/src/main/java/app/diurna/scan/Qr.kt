@@ -73,7 +73,7 @@ fun CodeScanner(formats: IntArray, onCode: (String, Int) -> Unit, modifier: Modi
         )
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
-            try {
+            val started = tryStartCamera {
                 val provider = future.get()
                 val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
                 val analysis = ImageAnalysis.Builder()
@@ -92,13 +92,16 @@ fun CodeScanner(formats: IntArray, onCode: (String, Int) -> Unit, modifier: Modi
                         .addOnCompleteListener { proxy.close() }
                 }
                 provider.unbindAll()
-                camera = provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                failed = false
-            } catch (e: Exception) {
-                Log.w("Diurna", "camera didn't start", e)
-                camera = null
-                failed = true
+                provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
             }
+            started.fold(
+                onSuccess = { cam -> camera = cam; failed = false },
+                onFailure = { e ->
+                    Log.w("Diurna", "camera didn't start", e)
+                    camera = null
+                    failed = true
+                },
+            )
         }, ContextCompat.getMainExecutor(context))
 
         onDispose {

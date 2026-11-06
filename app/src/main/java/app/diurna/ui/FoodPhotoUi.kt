@@ -101,7 +101,7 @@ fun rememberPhotoAttacher(host: PhotoImportHost, onAttached: (String) -> Unit): 
         scope.launch {
             val name = block()
             busy = false
-            if (name != null) onAttached(name) else error = "Couldn't read that photo"
+            if (name != null) onAttached(name) else error = PhotoAiReads.COULDNT_READ_PHOTO
         }
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
