@@ -21,6 +21,15 @@ class OcrLayoutTest {
         assertTrue(ocrProductCodes(listOf("036000","291452")).isEmpty())
         assertTrue(ocrProductCodes(listOf("11110360002914521111")).isEmpty())
     }
+    @Test fun wholeCodeDoesNotRequireGeometryButFragmentsDo() {
+        assertEquals(listOf(ProductCode("4006381333931")),ocrProductCodesFromLayout(listOf(OcrLine("4006381333931",0,0,0,0))))
+        assertTrue(ocrProductCodesFromLayout(listOf(OcrLine("036000",0,0,0,0),OcrLine("291452",0,0,0,0))).isEmpty())
+    }
+    @Test fun shortCodesAndDistantFragmentsRemainConservative() {
+        assertTrue(ocrProductCodes(listOf("04252614")).contains(ProductCode("04252614", true)))
+        assertTrue(ocrProductCodes(listOf("96385074")).contains(ProductCode("96385074")))
+        assertTrue(ocrProductCodesFromLayout(listOf(line("036000",0),line("291452",1000))).isEmpty())
+    }
     @Test fun boundsInputAndDeduplicatesLeadingZeroEquivalentCodes() {
         assertEquals(1,ocrProductCodesFromLayout(listOf(line("036000291452",0),line("0036000291452",0,60))).size)
         assertTrue(ocrProductCodesFromLayout(emptyList()).isEmpty())

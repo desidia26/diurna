@@ -1,5 +1,6 @@
 package app.diurna.scan
 
+import app.diurna.domain.OcrLine
 import app.diurna.domain.ProductCode
 import app.diurna.domain.ScanDiagnostics
 import app.diurna.domain.ScanOutcome
@@ -79,18 +80,34 @@ suspend fun readBarcodePixels(pixels: ScanPixels, diagnostics: ScanDiagnostics =
             .setBarcodeFormats(PRODUCT_FORMATS.first(), *PRODUCT_FORMATS.drop(1).toIntArray()).build())
         val text = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         try {
-            decodeProductImage(pixels, { image, _ ->
-                image.processBitmap { scanner.process(it) }.mapNotNull { barcode ->
+            decodeProductImage(pixels, { image, variant ->
+                val detected = image.processBitmap { scanner.process(it) }
+                if (diagnostics.enabled) diagnostics.onEvent("still_detector", "summary", mapOf("variant" to variant.name.lowercase(),
+                    "raw_candidates" to detected.size.toString(), "accepted_candidates" to detected.count { code ->
+                        code.rawValue?.let { ProductCode(it, code.format == Barcode.FORMAT_UPC_E).isValid() } == true
+                    }.toString()))
+                detected.mapNotNull { barcode ->
                     barcode.rawValue?.let { ProductCode(it, barcode.format == Barcode.FORMAT_UPC_E) }
                 }
-            }, { image ->
+            }, { emptyList() }, diagnostics, recognizeLayout = { image ->
                 try {
-                    image.processBitmap { text.process(it) }.textBlocks.flatMap { block -> block.lines.map { it.text } }
+                    val lines = image.processBitmap { text.process(it) }.textBlocks.flatMap { block -> block.lines }
+                    if (diagnostics.enabled) {
+                    val numeric = lines.take(64).flatMap { Regex("[0-9][0-9 \\t-]*[0-9]").findAll(it.text.take(256)).map { m -> m.value }.toList() }
+                    diagnostics.onEvent("ocr_text", "summary", mapOf("lines" to lines.size.toString(),
+                        "numeric_runs" to numeric.size.toString(), "rejected_runs" to numeric.count {
+                            app.diurna.domain.ocrProductCodes(listOf(it)).isEmpty()
+                        }.toString()))
+                    }
+                    lines.take(64).map { line ->
+                        val box = line.boundingBox
+                        OcrLine(line.text.take(256),box?.left ?: 0,box?.top ?: 0,box?.right ?: 0,box?.bottom ?: 0)
+                    }
                 } catch (e: Exception) {
                     if (e.isTextModelNotReady()) throw TextRecognitionNotReady()
                     throw e
                 }
-            }, diagnostics)
+            })
         } finally {
             scanner.close()
             text.close()

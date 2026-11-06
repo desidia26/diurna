@@ -26,6 +26,7 @@ enum class ScanVariant { ORIGINAL, CROP, ROTATE, CONTRAST, THRESHOLD, SHARPEN }
 
 /** Scanner never owns debug storage: an opt-in recorder may copy the file during this callback. */
 interface ScanDiagnostics {
+    fun onResolved(resolution: ScanResolution) {}
     fun onEvent(name: String, outcome: String, details: Map<String, String> = emptyMap(), latencyMs: Long? = null) {}
     val enabled: Boolean get() = false
     fun onFailedVariant(pixels: ScanPixels) {}
@@ -63,12 +64,16 @@ suspend fun decodeProductImage(
     decode: suspend (ScanPixels, ScanVariant) -> List<ProductCode>,
     recognizeText: suspend (ScanPixels) -> List<String>,
     diagnostics: ScanDiagnostics = ScanDiagnostics.NONE,
+    recognizeLayout: (suspend (ScanPixels) -> List<OcrLine>)? = null,
 ): ScanOutcome {
     for (variant in ScanVariant.entries) {
         val started = if (diagnostics.enabled) System.nanoTime() else 0L
         val codes = try {
             image.variant(variant).let { pixels ->
-                decode(pixels, variant).validDistinct().also {
+                decode(pixels, variant).also { raw ->
+                    if (diagnostics.enabled) diagnostics.onEvent("decode_counts", "summary", mapOf("variant" to variant.name.lowercase(),
+                        "raw_candidates" to raw.size.toString(), "accepted_candidates" to raw.count { it.isValid() }.toString()))
+                }.validDistinct().also {
                     if (it.isEmpty() && variant == ScanVariant.SHARPEN && diagnostics.enabled) diagnostics.onFailedVariant(pixels)
                 }
             }.also {
@@ -88,7 +93,7 @@ suspend fun decodeProductImage(
     val ocrStart = if (diagnostics.enabled) System.nanoTime() else 0L
     diagnostics.onEvent("ocr", "start")
     val codes = try {
-        ocrProductCodes(recognizeText(image)).also { diagnostics.onEvent("ocr", "ready", mapOf("candidates" to it.size.toString()), if (diagnostics.enabled) (System.nanoTime() - ocrStart) / 1_000_000 else null) }
+        (if (recognizeLayout != null) ocrProductCodesFromLayout(recognizeLayout(image)) else ocrProductCodes(recognizeText(image))).also { diagnostics.onEvent("ocr", "ready", mapOf("candidates" to it.size.toString()), if (diagnostics.enabled) (System.nanoTime() - ocrStart) / 1_000_000 else null) }
     } catch (e: CancellationException) {
         throw e
     } catch (e: TextRecognitionNotReady) {

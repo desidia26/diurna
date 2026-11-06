@@ -46,6 +46,12 @@ class LiveScanSessionTest {
             assertEquals(1,pool.invokeAll(List(32) { java.util.concurrent.Callable { s.complete(ScanOutcome.Unreadable) } }).count { it.get()!=null })
         } finally { pool.shutdown() }
     }
+    @Test fun candidateLimitDoesNotEvictRetainedLiveRead() {
+        val s = LiveScanSession(); s.observe(listOf(a)); s.beginCapture()
+        val result = s.complete(ScanOutcome.Confirm(listOf(b)))!!
+        assertEquals("combined_confirmation", result.source)
+        assertTrue((result.outcome as ScanOutcome.Confirm).codes.contains(a))
+    }
     @Test fun lateDetectionsCannotChangeCapturedCandidateSnapshot() {
         val s = LiveScanSession(); s.observe(listOf(a)); s.beginCapture(); assertFalse(s.observe(listOf(b)))
         assertEquals(ScanOutcome.Confirm(listOf(a)),s.complete(ScanOutcome.Unreadable)!!.outcome)
