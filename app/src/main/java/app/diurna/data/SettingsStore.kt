@@ -62,6 +62,10 @@ class SettingsStore(private val context: Context) : StepStateStore {
         }
     }
 
+    private val svelteWeekKey = booleanPreferencesKey("svelte_week")
+    val svelteWeek: Flow<Boolean> = context.dataStore.data.map { it[svelteWeekKey] ?: false }.distinctUntilChanged()
+    suspend fun setSvelteWeek(enabled: Boolean) { context.dataStore.edit { it[svelteWeekKey] = enabled } }
+
     // ---- Cardio ----
     // Off by default, so people who only lift never see cardio exercises in suggestions or Library.
     private val cardioKey = booleanPreferencesKey("cardio_enabled")

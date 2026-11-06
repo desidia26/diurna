@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(showDayRequests) { if (showDayRequests > 0) tab = Tab.Day }
                 // An exercise opened from Day's menu goes back to Day, not to the Metrics list.
                 var backToDay by rememberSaveable { mutableStateOf(false) }
+                val svelteWeek by c.settings.svelteWeek.collectAsStateWithLifecycle(false)
                 val tracked by metricsVm.tracked.collectAsStateWithLifecycle()
                 Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
@@ -136,7 +137,8 @@ class MainActivity : ComponentActivity() {
                                 backToDay = true
                                 tab = Tab.Metrics
                             }
-                            Tab.Week -> WeekScreen(weekVm, inner) { weekVm.goTo(it); tab = Tab.Day }
+                            Tab.Week -> if (svelteWeek) app.diurna.ui.web.SvelteWeekScreen(weekVm, inner) { weekVm.goTo(it); tab = Tab.Day }
+                                else WeekScreen(weekVm, inner) { weekVm.goTo(it); tab = Tab.Day }
                             Tab.Metrics -> MetricsScreen(metricsVm, inner) {
                                 metricsVm.closeExercise()
                                 if (backToDay) { backToDay = false; tab = Tab.Day }

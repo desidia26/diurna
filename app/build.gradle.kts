@@ -90,6 +90,7 @@ ksp {
 }
 
 dependencies {
+    implementation("androidx.webkit:webkit:1.14.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -184,3 +185,26 @@ afterEvaluate {
         }
     }
 }
+
+// Bundled offline; missing Node/npm fails rather than shipping an empty preview.
+val webInstall = tasks.register<Exec>("webInstall") {
+    workingDir(rootProject.file("web"))
+    inputs.files(rootProject.file("web/package.json"), rootProject.file("web/package-lock.json"))
+    outputs.dir(rootProject.file("web/node_modules"))
+    commandLine("npm", "ci", "--ignore-scripts")
+}
+abstract class BuildWeekWebTask : Exec() {
+    @get:OutputDirectory abstract val outputDirectory: DirectoryProperty
+}
+val buildWeekWeb = tasks.register<BuildWeekWebTask>("buildWeekWeb") {
+    dependsOn(webInstall)
+    workingDir(rootProject.file("web"))
+    inputs.dir(rootProject.file("web/src"))
+    inputs.files(rootProject.file("web/index.html"), rootProject.file("web/vite.config.ts"), rootProject.file("web/tsconfig.json"), rootProject.file("web/package.json"), rootProject.file("web/package-lock.json"))
+    outputDirectory.set(layout.buildDirectory.dir("generated/webAssets"))
+    commandLine("npm", "run", "build")
+}
+androidComponents.onVariants { variant ->
+    variant.sources.assets?.addGeneratedSourceDirectory(buildWeekWeb) { it.outputDirectory }
+}
+tasks.named("preBuild") { dependsOn(buildWeekWeb) }

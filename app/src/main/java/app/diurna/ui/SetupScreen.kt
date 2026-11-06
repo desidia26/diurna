@@ -106,6 +106,22 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item {
+            val enabled by context.container.settings.svelteWeek.collectAsStateWithLifecycle(false)
+            val scope = rememberCoroutineScope()
+            SectionCard("Experimental Week client") {
+                Row {
+                    Text("Svelte Week (read only)", Modifier.weight(1f))
+                    androidx.compose.material3.Switch(checked = enabled, onCheckedChange = { value ->
+                        scope.launch {
+                            context.container.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.SETUP, "web.toggle"))
+                            context.container.settings.setSvelteWeek(value)
+                        }
+                    })
+                }
+                Text("Offline preview. Load failures use native Week automatically.")
+            }
+        }
         item { Text("Setup", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
         item {
             SectionCard("Alarm status") {
