@@ -80,7 +80,7 @@ A synchronized capture/completion gate and a separate terminal lookup gate preve
 `scan.image_outcome.*` now describes ONLY the saved-image pipeline. `scan.outcome.*` is its resolved
 result, with `source=live_confirmation|combined_confirmation|saved_photo|none`. Thus an unreadable
 photo can correctly precede a successful confirmation fallback. `scan.decode_counts.summary`
-reports parsed/accepted decoder candidates by variant; `scan.still_detector.summary` counts all ML Kit detections before null-value filtering; sampled `scan.live_counts.summary` does likewise.
+reports parsed/accepted decoder candidates by variant (accepted counts are before canonical deduplication); `scan.still_detector.summary` counts all ML Kit detections before null-value filtering; sampled `scan.live_counts.summary` does likewise.
 `scan.ocr_text.summary` reports detected lines, numeric runs and individually rejected runs;
 `scan.ocr.ready` reports accepted codes after spatial grouping. Rejected runs can participate in a
 valid aligned-fragment group, so these counts are not interchangeable. No raw OCR label text is

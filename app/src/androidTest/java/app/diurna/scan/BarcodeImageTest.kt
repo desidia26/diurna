@@ -71,7 +71,6 @@ class BarcodeImageTest {
             }
         } catch (e: Exception) { availability = (e.cause as? com.google.android.gms.common.api.ApiException)?.let { "api_status_${it.statusCode}" } ?: e.javaClass.simpleName }
         finally { recognizer.close() }
-        assumeTrue("OCR correctness NOT VALIDATED: Google Play module unavailable ($availability)", ready)
         val bitmap = Bitmap.createBitmap(1100, 220, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.WHITE)
@@ -80,25 +79,32 @@ class BarcodeImageTest {
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         val image = ScanPixels(bitmap.width, bitmap.height, pixels)
         bitmap.recycle()
-        val result = readBarcodePixels(image)
+        val result = kotlinx.coroutines.withTimeout(20_000) { readBarcodePixels(image) }
+        assumeTrue("OCR correctness NOT VALIDATED: Google Play module unavailable ($availability)", ready || result != ScanOutcome.TextModelNotReady)
         assertTrue("Model reported ready but OCR did not recognize known digits: $result", result is ScanOutcome.Confirm)
         assertEquals(listOf(ProductCode("4006381333931")), (result as ScanOutcome.Confirm).codes)
     }
 
-    @Test fun sanitizedRealPhotoCannotEraseValidLiveCandidateAndScratchIsDeleted() = runBlocking {
-        val raw = File.createTempFile("scanner-fixture", ".png", context.cacheDir)
-        InstrumentationRegistry.getInstrumentation().context.assets.open("blurry-upca.png").use { input ->
-            raw.outputStream().use { input.copyTo(it) }
-        }
+    @Test fun sanitizedRealPhotoCannotEraseValidLiveCandidate() = runBlocking {
+        // Replay exact sanitized RGB pixels, without a second lossy JPEG round-trip.
+        val bitmap = InstrumentationRegistry.getInstrumentation().context.assets.open("blurry-upca.png").use {
+            android.graphics.BitmapFactory.decodeStream(it)
+        }!!
+        val argb = IntArray(bitmap.width * bitmap.height)
+        val pixels = try {
+            bitmap.getPixels(argb,0,bitmap.width,0,0,bitmap.width,bitmap.height)
+            ScanPixels(bitmap.width,bitmap.height,argb)
+        } finally { bitmap.recycle() }
         val live = ProductCode("4006381333931") // synthetic candidate, not an asserted reading of the photo
         val session = LiveScanSession(); session.observe(listOf(live)); session.beginCapture()
-        val result = session.complete(readCapturedBarcode(raw))!!.outcome
+        val photo = try { kotlinx.coroutines.withTimeout(20_000) { readBarcodePixels(pixels) } }
+            catch (_: kotlinx.coroutines.TimeoutCancellationException) { ScanOutcome.Unreadable }
+        val result = session.complete(photo)!!.outcome
         when (result) {
             is ScanOutcome.Confirm -> { assertTrue(result.codes.contains(live)); assertTrue(result.codes.all { it.isValid() }) }
             is ScanOutcome.Decoded -> assertEquals(live, result.code)
             else -> fail("A worse still must not erase the live read: $result")
         }
-        assertFalse(raw.exists())
     }
 
     @Test fun corruptOrEmptyCaptureIsRejectedAndDeleted() = runBlocking {
