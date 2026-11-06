@@ -63,6 +63,7 @@ class AlarmActivity : ComponentActivity() {
                 val current = ring ?: return@DiurnaTheme
                 var stopping by remember { mutableStateOf(false) }
 
+                app.diurna.debug.DebugHost(c, app.diurna.debug.Screen.ALARM) {
                 AlarmScreen(
                     test = current.test,
                     hasCamera = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
@@ -81,6 +82,7 @@ class AlarmActivity : ComponentActivity() {
                     },
                     onStopTest = { stop() },
                 )
+                }
             }
         }
     }
