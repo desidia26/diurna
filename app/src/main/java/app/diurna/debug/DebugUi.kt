@@ -75,7 +75,7 @@ fun DebugHost(c: AppContainer, screen: Screen, content: @Composable () -> Unit) 
             modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding(),
             onClick = {
                 if (keyguard.isKeyguardLocked && activity != null) {
-                    activity.requestDismissKeyguard(object : KeyguardManager.KeyguardDismissCallback() {
+                    keyguard.requestDismissKeyguard(activity, object : KeyguardManager.KeyguardDismissCallback() {
                         override fun onDismissSucceeded() { if (!keyguard.isDeviceLocked) open = true }
                     })
                 } else if (!keyguard.isDeviceLocked) open = true
