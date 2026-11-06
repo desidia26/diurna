@@ -37,3 +37,20 @@ No payload replay, screenshots, HTTP bodies or deterministic state reconstructio
 No schema/package/signing/prompt/CI changes. No new network calls or automatic sharing. Storage
 and queue are bounded, filenames generated, metadata allowlisted, exception messages omitted.
 Attachments can contain private information and must be explicitly reviewed before export.
+
+## Reviewed failure reports
+
+Setup exposes independent debug and typed-text toggles. A top-level flag button covers all five
+tabs, Setup-hosted Library pages and AlarmActivity. While an existing modal dialog covers the
+root, close it to reach the flag button; those individual modal windows are not instrumented yet.
+The report screen previews the JSONL and each image/barcode, allows excluding the log or individual
+attachments, bounds the note, then invokes the system share chooser with a read-only FileProvider
+URI. Review windows are secure, require an unlocked device and cannot bypass the porch alarm.
+Generated ZIPs live in a dedicated cache directory, at most one per report flow, cleared on disabling
+and next process startup. No database, settings backup or key material is included. Reports are
+not a replay format; filesystem/queue eviction can leave incomplete history and missing attachments.
+
+Tests cover recorder redaction/retention/size/enable transitions and archive contents/path guarding,
+plus the independent toggle behavior in a CI-only emulator Compose test. End-to-end share chooser,
+keyguard transitions during an actual ringing alarm, and arbitrary OEM camera behavior remain
+manual/emulator integration gaps.

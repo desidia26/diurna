@@ -67,6 +67,7 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Export and import: Setup → Backups writes one zip (manifest, a consistent database copy, settings with the porch code, meal photos; never API keys or AI provider settings) wherever the person picks, and imports one on a fresh install. Imports are checked entry by entry (known names only, size caps, `integrity_check`, schema no newer than the app), staged, backed up against, then swapped in at the next start before anything opens the database; older exports migrate as usual | `domain/ExportArchive.kt`, `data/DataTransfer.kt` |
 | Shared one-line summaries for the Day screen and lock screen | `domain/DayText.kt` |
 | What's new: user-facing notes, one file per change in `assets/changelog` (`yyyy-MM-dd-short-name.md`: title line, then body), so parallel PRs never conflict and there's nothing to number. Shown once as a dialog on the first launcher open after an update (not from the check-in notification or the alarm); a fresh install starts caught up. Settings keep the set of entry names already shown, so an entry that merges late still appears; installs from when entries were numbered carry over. Setup lists recent entries. CI (`changelog.yml`) asks app-changing PRs for an entry or the `no-changelog` label | `domain/Changelog.kt`, `data/ChangelogFiles.kt`, `ui/WhatsNew.kt` |
+| Debug reports: opt-in Redux-style action journal with a no-op reducer; independent typed-text consent, private 20 MB / 7-day retention, reviewed ZIPs with captured images/barcodes, manual sharing only | `debug/`, [API and coverage](docs/debug-actions.md) |
 | UI: Compose, five tabs (Day, Week, Metrics, Routine, Setup), one ViewModel per screen | `ui/` |
 
 Key data rules:
@@ -140,3 +141,5 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 ## Backlog
 
 Bugs, features and tech debt are tracked in [BACKLOG.md](BACKLOG.md).
+
+Debug reports are opt-in under Setup. Review captured images and logs before using Flag failure → Share ZIP. See [debug action API](docs/debug-actions.md).

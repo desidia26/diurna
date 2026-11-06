@@ -106,6 +106,7 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item { app.diurna.debug.DebugCard(context.container.debug) }
         item { Text("Setup", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
         item {
             SectionCard("Alarm status") {
