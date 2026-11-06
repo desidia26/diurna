@@ -3,11 +3,7 @@ package app.diurna.ui
 import android.net.Uri
 import app.diurna.AppContainer
 import app.diurna.ai.CardioReading
-import app.diurna.ai.EstimateFailed
-import app.diurna.ai.EstimateRetryable
-import app.diurna.ai.NoApiKey
 import app.diurna.domain.CardioPiece
-import kotlinx.coroutines.CancellationException
 import app.diurna.data.DayEntity
 import app.diurna.data.FoodEntryEntity
 import app.diurna.data.LastTime
@@ -146,46 +142,12 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoImport
      * needed for the call, so it's deleted straight after reading. Nothing is saved here.
      */
     suspend fun readCardioPhoto(name: String): CardioPhotoResult = withContext(Dispatchers.IO) {
-        if (!c.supportsImages()) {
-            c.foodPhotos.delete(name)
-            return@withContext CardioPhotoResult.Problem(app.diurna.ai.VisionSupport.PHOTO_FEATURES_DISABLED)
-        }
-        val bytes = c.foodPhotos.read(name)
-        c.foodPhotos.delete(name)
-        if (bytes == null) return@withContext CardioPhotoResult.Problem("Couldn't read that photo")
-        try {
-            CardioPhotoResult.Read(c.cardioReader.read(bytes))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: NoApiKey) {
-            CardioPhotoResult.Problem(e.message ?: "Add an API key in Setup to read photos")
-        } catch (e: EstimateFailed) {
-            CardioPhotoResult.Problem(e.message ?: "Couldn't read the screen")
-        } catch (e: EstimateRetryable) {
-            CardioPhotoResult.Problem("Couldn't reach the AI. Check your connection and try again.")
-        } catch (e: Exception) {
-            CardioPhotoResult.Problem("Couldn't read the screen (${e.javaClass.simpleName})")
-        }
+        PhotoAiReads.readCardioPhoto(name, c.foodPhotos, c.cardioReader, c.supportsImages())
     }
 
     /** Reads a Nutrition Facts label into meal fields for confirm-before-save. Temp photo deleted after. */
     suspend fun readLabelPhoto(name: String): LabelPhotoResult = withContext(Dispatchers.IO) {
-        val bytes = c.foodPhotos.read(name)
-        c.foodPhotos.delete(name)
-        if (bytes == null) return@withContext LabelPhotoResult.Problem("Couldn't read that photo")
-        try {
-            LabelPhotoResult.Read(c.labelReader.read(bytes))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: NoApiKey) {
-            LabelPhotoResult.Problem(e.message ?: "Add an API key in Setup to read labels")
-        } catch (e: EstimateFailed) {
-            LabelPhotoResult.Problem(e.message ?: "Couldn't read the label")
-        } catch (e: EstimateRetryable) {
-            LabelPhotoResult.Problem("Couldn't reach the AI. Check your connection and try again.")
-        } catch (e: Exception) {
-            LabelPhotoResult.Problem("Couldn't read the label (${e.javaClass.simpleName})")
-        }
+        PhotoAiReads.readLabelPhoto(name, c.foodPhotos, c.labelReader)
     }
     fun deleteSet(setId: Long, loggedId: Long) = io { c.days.deleteSet(setId, loggedId) }
     fun removeWorkout() = io { c.days.removeWorkout(date) }
