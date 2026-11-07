@@ -1,6 +1,9 @@
 package app.diurna.data.fdc
 
 import app.diurna.domain.AminoAcids
+import app.diurna.domain.MicronutrientProfile
+import app.diurna.domain.NutrientId
+import app.diurna.domain.NutrientRegistry
 import app.diurna.domain.RecipeMath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -111,6 +114,21 @@ class FdcClient(
         const val N_TRANS = 1257
         const val N_CHOL = 1253
 
+        // Micronutrients (canonical units). IU / non-DFE folate ids are handled in parseMicronutrients.
+        const val N_SODIUM = 1093
+        const val N_POTASSIUM = 1092
+        const val N_CALCIUM = 1087
+        const val N_IRON = 1089
+        const val N_MAGNESIUM = 1090
+        const val N_ZINC = 1095
+        const val N_VITAMIN_A_RAE = 1106
+        const val N_VITAMIN_A_IU = 1104
+        const val N_VITAMIN_C = 1162
+        const val N_VITAMIN_D_UG = 1114
+        const val N_VITAMIN_D_IU = 1110
+        const val N_VITAMIN_B12 = 1178
+        const val N_FOLATE_DFE = 1177
+
         fun parseAminoProfile(food: JSONObject): AminoProfile? {
             val nutrients = food.optJSONArray("foodNutrients") ?: return null
             var his: Int? = null; var ile: Int? = null; var leu: Int? = null
@@ -187,6 +205,50 @@ class FdcClient(
                 ),
                 kcalPer100 = kcal.coerceAtLeast(0),
             )
+        }
+
+
+        /**
+         * Per-100g micronutrients from a food detail/search JSON. Null when none of the first-wave
+         * nutrients are present with a usable amount. Missing ≠ zero; vitamin A IU alone never
+         * becomes RAE; vitamin D IU converts with [NutrientRegistry.VITAMIN_D_IU_TO_UG] only when
+         * µg is absent; folate without DFE is ignored.
+         */
+        fun parseMicronutrients(food: JSONObject): MicronutrientProfile? {
+            val nutrients = food.optJSONArray("foodNutrients") ?: return null
+            val byId = mutableMapOf<Int, Double>()
+            for (i in 0 until nutrients.length()) {
+                val n = nutrients.getJSONObject(i)
+                val id = nutrientId(n) ?: continue
+                val amount = n.optDouble("amount", Double.NaN)
+                val sanitized = NutrientRegistry.sanitize(amount) ?: continue
+                byId[id] = sanitized
+            }
+            if (byId.isEmpty()) return null
+            val pairs = ArrayList<Pair<NutrientId, Double>>()
+            fun take(id: NutrientId, fdcId: Int) {
+                val v = byId[fdcId] ?: return
+                pairs += id to v
+            }
+            take(NutrientId.SODIUM, N_SODIUM)
+            take(NutrientId.POTASSIUM, N_POTASSIUM)
+            take(NutrientId.CALCIUM, N_CALCIUM)
+            take(NutrientId.IRON, N_IRON)
+            take(NutrientId.MAGNESIUM, N_MAGNESIUM)
+            take(NutrientId.ZINC, N_ZINC)
+            take(NutrientId.VITAMIN_A_RAE, N_VITAMIN_A_RAE) // never N_VITAMIN_A_IU
+            take(NutrientId.VITAMIN_C, N_VITAMIN_C)
+            when {
+                byId[N_VITAMIN_D_UG] != null -> pairs += NutrientId.VITAMIN_D to byId.getValue(N_VITAMIN_D_UG)
+                byId[N_VITAMIN_D_IU] != null -> {
+                    val ug = byId.getValue(N_VITAMIN_D_IU) * NutrientRegistry.VITAMIN_D_IU_TO_UG
+                    NutrientRegistry.sanitize(ug)?.let { pairs += NutrientId.VITAMIN_D to it }
+                }
+            }
+            take(NutrientId.VITAMIN_B12, N_VITAMIN_B12)
+            take(NutrientId.FOLATE_DFE, N_FOLATE_DFE)
+            val profile = MicronutrientProfile.fromPairs(pairs)
+            return profile.takeIf { it.hasAny }
         }
 
         private fun nutrientId(n: JSONObject): Int? {

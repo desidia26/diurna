@@ -51,7 +51,7 @@ data class IngredientDraft(
     val amount: Double = 0.0,
     val unit: IngredientUnit = IngredientUnit.G,
     val densityId: String? = null,
-    /** Session-only g/ml from USDA/AI lookup so amount edits can recompute grams. */
+    /** Persisted g/ml from USDA/AI/builtin so amount edits can recompute grams. */
     val gPerMl: Double? = null,
     val gramsPerEach: Double? = null,
     val grams: Double? = null,
@@ -71,6 +71,7 @@ data class IngredientDraft(
         grams = grams,
         densityId = densityId,
         gramsPerEach = gramsPerEach,
+        gPerMl = gPerMl,
         proteinG = nutrition.proteinG,
         carbsG = nutrition.carbsG,
         fatG = nutrition.fatG,
@@ -112,7 +113,7 @@ fun RecipeIngredientEntity.toDraft() = IngredientDraft(
     amount = amount,
     unit = IngredientUnit.of(unit),
     densityId = densityId,
-    gPerMl = IngredientDensities.byId(densityId)?.gPerMl,
+    gPerMl = gPerMl ?: IngredientDensities.byId(densityId)?.gPerMl,
     gramsPerEach = gramsPerEach,
     grams = grams,
     nutrition = RecipeMath.IngredientNutrition(
@@ -172,27 +173,7 @@ fun RecipeDialog(
             val filled = filler(entities)
             filled.forEachIndexed { i, ent ->
                 if (i in lines.indices) {
-                    val d = ent.toDraft()
-                    // Preserve session gPerMl for usda/ai from resolved grams when possible.
-                    val gPerMl = when {
-                        d.gPerMl != null -> d.gPerMl
-                        ent.densityId == app.diurna.domain.IngredientDensity.Source.USDA ||
-                            ent.densityId == app.diurna.domain.IngredientDensity.Source.AI -> {
-                            val u = IngredientUnit.of(ent.unit)
-                            val g = ent.grams
-                            if (g != null && ent.amount > 0) {
-                                when (u) {
-                                    IngredientUnit.ML -> g / ent.amount
-                                    IngredientUnit.CUP -> g / (ent.amount * IngredientUnits.ML_PER_CUP)
-                                    IngredientUnit.TBSP -> g / (ent.amount * IngredientUnits.ML_PER_TBSP)
-                                    IngredientUnit.TSP -> g / (ent.amount * IngredientUnits.ML_PER_TSP)
-                                    else -> null
-                                }
-                            } else null
-                        }
-                        else -> null
-                    }
-                    lines[i] = d.copy(gPerMl = gPerMl)
+                    lines[i] = ent.toDraft()
                 }
             }
         } finally {
@@ -267,7 +248,9 @@ fun RecipeDialog(
                                     color = LocalStatusColors.current.warn,
                                 )
                             }
-                            if (line.densityId == app.diurna.domain.IngredientDensity.Source.AI && line.grams != null) {
+                            val aiNutrition = line.source == "ai"
+                            val aiDensity = line.densityId == app.diurna.domain.IngredientDensity.Source.AI && line.grams != null
+                            if (aiNutrition || aiDensity) {
                                 Text("AI estimate", style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
                             }
                         }
@@ -444,13 +427,25 @@ private fun ManualIngredientDialog(
                 val fat = f.toIntOrNull() ?: 0
                 val k = kcal.toIntOrNull()
                     ?: app.diurna.domain.MacroEnergy.kcal(protein, carbs, fat).total.roundToInt()
+                val typedGEach = gEach.toDoubleOrNull()
+                val manualDensityId = when {
+                    unit == IngredientUnit.G -> app.diurna.domain.IngredientDensity.Source.MANUAL
+                    unit.needsGramsPerEach && typedGEach != null ->
+                        app.diurna.domain.IngredientDensity.Source.MANUAL
+                    else -> densityId
+                }
+                val resolvedGPerMl = when {
+                    unit.needsDensity -> IngredientDensities.byId(densityId)?.gPerMl
+                    else -> null
+                }
                 onAdd(
                     IngredientDraft(
                         name = name.trim(),
                         amount = amount,
                         unit = unit,
-                        densityId = densityId,
-                        gramsPerEach = gEach.toDoubleOrNull(),
+                        densityId = manualDensityId,
+                        gPerMl = resolvedGPerMl,
+                        gramsPerEach = typedGEach,
                         grams = grams,
                         nutrition = RecipeMath.IngredientNutrition(proteinG = protein, carbsG = carbs, fatG = fat),
                         kcal = k,

@@ -14,6 +14,12 @@ class IngredientDensityTest {
         assertEquals("all purpose flour", IngredientDensity.normalizeName("  All-Purpose Flour! "))
         assertEquals("onion chopped", IngredientDensity.normalizeName("Onion, chopped (optional)"))
         assertEquals("", IngredientDensity.normalizeName("   "))
+        assertEquals(
+            "all purpose flour",
+            IngredientDensity.normalizeName("all purpose flour* (or a mix of whole wheat and white flour)"),
+        )
+        assertEquals("salt", IngredientDensity.normalizeName("salt, to taste"))
+        assertEquals("black pepper", IngredientDensity.normalizeName("Black pepper (as needed)"))
     }
 
     @Test fun cacheKeyIncludesKind() {
