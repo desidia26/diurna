@@ -7,7 +7,7 @@ Android app (Kotlin, Jetpack Compose, Room): a porch-QR alarm, food logging with
 - `scripts/test`: unit tests, plus device tests on a running emulator (`scripts/emulator --headless` starts one)
 - `scripts/install`: debug build onto the connected device
 - `scripts/release`: tests, release build, backup, install as an update, data check, alarm check, tag
-- `scripts/new-release-key`: run once, ever: creates the release key and stores it in the GitHub environment `release`
+- `scripts/new-release-key`: run once, ever: creates the release key and stores it in the GitHub environments `release` and `release-held`
 - `scripts/backup-signing-keys`: encrypted copy of `signing/` to keep off this machine
 - `scripts/smoke <apk>`: emulator only: installs a minified build (`./gradlew assembleRelease -PsmokeTest` adds x86_64) and makes the test alarm go off, failing on a crash. Debug builds and the tests never run R8's output; run this after toolchain or keep-rule changes
 - `scripts/backup-db`, `scripts/logs`, `scripts/screenshot`, `scripts/alarm-check`, `scripts/demo-data` (emulator only: replaces app data with made-up history)

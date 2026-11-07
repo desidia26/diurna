@@ -123,7 +123,7 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 | `scripts/screenshot` | Capture the device screen to `~/Downloads` (`--last` copies the newest screenshot taken on the phone) |
 | `scripts/demo-data` | **Emulator only:** clear the app's data and fill it with 12 weeks of made-up history (or `scripts/demo-data <weeks>`), for screenshots |
 | `scripts/backup-db` | Copy the database off the device into `backups/<timestamp>/`, which git ignores |
-| `scripts/new-release-key` | **Once, ever:** create the release key in `signing/` and store it in the GitHub environment `release` for the nightly workflow (refuses if it exists) |
+| `scripts/new-release-key` | **Once, ever:** create the release key in `signing/` and store it in the GitHub environments `release` and `release-held` (the one a held night waits in) for the nightly workflow (refuses if it exists) |
 | `scripts/smoke <apk>` | **Emulator only:** install a minified build (`./gradlew assembleRelease -PsmokeTest`, which adds x86_64) and make the test alarm go off with the screen asleep, failing if the app crashes. The tests never run R8's output; this does |
 | `scripts/backup-signing-keys` | Encrypt `signing/` (both keys and their passwords) with a passphrase into `~/diurna-signing-keys-<date>.tar.gz.gpg`, and check it opens again; keep the file off this machine |
 | `scripts/alarm-check` | Show the armed alarm and permissions (`--doze` or `--reboot` to stress-test it) |
@@ -160,7 +160,7 @@ Build tooling (AGP, Gradle plugins) never reaches a phone, so its advisories don
 
 - `CLAUDE_REVIEW_KEY`: repository secret, an Anthropic API key with a spend limit, for PR reviews. Anyone who can push a branch here could read it through a workflow, so keep the limit low.
 - `CLAUDE_AUTOFIX_KEY`: a secret in an environment named `security`, with deployments limited to `main`, for the nightly's review and autofix. Pull request code can't read it.
-- An environment named `release-held` with you as required reviewer, deployments limited to `main`, and the same secrets and `RELEASE_CERT_SHA256` variable as `release`. A held night waits there for approval.
+- An environment named `release-held` with you as required reviewer, deployments limited to `main`, and the same four `RELEASE_*` secrets as `release` (`RELEASE_CERT_SHA256` is a repo variable, so it already applies). A held night waits there for approval. `scripts/new-release-key` sets up both environments, so a new key reaches both.
 
 ## Issues
 
