@@ -1,6 +1,6 @@
 # Diurna
 
-Android app (Kotlin, Jetpack Compose, Room): a porch-QR alarm, food logging with AI estimates and barcodes, workouts from a weekly routine (lifting, plus optional cardio), steps and an evening check-in. Read [README.md](README.md) for the mission, principles and architecture map, and [BACKLOG.md](BACKLOG.md) for the work list.
+Android app (Kotlin, Jetpack Compose, Room): a porch-QR alarm, food logging with AI estimates and barcodes, workouts from a weekly routine (lifting, plus optional cardio), steps and an evening check-in. Read [README.md](README.md) for the mission, principles and architecture map. The work list is GitHub issues (`gh issue list`), labelled `bug` / `enhancement` / `tech-debt` and `P1`–`P3`.
 
 ## Commands
 
@@ -35,4 +35,4 @@ Check a build by its exit code, not by filtered output.
 - Match the surrounding code's comment density and naming. Comments explain why, not what.
 - UI is dark only: grey, black, purple, white.
 - New features start with a discussion of the data shape before code, unless asked to just build.
-- When something ships, add it to BACKLOG.md's Done table, and keep README's "How it works" table current. Anything the user would notice also gets a What's new entry: a new file `app/src/main/assets/changelog/yyyy-MM-dd-short-name.md` (title line, blank line, a plain-words body), shown once after the update. Never edit or rename a shipped entry's file: its name is what installs record as seen. Changes nobody would notice get the `no-changelog` label instead; the Changelog CI check asks for one or the other.
+- When something ships, close its issue from the PR (`Closes #n`), and keep README's "How it works" table current. Follow-up work gets a new issue, not a TODO. Anything the user would notice also gets a What's new entry: a new file `app/src/main/assets/changelog/yyyy-MM-dd-short-name.md` (title line, blank line, a plain-words body), shown once after the update. Never edit or rename a shipped entry's file: its name is what installs record as seen. Changes nobody would notice get the `no-changelog` label instead; the Changelog CI check asks for one or the other.
