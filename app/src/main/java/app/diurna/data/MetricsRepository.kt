@@ -1,6 +1,7 @@
 package app.diurna.data
 
 import app.diurna.domain.Cardio
+import app.diurna.domain.DailyMetrics
 import app.diurna.domain.Metrics
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -15,6 +16,7 @@ class MetricsRepository(db: AppDatabase) {
     private val days = db.dayDao()
     private val workouts = db.workoutDao()
     private val food = db.foodDao()
+    private val dailyMetrics = db.dailyMetricDao()
 
     /** The range's days, plus the 6 before [from] so the first 7-day averages have a full window. */
     data class Snapshot(
@@ -29,6 +31,10 @@ class MetricsRepository(db: AppDatabase) {
         val macroGrams: Map<LocalDate, Metrics.DayMacroGrams> = emptyMap(),
         /** True once any food entry has ever been estimated; hides the macros card until then. */
         val hasEstimatedFood: Boolean = false,
+        /** Every check-in metric, archived ones too, in Day-screen order. */
+        val checkIn: List<DailyMetrics.Def> = emptyList(),
+        /** Check-in values over the same days as [days]. */
+        val checkInValues: List<DailyMetricValueEntity> = emptyList(),
     )
 
     data class Training(val lifting: List<Metrics.Session>, val cardio: List<Cardio.Session>)
@@ -43,12 +49,16 @@ class MetricsRepository(db: AppDatabase) {
     fun observe(range: Metrics.Range, today: LocalDate): Flow<Snapshot> =
         days.observeFirstDate().map { it?.let(LocalDate::parse) }.distinctUntilChanged().flatMapLatest { first ->
             val from = range.start(today, first)
+            val checkIn = combine(
+                dailyMetrics.observeAll(),
+                dailyMetrics.observeValuesRange(from.minusDays(6).key(), today.key()),
+            ) { defs, values -> defs.map { it.def() } to values }
             combine(
-                days.observeRange(from.minusDays(6).key(), today.key()),
+                combine(days.observeRange(from.minusDays(6).key(), today.key()), checkIn, ::Pair),
                 training,
                 food.observeMacros(from.key(), today.key()),
                 food.observeEstimatedFoodCount(),
-            ) { rows, t, macros, foodCount ->
+            ) { (rows, checkIn), t, macros, foodCount ->
                 Snapshot(
                     from, today, rows, t.lifting, t.cardio,
                     macros = macros.associate { row ->
@@ -75,6 +85,8 @@ class MetricsRepository(db: AppDatabase) {
                         )
                     },
                     hasEstimatedFood = foodCount > 0,
+                    checkIn = checkIn.first,
+                    checkInValues = checkIn.second,
                 )
             }
         }
