@@ -123,19 +123,44 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 | `scripts/screenshot` | Capture the device screen to `~/Downloads` (`--last` copies the newest screenshot taken on the phone) |
 | `scripts/demo-data` | **Emulator only:** clear the app's data and fill it with 12 weeks of made-up history (or `scripts/demo-data <weeks>`), for screenshots |
 | `scripts/backup-db` | Copy the database off the device into `backups/<timestamp>/`, which git ignores |
-| `scripts/new-release-key` | **Once, ever:** create the release key in `signing/` and store it in the GitHub environment `release` for the nightly workflow (refuses if it exists) |
+| `scripts/new-release-key` | **Once, ever:** create the release key in `signing/` and store it in the GitHub environments `release` and `release-held` (the one a held night waits in) for the nightly workflow (refuses if it exists) |
 | `scripts/smoke <apk>` | **Emulator only:** install a minified build (`./gradlew assembleRelease -PsmokeTest`, which adds x86_64) and make the test alarm go off with the screen asleep, failing if the app crashes. The tests never run R8's output; this does |
 | `scripts/backup-signing-keys` | Encrypt `signing/` (both keys and their passwords) with a passphrase into `~/diurna-signing-keys-<date>.tar.gz.gpg`, and check it opens again; keep the file off this machine |
 | `scripts/alarm-check` | Show the armed alarm and permissions (`--doze` or `--reboot` to stress-test it) |
+| `scripts/security-gate` | Scan the libraries that ship in the APK for known vulnerabilities (OSV-Scanner, today's data); fails on high or critical ones that aren't waived. See [Security](#security) |
+| `scripts/check-apk <apk>` | Compare a built APK's permissions, exported components, debug flags and cleartext hosts with `security/apk-baseline.txt` (`--write-baseline` to update it after a deliberate change) |
 | `LIVE_API=1 ./gradlew testDebugUnitTest --tests '*LiveApiErrorTest*'` | Check a real API error end to end, using a deliberately invalid key (free) |
 
 **Release builds** are shrunk with R8 (about 25 MB, versus about 80 MB for debug) and not debuggable. `versionCode` is the git commit count, so every release is newer than the last.
 
 **Device tests never run on a real phone.** Gradle uninstalls the app after them, which deletes all of Diurna's data, so `scripts/test` refuses anything but the emulator. Run `./gradlew connectedDebugAndroidTest` by hand only if you know which device it will hit.
 
-**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key. `.github/workflows/nightly.yml` runs from `main` daily at 04:00 UTC (midnight Eastern, away from morning alarms): it first runs `scripts/smoke` on the minified build in an emulator, then builds the release, checks its certificate against `RELEASE_CERT_SHA256`, its version, its CPU type (arm64 only) and its size (30 MB at most), and publishes it as `v0.N` with the new What's new entries as release notes. It only runs on `main` and is the only job given the release key.
+**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key. `.github/workflows/nightly.yml` runs from `main` daily at 04:00 UTC (midnight Eastern, away from morning alarms): it first runs `scripts/smoke` on the minified build in an emulator, then builds the release, checks its certificate against `RELEASE_CERT_SHA256`, its version, its CPU type (arm64 only) and its size (30 MB at most), and publishes it as `v0.N` with the new What's new entries as release notes. It only runs on `main` and is the only job given the release key. Before publishing it runs the security checks below. `.github/workflows/security.yml` runs the vulnerability scan, CodeQL, workflow lint and an AI review on every pull request.
 
 **Wireless debugging** works with the scripts too: pair once in Developer options → Wireless debugging, and `adb` reconnects whenever it's turned on. Keep it on trusted networks only, and off when not in use.
+
+## Security
+
+The nightly only publishes what passes these checks, and every pull request runs them too.
+
+| Check | What it looks at | On a problem |
+|---|---|---|
+| Known vulnerabilities (`scripts/security-gate`) | Every library in the APK (the release runtime classpath), against the OSV database on the day | **Blocks** on CVSS 7.0+ or high/critical. Medium and low are listed in the run summary |
+| CodeQL | The Kotlin source, with GitHub's security-extended queries | **Blocks** the nightly while a high or critical alert is open on `main` |
+| Lint (`app/lint.xml`) | Android's security checks: TLS and hostname verification, exported components, implicit intents, WebViews, world-readable files, weak randomness | **Fails** the PR. `app/lint-baseline.xml` holds older non-security findings; it should only shrink |
+| APK surface (`scripts/check-apk`) | Permissions, exported components and what guards them, debug flags, cleartext hosts | **Blocks** anything not in `security/apk-baseline.txt`; a deliberate change updates the baseline in its PR |
+| Workflow lint (zizmor) and wrapper validation | GitHub Actions workflows and `gradle-wrapper.jar` | Findings in the Security tab; a bad wrapper fails the PR |
+| AI review (Claude) | The diff: a PR's, or everything since the last release for the nightly | Advisory comment on PRs. In the nightly, a high or critical finding **holds** the release in the `release-held` environment until someone approves it |
+
+When the nightly is blocked, its autofix job gives Claude the findings. Claude may edit the code and build files, but not workflows, scripts, signing or `security/`, and has no GitHub token. The job then runs the unit tests, lint and the vulnerability scan itself, and opens a PR only if all pass; otherwise it files (or updates) an issue. Nothing ships until a person merges the fix. AI can hold a release or propose a fix; it never clears a release or merges anything.
+
+Build tooling (AGP, Gradle plugins) never reaches a phone, so its advisories don't block; Dependabot still raises them. An advisory that can't affect the app is waived in `security/osv-scanner.toml` with a reason and an `ignoreUntil` date, in a reviewed PR, and blocks again once the date passes.
+
+**Setup (once).** The AI parts stay off until these exist, and the rest works without them.
+
+- `CLAUDE_REVIEW_KEY`: repository secret, an Anthropic API key with a spend limit, for PR reviews. Anyone who can push a branch here could read it through a workflow, so keep the limit low.
+- `CLAUDE_AUTOFIX_KEY`: a secret in an environment named `security`, with deployments limited to `main`, for the nightly's review and autofix. Pull request code can't read it.
+- An environment named `release-held` with you as required reviewer, deployments limited to `main`, and the same four `RELEASE_*` secrets as `release` (`RELEASE_CERT_SHA256` is a repo variable, so it already applies). A held night waits there for approval. `scripts/new-release-key` sets up both environments, so a new key reaches both.
 
 ## Issues
 
