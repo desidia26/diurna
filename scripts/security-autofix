@@ -48,6 +48,9 @@ open_issue() { # open_issue <why>
   exit 0
 }
 
+# gh refuses to create an issue or PR with a label the repo doesn't have; fails harmlessly if it exists.
+GH_TOKEN="$gh_token" gh label create security --color B60205 --description "Security gate and autofix" >/dev/null 2>&1 || true
+
 # One fix in flight at a time: an open autofix PR means the next nightly just waits for it.
 if GH_TOKEN="$gh_token" gh pr list --state open --json headRefName --jq '.[].headRefName' | grep -q '^security/autofix-'; then
   echo "An autofix PR is already open; not starting another."

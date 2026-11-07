@@ -107,9 +107,15 @@ jobs:
       - name: Open CodeQL alerts
         id: codeql
         run: |
-          if ! alerts="$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?ref=refs/heads/main&state=open&tool_name=CodeQL&per_page=100" --paginate 2>/dev/null)"; then
-            echo "No CodeQL analysis on main yet; nothing to check." >>"$GITHUB_STEP_SUMMARY"
-            echo "high=0" >>"$GITHUB_OUTPUT"
+          if ! alerts="$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?ref=refs/heads/main&state=open&tool_name=CodeQL&per_page=100" --paginate 2>codeql.err)"; then
+            # Only "no analysis yet" (404) passes; any other failure blocks rather than reading as zero alerts.
+            if grep -q 'HTTP 404' codeql.err; then
+              echo "No CodeQL analysis on main yet; nothing to check." >>"$GITHUB_STEP_SUMMARY"
+              echo "high=0" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "### CodeQL: couldn't read the alerts ($(head -c 300 codeql.err)); blocking" >>"$GITHUB_STEP_SUMMARY"
+            echo "high=unknown" >>"$GITHUB_OUTPUT"
             exit 0
           fi
           # Kept for the autofix job: where each high/critical alert is and which rule it broke.
@@ -294,6 +300,8 @@ jobs:
           size="$(stat -c %s "$apk")"
           (( size <= MAX_APK_BYTES )) || { echo "APK is $size bytes, over the $MAX_APK_BYTES limit"; exit 1; }
           # Permissions, exported components, debug flags and cleartext hosts must match the baseline.
+          # pipefail: without it the step takes tee's exit status and a failed check still publishes.
+          set -o pipefail
           scripts/check-apk "$apk" | tee -a "$GITHUB_STEP_SUMMARY"
           cp "$apk" "diurna-0.$N.apk"
           echo "0.$N: $((size / 1048576)) MB, certificate $cert" >>"$GITHUB_STEP_SUMMARY"
