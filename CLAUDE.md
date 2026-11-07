@@ -25,6 +25,7 @@ Check a build by its exit code, not by filtered output.
 - **`versionCode` is the commit count, so commits must never be dropped.** Android won't install a lower version without wiping data. Never rewrite `main`'s history (no force-push, rebase or amend of pushed commits). PRs land as merge commits only (squash and rebase merges are off in the repo): `main` then keeps every branch commit, so it always counts at least as high as any build made from a branch, including stacked previews. Don't squash or rebase a branch someone may have built from.
 - **Never commit secrets or personal data:** API keys, `signing/`, `local.properties`, `backups/`, databases. AI provider keys are entered in the app and stored encrypted on the phone; never put one in code, tests or chat.
 - **Every schema change ships with a migration and a `MigrationTest` case.** Prefer `AutoMigration`; data-only changes use a `Migration`. Never a destructive fallback. Other people run the app too, on phones with no backup script, so a bad migration there can't be undone.
+- **A new permission, exported component or cleartext host updates `security/apk-baseline.txt` in the same PR** (`scripts/check-apk <apk> --write-baseline`), with the reason in the PR description. Waivers in `security/osv-scanner.toml` need a reason and an `ignoreUntil` date. Never grow `app/lint-baseline.xml` to get a security check past lint.
 
 ## Conventions
 

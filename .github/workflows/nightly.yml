@@ -6,6 +6,12 @@
 # 128 shipped an alarm that crashed on opening. Signed with the release key from the "release"
 # environment (deployable from main only; created by scripts/new-release-key), and every build's
 # certificate is checked against RELEASE_CERT_SHA256, so a wrong key never reaches anyone's phone.
+#
+# Security, before anything is signed: high/critical advisories in what ships (scripts/security-gate,
+# today's OSV data) or open high/critical CodeQL alerts block the night, and the autofix job asks
+# Claude for a fix PR. Claude also reviews everything since the last release; a finding sends the
+# night's publish to the release-held environment, which waits for a person. AI can hold a release
+# or propose a fix, never clear one. scripts/check-apk fails on a new permission or exported component.
 name: Nightly
 
 on:
@@ -63,6 +69,101 @@ jobs:
             exit 0
           fi
           echo "skip=false" >>"$GITHUB_OUTPUT"
+
+  security:
+    name: Security
+    needs: check
+    if: needs.check.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Main-only environment: holds CLAUDE_AUTOFIX_KEY, which pull request code can never read.
+    environment: security
+    permissions:
+      contents: read
+      security-events: read # open CodeQL alerts on this commit
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      blocked: ${{ steps.verdict.outputs.blocked }}
+      hold: ${{ steps.verdict.outputs.hold }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: true
+
+      - name: Known vulnerabilities (what ships)
+        id: cve
+        continue-on-error: true
+        run: scripts/security-gate
+
+      - name: Open CodeQL alerts
+        id: codeql
+        run: |
+          if ! alerts="$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?ref=refs/heads/main&state=open&tool_name=CodeQL&per_page=100" --paginate 2>/dev/null)"; then
+            echo "No CodeQL analysis on main yet; nothing to check." >>"$GITHUB_STEP_SUMMARY"
+            echo "high=0" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Kept for the autofix job: where each high/critical alert is and which rule it broke.
+          jq -s '[.[][] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")
+            | {rule: .rule.id, severity: .rule.security_severity_level, path: .most_recent_instance.location.path,
+               line: .most_recent_instance.location.start_line}]' <<<"$alerts" >codeql.json
+          high="$(jq length codeql.json)"
+          echo "high=$high" >>"$GITHUB_OUTPUT"
+          echo "### CodeQL: $high open high/critical alert(s) on main" >>"$GITHUB_STEP_SUMMARY"
+
+      - name: AI review of everything since the last release
+        id: ai
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_AUTOFIX_KEY }}
+        run: |
+          if [[ -z "$ANTHROPIC_API_KEY" ]]; then
+            echo "### AI review: skipped (CLAUDE_AUTOFIX_KEY isn't set in the security environment)" >>"$GITHUB_STEP_SUMMARY"
+            echo "verdict=skipped" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          prev="$(gh release list --limit 50 --json tagName --jq '[.[] | select(.tagName | startswith("v0."))][0].tagName // ""')"
+          if [[ -n "$prev" ]] && git rev-parse -q --verify "refs/tags/$prev" >/dev/null; then base="$prev"; else base="HEAD~20"; fi
+          scripts/ai-review "$base" HEAD review.json
+          python3 -I scripts/ai-review-comment.py review.json >>"$GITHUB_STEP_SUMMARY"
+          echo "verdict=$(jq -r .verdict review.json)" >>"$GITHUB_OUTPUT"
+
+      - name: Verdict
+        id: verdict
+        env:
+          CVE: ${{ steps.cve.outcome }}
+          CODEQL_HIGH: ${{ steps.codeql.outputs.high }}
+          AI: ${{ steps.ai.outputs.verdict }}
+        run: |
+          blocked=false; hold=false
+          [[ "$CVE" == success && "${CODEQL_HIGH:-0}" == 0 ]] || blocked=true
+          [[ "$AI" == hold ]] && hold=true
+          echo "blocked=$blocked" >>"$GITHUB_OUTPUT"
+          echo "hold=$hold" >>"$GITHUB_OUTPUT"
+          {
+            echo "### Security verdict"
+            if [[ $blocked == true ]]; then echo "**Blocked**: not publishing tonight; the autofix job will try a fix PR."
+            elif [[ $hold == true ]]; then echo "**Held**: publish waits for approval in the release-held environment."
+            else echo "Clear to publish."; fi
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: security
+          path: |
+            app/build/security/gate.json
+            codeql.json
+            review.json
+          if-no-files-found: ignore
 
   smoke:
     name: Alarm smoke test (minified build, emulator)
@@ -129,11 +230,13 @@ jobs:
 
   publish:
     name: Publish
-    needs: [check, smoke]
-    if: needs.check.outputs.skip == 'false'
+    needs: [check, smoke, security]
+    if: needs.check.outputs.skip == 'false' && needs.security.outputs.blocked == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    environment: release
+    # A held night needs a person's approval (release-held has a required reviewer); the job waits
+    # there and publishes once approved. Both environments carry the same signing secrets.
+    environment: ${{ needs.security.outputs.hold == 'true' && 'release-held' || 'release' }}
     permissions:
       contents: write # create the release and its tag
     env:
@@ -190,6 +293,8 @@ jobs:
             || { echo "unexpected native code (the emulator ABI must not ship):"; grep native-code <<<"$badging"; exit 1; }
           size="$(stat -c %s "$apk")"
           (( size <= MAX_APK_BYTES )) || { echo "APK is $size bytes, over the $MAX_APK_BYTES limit"; exit 1; }
+          # Permissions, exported components, debug flags and cleartext hosts must match the baseline.
+          scripts/check-apk "$apk" | tee -a "$GITHUB_STEP_SUMMARY"
           cp "$apk" "diurna-0.$N.apk"
           echo "0.$N: $((size / 1048576)) MB, certificate $cert" >>"$GITHUB_STEP_SUMMARY"
 
@@ -224,7 +329,10 @@ jobs:
 
       - name: Publish
         run: |
-          gh release create "$TAG" "diurna-0.$N.apk" --target "$GITHUB_SHA" \
+          # The exact libraries inside this APK, for anyone checking it against an advisory later.
+          ./gradlew -q :app:shippedDependencies
+          sed 's/=.*//; /^empty$/d' app/build/security/gradle.lockfile >"diurna-0.$N-dependencies.txt"
+          gh release create "$TAG" "diurna-0.$N.apk" "diurna-0.$N-dependencies.txt" --target "$GITHUB_SHA" \
             --title "Diurna 0.$N" --notes-file notes.md --generate-notes
           # Keep the newest 15 builds; Obtainium only needs the latest.
           gh release list --limit 200 --json tagName,createdAt \
@@ -234,3 +342,39 @@ jobs:
       - name: Remove the signing key
         if: always()
         run: rm -rf signing
+
+  autofix:
+    name: Security autofix (Claude proposes a fix PR)
+    needs: [check, security]
+    if: needs.check.outputs.skip == 'false' && needs.security.outputs.blocked == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: security # CLAUDE_AUTOFIX_KEY; main only
+    permissions:
+      contents: write # push the fix branch
+      pull-requests: write # open the PR
+      issues: write # or the issue, when there's no safe fix
+      actions: write # start Tests on the branch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # No token in .git/config: Claude's edits run through Gradle before anything is pushed.
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: security
+          path: ${{ runner.temp }}/findings
+      # The script keeps the two credentials apart (see its header); neither goes to Claude's checks.
+      - name: Ask Claude for a fix, check it, open a PR or an issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_AUTOFIX_KEY }}
+        run: scripts/security-autofix "$RUNNER_TEMP/findings"
