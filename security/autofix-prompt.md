@@ -8,7 +8,7 @@ Make the smallest change that resolves the blocking findings:
 Then check your work: run `./gradlew :app:shippedDependencies` and `scripts/security-gate` until nothing blocks, and `./gradlew testDebugUnitTest` to make sure nothing broke. If a fix breaks the build or tests and you can't resolve it, undo it.
 
 Rules:
-- Never edit anything under .github/, signing/, or security/ (waivers and the APK baseline are decisions for a person), and never edit CLAUDE.md or AGENTS.md.
+- Never edit anything under .github/, signing/, scripts/, gradle/wrapper/ or security/, or gradlew (waivers and the APK baseline are decisions for a person), and never edit CLAUDE.md or AGENTS.md.
 - Don't commit, push, or open pull requests; the workflow does that after checking your work itself.
 - If no safe fix exists (no fixed version yet, or the fix needs a major upgrade or a design decision), change nothing.
 
