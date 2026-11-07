@@ -45,6 +45,7 @@ import app.diurna.data.DayFinalizer
 import app.diurna.data.DailyMetricRepository
 import app.diurna.data.DayRepository
 import app.diurna.data.NutritionRepository
+import app.diurna.data.NutrientRepository
 import app.diurna.data.FoodPhotos
 import app.diurna.data.FoodPhotoStore
 import app.diurna.data.FoodRepository
@@ -83,7 +84,8 @@ class AppContainer(context: Context) {
     val foodPhotoStore = FoodPhotoStore(db, foodPhotos)
     val food = FoodRepository(db, foodPhotos, foodPhotoStore)
     val photoImporter = PhotoImporter(context, foodPhotos)
-    val library = LibraryRepository(db, photoStore = foodPhotoStore)
+    val nutrients = NutrientRepository(db)
+    val library = LibraryRepository(db, photoStore = foodPhotoStore, nutrients = nutrients)
     val backups = Backups(context, db, foodPhotos)
     /** What's new entries, read from assets once. */
     val changelog by lazy { ChangelogFiles.load(context.assets) }
@@ -241,6 +243,12 @@ class AppContainer(context: Context) {
         food.onPendingEstimates = { EstimateWorker.enqueue(context) }
         lockWallpaper.start(appScope)
     }
+    init {
+        appScope.launch {
+            runCatching { nutrients.backfillFromOffSnapshots() }
+        }
+    }
+
 }
 
 class DiurnaApp : Application() {
