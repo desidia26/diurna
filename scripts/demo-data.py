@@ -60,6 +60,12 @@ if cur.execute("SELECT COUNT(*) FROM day").fetchone()[0]:
     sys.exit("error: the database already has days in it; demo data goes into a fresh one")
 
 
+# The app seeds Mood and Energy when it creates the database.
+metric_ids = dict(cur.execute("SELECT `key`, id FROM daily_metric WHERE `key` IS NOT NULL").fetchall())
+if set(metric_ids) != {"mood", "energy"}:
+    sys.exit("error: the database has no Mood and Energy metrics; open the app once on a newer build first")
+
+
 def exercise_id(name):
     row = cur.execute("SELECT id FROM exercise WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
     if row is None:
@@ -146,9 +152,13 @@ while d < today:
 
     cur.execute(
         "INSERT INTO day (date, alarm_override, scheduled_alarm, scanned_at, morning_source, body_weight,"
-        " planned_workout, target_kcal, target_protein_g, target_carbs_g, target_fat_g, finalized, steps, mood, energy)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)",
-        (d.isoformat(), override, scheduled, scanned, source, body, template, *TARGETS, steps, mood, energy))
+        " planned_workout, target_kcal, target_protein_g, target_carbs_g, target_fat_g, finalized, steps)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
+        (d.isoformat(), override, scheduled, scanned, source, body, template, *TARGETS, steps))
+    for key, value in (("mood", mood), ("energy", energy)):
+        if value is not None:
+            cur.execute("INSERT INTO daily_metric_value (date, metric_id, value) VALUES (?, ?, ?)",
+                        (d.isoformat(), metric_ids[key], value))
     if lifted:
         log_workout(d, template, week)
     log_food(d)

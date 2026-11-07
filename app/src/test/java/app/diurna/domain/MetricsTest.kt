@@ -33,21 +33,6 @@ class MetricsTest {
         assertNull(Metrics.change(emptyList()))
     }
 
-    // ---- Ratings ----
-
-    @Test fun ratingAveragesSkipUnratedDays() {
-        val s = Metrics.ratingSummary(listOf(
-            Metrics.DayRating(d(1), 4, 2),
-            Metrics.DayRating(d(2), null, null),
-            Metrics.DayRating(d(3), 2, null),
-        ))
-        assertEquals(3.0, s.mood!!, 1e-9)
-        assertEquals(2.0, s.energy!!, 1e-9)
-        assertEquals(2, s.rated)
-        assertEquals(3, s.days)
-        assertNull(Metrics.ratingSummary(listOf(Metrics.DayRating(d(1), null, null))).mood)
-    }
-
     // ---- Lifting ----
 
     @Test fun e1rmBounds() {

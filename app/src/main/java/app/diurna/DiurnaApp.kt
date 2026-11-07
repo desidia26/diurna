@@ -42,6 +42,7 @@ import app.diurna.data.ChangelogFiles
 import app.diurna.data.DataTransfer
 import app.diurna.data.ImportApply
 import app.diurna.data.DayFinalizer
+import app.diurna.data.DailyMetricRepository
 import app.diurna.data.DayRepository
 import app.diurna.data.NutritionRepository
 import app.diurna.data.FoodPhotos
@@ -76,6 +77,7 @@ class AppContainer(context: Context) {
     val db = AppDatabase.build(context)
     val settings = SettingsStore(context)
     val days = DayRepository(db)
+    val dailyMetrics = DailyMetricRepository(db)
     val metrics = MetricsRepository(db)
     val foodPhotos = FoodPhotos(File(context.filesDir, "food-photos"))
     val foodPhotoStore = FoodPhotoStore(db, foodPhotos)
@@ -235,7 +237,7 @@ class AppContainer(context: Context) {
 
     init {
         days.onAlarmInputsChanged = { scheduler.reschedule() }
-        days.onRatingChanged = { if (days.isRated(it)) CheckInReminder.dismiss(context) }
+        dailyMetrics.onValueChanged = { if (dailyMetrics.isComplete(it)) CheckInReminder.dismiss(context) }
         food.onPendingEstimates = { EstimateWorker.enqueue(context) }
         lockWallpaper.start(appScope)
     }
