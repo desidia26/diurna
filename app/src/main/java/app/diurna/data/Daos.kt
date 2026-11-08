@@ -35,12 +35,6 @@ interface DayDao {
     @Query("UPDATE day SET steps = COALESCE(steps, 0) + :add WHERE date = :date")
     suspend fun addSteps(date: String, add: Long)
 
-    @Query("UPDATE day SET mood = :value WHERE date = :date")
-    suspend fun setMood(date: String, value: Int?)
-
-    @Query("UPDATE day SET energy = :value WHERE date = :date")
-    suspend fun setEnergy(date: String, value: Int?)
-
     @Query("UPDATE day SET body_weight = :lb WHERE date = :date")
     suspend fun setBodyWeight(date: String, lb: Double?)
 
@@ -198,6 +192,19 @@ interface RecipeIngredientDao {
              AND unit IN ('ml','cup','tbsp','tsp','each')"""
     )
     suspend fun blockedNeedingDensity(): List<RecipeIngredientEntity>
+
+    /**
+     * Lines that look like they still need nutrition fill: macros all zero, no detail,
+     * and source is blank / import (not manual / barcode / meal / already-filled fdc|ai).
+     */
+    @Query(
+        """SELECT * FROM recipe_ingredient
+           WHERE protein_g = 0 AND carbs_g = 0 AND fat_g = 0 AND kcal = 0
+             AND fiber_g IS NULL AND sugars_g IS NULL AND sat_fat_g IS NULL
+             AND (source IS NULL OR source = '' OR source = 'import')
+             AND grams IS NOT NULL AND grams > 0"""
+    )
+    suspend fun needingNutritionFill(): List<RecipeIngredientEntity>
 }
 
 @Dao
@@ -612,4 +619,75 @@ interface IngredientDensityCacheDao {
 
     @Query("DELETE FROM ingredient_density_cache WHERE query_key = :key")
     suspend fun delete(key: String)
+}
+
+@Dao
+interface IngredientNutritionCacheDao {
+    @Query("SELECT * FROM ingredient_nutrition_cache WHERE normalized_name = :name LIMIT 1")
+    suspend fun get(name: String): IngredientNutritionCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(row: IngredientNutritionCacheEntity)
+
+    @Query("DELETE FROM ingredient_nutrition_cache WHERE normalized_name = :name")
+    suspend fun delete(name: String)
+}
+
+@Dao
+interface DailyMetricDao {
+    @Query("SELECT * FROM daily_metric ORDER BY position, id")
+    fun observeAll(): Flow<List<DailyMetricEntity>>
+
+    @Query("SELECT * FROM daily_metric ORDER BY position, id")
+    suspend fun all(): List<DailyMetricEntity>
+
+    @Query("SELECT * FROM daily_metric WHERE id = :id")
+    suspend fun get(id: Long): DailyMetricEntity?
+
+    @Query("SELECT id FROM daily_metric WHERE name = :name COLLATE NOCASE LIMIT 1")
+    suspend fun idNamed(name: String): Long?
+
+    @Query("SELECT COALESCE(MAX(position), -1) FROM daily_metric")
+    suspend fun maxPosition(): Int
+
+    @Insert
+    suspend fun insert(metric: DailyMetricEntity): Long
+
+    @Update
+    suspend fun update(metric: DailyMetricEntity)
+
+    @Query("UPDATE daily_metric SET position = :position WHERE id = :id")
+    suspend fun setPosition(id: Long, position: Int)
+
+    @Query("UPDATE daily_metric SET archived = :archived WHERE id = :id")
+    suspend fun setArchived(id: Long, archived: Boolean)
+
+    @Query("DELETE FROM daily_metric WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM daily_metric_value WHERE metric_id = :id")
+    suspend fun deleteValues(id: Long)
+
+    data class Count(@androidx.room.ColumnInfo(name = "metric_id") val metricId: Long, val days: Int)
+
+    @Query("SELECT metric_id, COUNT(*) AS days FROM daily_metric_value GROUP BY metric_id")
+    fun observeCounts(): Flow<List<Count>>
+
+    @Query("SELECT COUNT(*) FROM daily_metric_value WHERE metric_id = :id")
+    suspend fun valueCount(id: Long): Int
+
+    @Query("SELECT * FROM daily_metric_value WHERE date = :date")
+    fun observeValues(date: String): Flow<List<DailyMetricValueEntity>>
+
+    @Query("SELECT * FROM daily_metric_value WHERE date = :date")
+    suspend fun values(date: String): List<DailyMetricValueEntity>
+
+    @Query("SELECT * FROM daily_metric_value WHERE date BETWEEN :from AND :to")
+    fun observeValuesRange(from: String, to: String): Flow<List<DailyMetricValueEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertValue(value: DailyMetricValueEntity)
+
+    @Query("DELETE FROM daily_metric_value WHERE date = :date AND metric_id = :id")
+    suspend fun deleteValue(date: String, id: Long)
 }
