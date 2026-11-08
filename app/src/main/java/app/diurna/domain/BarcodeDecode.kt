@@ -26,6 +26,7 @@ enum class ScanVariant { ORIGINAL, CROP, ROTATE, CONTRAST, THRESHOLD, SHARPEN }
 
 /** Scanner never owns debug storage: an opt-in recorder may copy the file during this callback. */
 interface ScanDiagnostics {
+    fun onResolved(resolution: ScanResolution) {}
     fun onEvent(name: String, outcome: String, details: Map<String, String> = emptyMap(), latencyMs: Long? = null) {}
     val enabled: Boolean get() = false
     fun onFailedVariant(pixels: ScanPixels) {}
@@ -49,13 +50,36 @@ class TextRecognitionNotReady(message: String = "text recognition model not read
 
 private fun List<ProductCode>.validDistinct() = filter { it.isValid() }.distinctBy { it.key }.take(8)
 
-/** Never replace O with 0, manufacture a check digit, or join unrelated OCR lines. */
+/** Whole contiguous digit groups only; neighbouring numbers must not swallow a valid code.
+ * Never slice a group, replace letters, manufacture a check digit, or join separate OCR lines.
+ */
 fun ocrProductCodes(lines: List<String>): List<ProductCode> = lines.take(64).flatMap { line ->
-    Regex("[0-9][0-9 \\t-]*[0-9]").findAll(line.take(256)).flatMap { match ->
-        val digits = match.value.filter { it in '0'..'9' }
-        listOfNotNull(ProductCode(digits), if (digits.length == 8) ProductCode(digits, upcE = true) else null)
+    Regex("[0-9]+(?:[ \t-]+[0-9]+)*").findAll(line.take(256)).flatMap { match ->
+        val groups = Regex("[0-9]+").findAll(match.value).map { it.value }.toList()
+        val candidates = mutableListOf<ProductCode>()
+        for (start in groups.indices) {
+            var digits = ""
+            for (end in start until groups.size) {
+                if (digits.length + groups[end].length > 13) break
+                digits += groups[end]
+                if (digits.length in listOf(8, 12, 13)) {
+                    candidates += ProductCode(digits)
+                    if (digits.length == 8) candidates += ProductCode(digits, upcE = true)
+                }
+            }
+        }
+        candidates.asSequence()
     }.toList()
 }.validDistinct()
+
+/** Covers image loading, transforms and ML Kit allocations without catching cancellation/other Errors. */
+suspend fun guardScanMemory(
+    diagnostics: ScanDiagnostics = ScanDiagnostics.NONE,
+    read: suspend () -> ScanOutcome,
+): ScanOutcome = try { read() } catch (_: OutOfMemoryError) {
+    diagnostics.onResult("out_of_memory", emptyList())
+    ScanOutcome.Unreadable
+}
 
 /** Original plus five ordered retries, each derived from the original, never an accumulating blur. */
 suspend fun decodeProductImage(
