@@ -42,7 +42,7 @@ jobs:
           path: app/build/reports/tests/testDebugUnitTest/
 
   device:
-    name: Device tests (emulator, Pixel 9 ≈ 11/10a)
+    name: Device tests (emulator)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
