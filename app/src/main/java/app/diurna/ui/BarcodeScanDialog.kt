@@ -27,6 +27,8 @@ import androidx.core.content.ContextCompat
 import app.diurna.data.LibraryRepository.ScanResult
 import app.diurna.data.MealEntity
 import app.diurna.scan.ProductScanner
+import app.diurna.domain.ScanLookupGate
+import androidx.compose.runtime.DisposableEffect
 import app.diurna.domain.ProductCode
 import app.diurna.domain.ScanOutcome
 import kotlinx.coroutines.CancellationException
@@ -51,20 +53,22 @@ fun BarcodeScanDialog(
     val askCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { hasCamera = it }
     LaunchedEffect(Unit) { if (!hasCamera) askCamera.launch(Manifest.permission.CAMERA) }
 
+    val lookupGate = remember { ScanLookupGate() }
+    DisposableEffect(lookupGate) { onDispose { lookupGate.cancel() } }
     var looking by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf<MealEntity?>(null) }
     var candidates by remember { mutableStateOf<List<ProductCode>>(emptyList()) }
     var torch by remember { mutableStateOf(false) }
     val lookup: (ProductCode) -> Unit = { code ->
-        if (!looking && code.isValid()) {
+        if (lookupGate.begin(code)) {
             looking = true
             candidates = emptyList()
             scope.launch {
                 try {
                     when (val result = scan(code.digits, code.upcE)) {
-                        is ScanResult.Known -> onKnown(result.meal)
-                        is ScanResult.Found -> onFound(result.draft)
+                        is ScanResult.Known -> { if (lookupGate.finish(true)) onKnown(result.meal) }
+                        is ScanResult.Found -> { if (lookupGate.finish(true)) onFound(result.draft) }
                         is ScanResult.NotFound -> {
                             draft = result.draft.takeIf { it.barcode != null }
                             problem = "Barcode read, but this product isn't in Open Food Facts. You can add its nutrition manually."
@@ -78,7 +82,7 @@ fun BarcodeScanDialog(
                     throw e
                 } catch (_: Exception) {
                     problem = "Barcode read, but the product lookup couldn't connect. Check your connection and try again."
-                } finally { looking = false }
+                } finally { lookupGate.finish(false); looking = false }
             }
         }
     }
@@ -95,7 +99,7 @@ fun BarcodeScanDialog(
                     }
                     looking -> Text("Looking up product…")
                     candidates.isNotEmpty() -> {
-                        Text("Check the printed numbers on the package, then choose the matching barcode. Text recognition can make mistakes.")
+                        Text("Check the printed numbers on the package, then choose the matching barcode. This may be a live-camera or text candidate that the saved photo could not verify.")
                         candidates.forEach { code ->
                             TextButton(onClick = { lookup(code) }) {
                                 Text(code.digits + if (code.upcE) " (UPC-E)" else "")

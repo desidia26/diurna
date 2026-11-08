@@ -3,6 +3,10 @@ package app.diurna.scan
 import app.diurna.domain.ProductCode
 import app.diurna.domain.ScanDiagnostics
 import app.diurna.domain.ScanOutcome
+import app.diurna.domain.LiveScanSession
+import app.diurna.domain.guardScanMemory
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 import android.util.Size
 import android.view.MotionEvent
@@ -53,7 +57,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** Separate from the alarm QR reader: all food lookups come from a saved still, never a live frame. */
+/** Food-only scanner. A valid live read survives a worse still, but live fallback needs confirmation. */
 @OptIn(ExperimentalGetImage::class)
 @Composable
 fun ProductScanner(
@@ -70,21 +74,24 @@ fun ProductScanner(
     val previewView = remember { PreviewView(context) }
     var camera by remember { mutableStateOf<Camera?>(null) }
     var capture by remember { mutableStateOf<ImageCapture?>(null) }
-    var busy by remember { mutableStateOf(false) }
+    var attempt by remember { mutableIntStateOf(0) }
+    val session = remember(owner, attempt) { LiveScanSession() }
+    var busy by remember(session) { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     var liveProblem by remember { mutableStateOf<String?>(null) }
-    var attempt by remember { mutableIntStateOf(0) }
-    val active = remember { AtomicBoolean(true) }
-    val capturing = remember { AtomicBoolean(false) }
-    val finished = remember { AtomicBoolean(false) }
-    val pending = remember { AtomicReference<File?>(null) }
+    val pending = remember(session) { AtomicReference<File?>(null) }
     val latestResult by rememberUpdatedState(onResult)
     val latestProblem by rememberUpdatedState(onProblem)
     val latestDiagnostics by rememberUpdatedState(diagnostics)
 
+    fun finish(outcome: ScanOutcome, problem: String? = null) {
+        val resolution = session.complete(outcome) ?: return
+        if (resolution.source != "none" || problem == null) latestResult(resolution.outcome)
+        else latestProblem(problem)
+    }
     val takePhoto: () -> Unit = takePhoto@{
         val shot = capture ?: return@takePhoto
-        if (!active.get() || finished.get() || !capturing.compareAndSet(false, true)) return@takePhoto
+        if (!owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || !session.beginCapture()) return@takePhoto
         busy = true
         liveProblem = null
         val raw = try {
@@ -93,10 +100,9 @@ fun ProductScanner(
             dir.listFiles()?.filter { it.name.startsWith("barcode-") && it.lastModified() < System.currentTimeMillis() - 60 * 60 * 1000 }
                 ?.forEach { it.delete() }
             File.createTempFile("barcode-raw-", ".jpg", dir)
-        } catch (_: Exception) {
-            busy = false; capturing.set(false)
-            finished.set(true)
-            latestProblem("Couldn't save the barcode photo. Check free space and try again.")
+        } catch (e: Exception) {
+            busy = false
+            finish(ScanOutcome.Unreadable, "Couldn't save the barcode photo. Check free space and try again.")
             return@takePhoto
         }
         pending.set(raw)
@@ -105,39 +111,43 @@ fun ProductScanner(
             shot.takePicture(ImageCapture.OutputFileOptions.Builder(raw).build(), executor,
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                        if (!active.get()) { raw.delete(); return }
+                        if (!session.isActive()) { raw.delete(); return }
                         scope.launch {
                             try {
-                                val result = readCapturedBarcode(raw, latestDiagnostics)
-                                if (active.get() && finished.compareAndSet(false, true)) latestResult(result)
+                                val result = guardScanMemory(latestDiagnostics) { readCapturedBarcode(raw, latestDiagnostics) }
+                                finish(result)
                             } catch (_: TimeoutCancellationException) {
-                                if (active.get() && finished.compareAndSet(false, true)) latestProblem("Reading the barcode photo took too long. Try again.")
+                                finish(ScanOutcome.Unreadable, "Reading the barcode photo took too long. Try again.")
                             } catch (e: CancellationException) {
+                                session.cancel()
                                 throw e
-                            } catch (_: Exception) {
-                                if (active.get() && finished.compareAndSet(false, true)) latestProblem("Couldn't process the saved barcode photo. Try again.")
+                            } catch (e: Exception) {
+                                finish(ScanOutcome.Unreadable, "Couldn't process the saved barcode photo. Try again.")
                             } finally {
                                 raw.delete()
                                 busy = false
-                                capturing.set(false)
                             }
                         }.invokeOnCompletion { raw.delete() }
                     }
                     override fun onError(exception: ImageCaptureException) {
-                        raw.delete(); busy = false; capturing.set(false)
-                        if (active.get() && finished.compareAndSet(false, true)) latestProblem("Couldn't take the barcode photo. Try again.")
+                        raw.delete(); busy = false
+                        finish(ScanOutcome.Unreadable, "Couldn't take the barcode photo. Try again.")
                     }
                 })
-        } catch (_: Exception) {
-            raw.delete(); busy = false; capturing.set(false)
-            finished.set(true)
-            latestProblem("Couldn't take the barcode photo. Try again.")
+        } catch (e: Exception) {
+            raw.delete(); busy = false
+            finish(ScanOutcome.Unreadable, "Couldn't take the barcode photo. Try again.")
         }
     }
-    val latestTakePhoto by rememberUpdatedState(takePhoto)
 
-    DisposableEffect(owner, attempt) {
-        active.set(true)
+    DisposableEffect(owner, session) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) { session.cancel(); busy = false }
+            if (event == Lifecycle.Event.ON_START && !session.isActive()) attempt++
+        }
+        owner.lifecycle.addObserver(observer)
+        if (!owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) session.cancel()
+        liveProblem = null
         val disposed = AtomicBoolean(false)
         val worker = Executors.newSingleThreadExecutor()
         val reader = BarcodeScanning.getClient(BarcodeScannerOptions.Builder()
@@ -153,23 +163,31 @@ fun ProductScanner(
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
         analysis.setAnalyzer(worker) { proxy ->
             val media = proxy.image
-            if (media == null || disposed.get() || capturing.get() || finished.get()) {
+            if (media == null || disposed.get() || !session.canAnalyze()) {
                 proxy.close()
             } else {
                 try {
                     reader.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
                         .addOnSuccessListener { codes ->
-                            if (!disposed.get() && codes.any { code -> code.rawValue?.let {
-                                ProductCode(it, code.format == Barcode.FORMAT_UPC_E).isValid()
-                            } == true }) latestTakePhoto()
+                            if (!disposed.get() && session.canAnalyze()) {
+                                val rawCodes = codes.mapNotNull { code -> code.rawValue?.let { ProductCode(it, code.format == Barcode.FORMAT_UPC_E) } }
+                                val accepted = rawCodes.filter { it.isValid() }
+                                if (session.observe(accepted)) takePhoto()
+                            }
                         }
                         .addOnFailureListener {
-                            if (!disposed.get()) liveProblem = "Live scanning failed. Tap Capture barcode to try a saved photo."
+                            if (!disposed.get()) {
+                                liveProblem = "Live scanning failed. Tap Capture barcode to try a saved photo."
+                            }
                         }
                         .addOnCompleteListener { proxy.close() }
-                } catch (_: Exception) {
+                } catch (e: Exception) {
                     proxy.close()
-                    executor.execute { if (!disposed.get()) liveProblem = "Live scanning failed. Try Capture barcode." }
+                    executor.execute {
+                        if (!disposed.get()) {
+                            liveProblem = "Live scanning failed. Try Capture barcode."
+                        }
+                    }
                 }
             }
         }
@@ -180,7 +198,7 @@ fun ProductScanner(
                     camera = provider!!.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis, still)
                     capture = still
                     failed = false
-                } catch (_: Exception) {
+                } catch (e: Exception) {
                     failed = true
                     capture = null
                 }
@@ -188,7 +206,8 @@ fun ProductScanner(
         }, executor)
         onDispose {
             disposed.set(true)
-            active.set(false)
+            owner.lifecycle.removeObserver(observer)
+            session.cancel()
             analysis.clearAnalyzer()
             pending.getAndSet(null)?.delete()
             provider?.unbind(preview, analysis, still)
