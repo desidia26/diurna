@@ -15,6 +15,9 @@ import app.diurna.data.Template
 import app.diurna.data.WorkoutWithExercises
 import app.diurna.data.totals
 import app.diurna.domain.AlarmRules
+import app.diurna.domain.DailyMetrics
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import app.diurna.domain.NutritionTotals
 import app.diurna.domain.Targets
 import kotlinx.coroutines.Dispatchers
@@ -126,8 +129,19 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     fun clearMorning() = io("day.clear_morning") { c.days.clearMorning(date) }
 
     // Check-in
-    fun setMood(value: Int?) = io("day.set_mood") { c.days.setMood(date, value) }
-    fun setEnergy(value: Int?) = io("day.set_energy") { c.days.setEnergy(date, value) }
+    data class CheckInUi(val metrics: List<DailyMetrics.Def>, val values: Map<Long, DailyMetrics.Value>) {
+        val done: Boolean get() = DailyMetrics.complete(metrics, values)
+        val summary: String get() = DailyMetrics.summary(metrics, values)
+    }
+
+    val checkIn: StateFlow<CheckInUi?> = c.selectedDate.value.flatMapLatest { d ->
+        combine(c.dailyMetrics.definitions.map { all -> all.filter { !it.archived } }, c.dailyMetrics.observeValues(d), ::CheckInUi)
+    }.state(null)
+
+    // Text saves on every keystroke; the lock is first-come-first-served, so writes land in typing order.
+    private val checkInWrites = Mutex()
+    fun setMetric(id: Long, value: Double?) { val d = date; io("day.set_metric") { checkInWrites.withLock { c.dailyMetrics.setValue(d, id, value) } } }
+    fun setMetricText(id: Long, text: String) { val d = date; io("day.set_metric_text") { checkInWrites.withLock { c.dailyMetrics.setText(d, id, text) } } }
 
     // Workout
     fun startWorkout(templateId: Long) = io("day.start_workout") { c.days.startWorkout(date, templateId) }

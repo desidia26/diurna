@@ -3,6 +3,7 @@ package app.diurna.ui
 import app.diurna.AppContainer
 import app.diurna.data.MetricsRepository
 import app.diurna.domain.Cardio
+import app.diurna.domain.DailyMetrics
 import app.diurna.domain.Metrics
 import app.diurna.domain.WhoAminoRefs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,11 +30,17 @@ data class WeightCard(
     val latest: Double?,
 )
 
-data class MoodCard(
-    val mood: List<Double?>,
-    val energy: List<Double?>,
-    val summary: Metrics.RatingSummary,
-    /** Past 4 weeks, daily ratings scribble; the lines become 7-day averages instead. */
+data class DailyMetricCard(
+    val def: DailyMetrics.Def,
+    /**
+     * Scale and number: one per day, or 7-day averages past 4 weeks, where daily values scribble.
+     * Yes/no: percent of answered days that were yes, per week.
+     */
+    val series: List<Double?>,
+    /** Mean of the logged days; for yes/no, the percent of them that were yes. */
+    val average: Double?,
+    val logged: Int,
+    val days: Int,
     val smoothed: Boolean,
 )
 
@@ -158,7 +165,8 @@ data class MetricsUi(
     /** Daily dots get too dense past 12 weeks, so longer ranges show the average alone. */
     val showDots: Boolean,
     val weight: WeightCard,
-    val mood: MoodCard,
+    /** One per check-in metric that charts (not text), in Day-screen order; archived ones only while they have values in range. */
+    val checkIn: List<DailyMetricCard>,
     /** Null until any food has ever been estimated, so people who don't log food never see it. */
     val macros: MacroCard?,
     /** Carb/fat/lipid breakdowns; null when Detailed nutrition is off or no sub-macro data in range. */
@@ -268,15 +276,25 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
         )
 
         val smoothed = range != Metrics.Range.W4
-        fun ratings(pick: (app.diurna.data.DayEntity) -> Int?): List<Double?> =
-            if (smoothed) Metrics.rollingAverage(s.days.mapNotNull { d -> pick(d)?.let { LocalDate.parse(d.date) to it.toDouble() } }.toMap(), s.from, s.to)
-            else inRange.map { it?.let(pick)?.toDouble() }
-        val mood = MoodCard(
-            mood = ratings { it.mood },
-            energy = ratings { it.energy },
-            summary = Metrics.ratingSummary(dates.map { Metrics.DayRating(it, byDate[it]?.mood, byDate[it]?.energy) }),
-            smoothed = smoothed,
-        )
+        val checkIn = s.checkIn.filter { it.kind != DailyMetrics.Kind.TEXT }.mapNotNull { def ->
+            val values = s.checkInValues.filter { it.metricId == def.id && it.value != null }
+                .associate { LocalDate.parse(it.date) to it.value!! }
+            val inRange = dates.mapNotNull { values[it] }
+            if (def.archived && inRange.isEmpty()) return@mapNotNull null
+            val yesNo = def.kind == DailyMetrics.Kind.YES_NO
+            DailyMetricCard(
+                def = def,
+                series = when {
+                    yesNo -> DailyMetrics.weeklyYesShare(values, s.from, s.to)
+                    smoothed -> Metrics.rollingAverage(values, s.from, s.to)
+                    else -> dates.map { values[it] }
+                },
+                average = inRange.takeIf { it.isNotEmpty() }?.let { v -> if (yesNo) 100.0 * v.count { it == 1.0 } / v.size else v.average() },
+                logged = inRange.size,
+                days = dates.size,
+                smoothed = smoothed,
+            )
+        }
 
         val sessions = s.sessions.filter { it.date in s.from..s.to }
         val prs = Metrics.prs(s.sessions).filter { it.session.date in s.from..s.to }
@@ -312,7 +330,7 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
 
         return MetricsUi(
             range, s.from, s.to, (range.days ?: Long.MAX_VALUE) <= 84,
-            weight, mood, macros, carbs, fats, lipids, aminos, training,
+            weight, checkIn, macros, carbs, fats, lipids, aminos, training,
             cardioCard(s).takeIf { s.cardio.isNotEmpty() }, lifts,
         )
     }
