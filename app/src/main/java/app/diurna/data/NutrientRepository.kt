@@ -46,40 +46,32 @@ class NutrientRepository(private val db: AppDatabase) {
     }
 
     /**
-     * Copies meal micros onto a food entry, scaled by [servings]. Derives from the meal's OFF
-     * snapshot when the meal has no rows yet. Replaces the entry's rows (logging/editing servings).
+     * Meal rows remain per OFF basis. Entry rows are amounts actually eaten, derived from the
+     * entry's frozen snapshot (or the meal snapshot for legacy entries with none), never by
+     * treating a cached per-basis meal profile as per-serving. Existing entry rows are not backfilled
+     * over; only this explicit log/servings edit replaces them.
      */
     suspend fun copyMealToEntry(mealId: Long, entryId: Long, servings: Double) {
         if (entryId <= 0L || servings <= 0 || !servings.isFinite()) return
-        var mealProfile = profile(NutrientOwner.MEAL, mealId)
-        if (!mealProfile.hasAny) {
-            val meal = meals.get(mealId)
-            val snap = OffSnapshot.decode(meal?.offSnapshotJson)
-            val derived = snap?.let { OffMicrosBackfill.profileFromSnapshot(it) }
-            if (derived != null && derived.hasAny) {
-                replace(NutrientOwner.MEAL, mealId, derived, NutrientSource.OFF)
-                mealProfile = derived
+        val entry = food.get(entryId) ?: return
+        val meal = meals.get(mealId)
+        val mealSnap = OffSnapshot.decode(meal?.offSnapshotJson)
+        syncMealFromOff(mealId, mealSnap)
+        val snap = OffSnapshot.decode(entry.offSnapshotJson) ?: mealSnap ?: return
+        val eaten = OffMicrosBackfill.profileForGrams(snap, snap.servingGrams() * servings) ?: return
+        replace(NutrientOwner.FOOD_ENTRY, entryId, eaten, NutrientSource.OFF)
+    }
+
+    /** Explicit servings edit after the saved meal was deleted; keep units/source and missingness. */
+    suspend fun scaleEntry(entryId: Long, factor: Double) {
+        if (!factor.isFinite() || factor <= 0) return
+        db.withTransaction {
+            val rows = dao.forOwner(NutrientOwner.FOOD_ENTRY, entryId).mapNotNull { row ->
+                app.diurna.domain.NutrientRegistry.sanitize(row.amount * factor)?.let { row.copy(amount = it) }
             }
+            dao.deleteOwner(NutrientOwner.FOOD_ENTRY, entryId)
+            dao.upsertAll(rows)
         }
-        if (!mealProfile.hasAny) {
-            // Entry may still have its own OFF snapshot (barcode log without a saved meal).
-            val entry = food.get(entryId)
-            val snap = OffSnapshot.decode(entry?.offSnapshotJson)
-            val grams = snap?.let { it.servingGrams() * servings }
-            val fromEntry = if (snap != null && grams != null) {
-                OffMicrosBackfill.profileForGrams(snap, grams)
-            } else null
-            if (fromEntry != null) {
-                replace(NutrientOwner.FOOD_ENTRY, entryId, fromEntry, NutrientSource.OFF)
-            }
-            return
-        }
-        replace(
-            NutrientOwner.FOOD_ENTRY,
-            entryId,
-            mealProfile.scale(servings),
-            NutrientSource.OFF,
-        )
     }
 
     /** Persist FDC per-100g micros for an fdcId; scale onto a recipe ingredient when [grams] set. */

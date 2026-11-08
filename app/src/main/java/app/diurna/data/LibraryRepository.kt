@@ -295,7 +295,7 @@ class LibraryRepository(
      */
     suspend fun setServings(entryId: Long, servings: Double) = db.withTransaction {
         val entry = food.get(entryId) ?: return@withTransaction
-        if (!entry.isMeal || servings <= 0) return@withTransaction
+        if (!entry.isMeal || servings <= 0 || !servings.isFinite()) return@withTransaction
         val meal = entry.mealId?.let { meals.get(it) }
         if (meal != null) {
             applyMeal(entryId, meal, servings, text = entry.text)
@@ -314,6 +314,7 @@ class LibraryRepository(
                 entry.ingredientsJson, entry.aminoMatched, entry.aminoTotal,
                 System.currentTimeMillis(),
             )
+            nutrients?.scaleEntry(entryId, k)
         }
     }
 
@@ -351,9 +352,10 @@ class LibraryRepository(
             meal.ingredientsJson, meal.aminoMatched, meal.aminoTotal,
             System.currentTimeMillis(),
         )
-        // Keep barcode/snapshot on the logged entry (setMeal does not touch them).
-        if (meal.barcode != null || meal.offSnapshotJson != null) {
-            food.setBarcodeSnapshot(entryId, meal.barcode, meal.offSnapshotJson)
+        // A servings edit must not replace historical OFF data with a later-edited meal snapshot.
+        val existing = food.get(entryId)
+        if (existing?.offSnapshotJson == null && (meal.barcode != null || meal.offSnapshotJson != null)) {
+            food.setBarcodeSnapshot(entryId, existing?.barcode ?: meal.barcode, meal.offSnapshotJson)
         }
         nutrients?.let { n ->
             if (meal.id > 0L) n.copyMealToEntry(meal.id, entryId, servings)

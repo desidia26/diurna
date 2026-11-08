@@ -17,11 +17,13 @@ object OffMicrosBackfill {
             val root = JSONObject(raw)
             if (root.optInt("status", 1) == 0) return null
             val n = root.optJSONObject("product")?.optJSONObject("nutriments") ?: return null
-            // Prefer per-100g; fall back to per-serving only when _100g energy/micros absent.
-            when {
-                hasAnyMicro(n, "_100g") -> parseOffMicronutrients(n, "_100g")
-                hasAnyMicro(n, "_serving") -> parseOffMicronutrients(n, "_serving")
-                else -> parseOffMicronutrients(n, "_100g")
+            val basis = snap.basisGrams.takeIf { it > 0 && it.isFinite() } ?: return null
+            // The suffix, not the macro snapshot's basis, determines the raw micro units.
+            val per100 = parseOffMicronutrients(n, "_100g")
+            if (per100 != null) per100.scale(basis / 100.0)
+            else {
+                val serving = snap.servingGrams().takeIf { it > 0 && it.isFinite() } ?: return null
+                parseOffMicronutrients(n, "_serving")?.scale(basis / serving)
             }
         } catch (_: JSONException) {
             null
@@ -31,17 +33,8 @@ object OffMicrosBackfill {
     fun profileForGrams(snap: OffSnapshot, grams: Double): MicronutrientProfile? {
         if (grams <= 0 || !grams.isFinite()) return null
         val perBasis = profileFromSnapshot(snap) ?: return null
-        val basis = snap.basisGrams.takeIf { it > 0 && it.isFinite() } ?: 100.0
+        val basis = snap.basisGrams.takeIf { it > 0 && it.isFinite() } ?: return null
         return perBasis.scale(grams / basis)
     }
 
-    private fun hasAnyMicro(n: JSONObject, suffix: String): Boolean {
-        val stems = listOf(
-            "sodium", "sodium-mg", "salt",
-            "potassium", "calcium", "iron", "magnesium", "zinc",
-            "vitamin-a", "vitamin-a-rae", "vitamin-c", "vitamin-d", "vitamin-d-iu",
-            "vitamin-b12", "folate-equivalent",
-        )
-        return stems.any { n.has("$it$suffix") }
-    }
 }
