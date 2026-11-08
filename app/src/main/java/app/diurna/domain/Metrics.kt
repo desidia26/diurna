@@ -3,7 +3,7 @@ package app.diurna.domain
 import java.time.DayOfWeek
 import java.time.LocalDate
 
-/** Trends over a range of days: weight averages, ratings, and lifting sessions, PRs and volume. */
+/** Trends over a range of days: weight averages and lifting sessions, PRs and volume. Check-in metrics are in [DailyMetrics]. */
 object Metrics {
     enum class Range(val label: String, val days: Long?) {
         W4("4w", 28), W12("12w", 84), Y1("1y", 365), ALL("All", null);
@@ -34,17 +34,6 @@ object Metrics {
         if (first < 0 || first == last) return null
         return series[last]!! - series[first]!!
     }
-
-    data class DayRating(val date: LocalDate, val mood: Int?, val energy: Int?)
-    data class RatingSummary(val mood: Double?, val energy: Double?, val rated: Int, val days: Int)
-
-    /** Averages count rated days only; a day counts as rated when either scale is filled in. */
-    fun ratingSummary(ratings: List<DayRating>): RatingSummary = RatingSummary(
-        mood = ratings.mapNotNull { it.mood }.takeIf { it.isNotEmpty() }?.average(),
-        energy = ratings.mapNotNull { it.energy }.takeIf { it.isNotEmpty() }?.average(),
-        rated = ratings.count { it.mood != null || it.energy != null },
-        days = ratings.size,
-    )
 
     // ---- Lifting ----
 
