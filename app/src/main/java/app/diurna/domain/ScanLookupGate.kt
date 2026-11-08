@@ -8,6 +8,10 @@ class ScanLookupGate {
         if (busy || terminal || !code.isValid()) return false
         busy = true; return true
     }
-    @Synchronized fun finish(success: Boolean) { busy = false; terminal = terminal || success }
+    @Synchronized fun finish(success: Boolean): Boolean {
+        val deliver = busy && !terminal
+        busy = false; terminal = terminal || success
+        return deliver
+    }
     @Synchronized fun cancel() { busy = false; terminal = true }
 }

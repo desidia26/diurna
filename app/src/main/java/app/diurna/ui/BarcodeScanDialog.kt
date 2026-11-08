@@ -93,8 +93,8 @@ fun BarcodeScanDialog(
                         is ScanResult.NotFound -> "not_found"; is ScanResult.Failed -> "failed"
                     }, latencyMs = (System.nanoTime() - started) / 1_000_000)
                     when (result) {
-                        is ScanResult.Known -> { lookupGate.finish(true); onKnown(result.meal) }
-                        is ScanResult.Found -> { lookupGate.finish(true); onFound(result.draft) }
+                        is ScanResult.Known -> { if (lookupGate.finish(true)) onKnown(result.meal) }
+                        is ScanResult.Found -> { if (lookupGate.finish(true)) onFound(result.draft) }
                         is ScanResult.NotFound -> {
                             draft = result.draft.takeIf { it.barcode != null }
                             problem = "Barcode read, but this product isn't in Open Food Facts. You can add its nutrition manually."

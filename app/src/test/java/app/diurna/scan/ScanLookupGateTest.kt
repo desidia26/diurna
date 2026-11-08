@@ -13,4 +13,11 @@ class ScanLookupGateTest {
         val gate=ScanLookupGate(); assertFalse(gate.begin(ProductCode("123")))
         gate.cancel(); gate.finish(false); assertFalse(gate.begin(code))
     }
+    @Test fun cancelledOrDuplicateSuccessCannotDeliver() {
+        val code = ProductCode("4006381333931")
+        val cancelled = ScanLookupGate(); assertTrue(cancelled.begin(code)); cancelled.cancel()
+        assertFalse(cancelled.finish(true))
+        val active = ScanLookupGate(); assertTrue(active.begin(code)); assertTrue(active.finish(true))
+        assertFalse(active.finish(true)); assertFalse(active.begin(code))
+    }
 }

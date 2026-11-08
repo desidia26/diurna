@@ -34,7 +34,7 @@ class LiveScanSession(private val clock: () -> Long = { System.nanoTime() / 1_00
         val all = (captured + photo).distinctBy { it.key }.take(8)
         val result = when {
             all.isEmpty() -> if (still is ScanOutcome.Decoded || still is ScanOutcome.Confirm) ScanOutcome.Unreadable else still
-            still is ScanOutcome.Decoded && all.size == 1 -> ScanOutcome.Decoded(all.single())
+            still is ScanOutcome.Decoded && photo.isNotEmpty() && all.size == 1 -> ScanOutcome.Decoded(all.single())
             else -> ScanOutcome.Confirm(all)
         }
         val source = when {

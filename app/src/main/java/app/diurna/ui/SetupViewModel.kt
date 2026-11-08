@@ -8,6 +8,8 @@ import app.diurna.ai.DetailBackfillRunner
 import app.diurna.ai.DetailBackfillWorker
 import app.diurna.ai.GatewaySettings
 import app.diurna.data.DataTransfer
+import app.diurna.data.LibraryRepository.Result
+import app.diurna.domain.DailyMetrics
 import app.diurna.data.ImportApply
 import app.diurna.data.ImportFailed
 import app.diurna.data.SettingsStore
@@ -63,6 +65,14 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
         stepsPermitted.value = c.stepSensor.permitted()
         todaySteps.value = c.steps.stepsOn(java.time.LocalDate.now())
     }
+
+    // Check-in metrics
+    val dailyMetrics = c.dailyMetrics.rows.state(emptyList())
+    suspend fun addMetric(def: DailyMetrics.Def): Result = c.dailyMetrics.add(def)
+    suspend fun updateMetric(def: DailyMetrics.Def): Result = c.dailyMetrics.update(def)
+    fun setMetricArchived(id: Long, archived: Boolean) = io("setup.set_metric_archived") { c.dailyMetrics.setArchived(id, archived, LocalDate.now()) }
+    fun deleteMetric(id: Long) = io("setup.delete_metric") { c.dailyMetrics.delete(id, LocalDate.now()) }
+    fun moveMetric(id: Long, up: Boolean) = io("setup.move_metric") { c.dailyMetrics.move(id, up) }
 
     /** What's new entries for Setup's card and page, newest first. */
     val changelog = c.changelog

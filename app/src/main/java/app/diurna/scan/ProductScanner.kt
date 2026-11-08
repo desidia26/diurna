@@ -4,6 +4,7 @@ import app.diurna.domain.ProductCode
 import app.diurna.domain.ScanDiagnostics
 import app.diurna.domain.ScanOutcome
 import app.diurna.domain.LiveScanSession
+import app.diurna.domain.guardScanMemory
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
@@ -117,7 +118,7 @@ fun ProductScanner(
                         if (!session.isActive()) { raw.delete(); return }
                         scope.launch {
                             try {
-                                val result = readCapturedBarcode(raw, latestDiagnostics)
+                                val result = guardScanMemory(latestDiagnostics) { readCapturedBarcode(raw, latestDiagnostics) }
                                 finish(result)
                             } catch (_: TimeoutCancellationException) {
                                 latestDiagnostics.onEvent("image_error", "timeout")

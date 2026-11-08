@@ -56,4 +56,8 @@ class LiveScanSessionTest {
         val s = LiveScanSession(); s.observe(listOf(a)); s.beginCapture(); assertFalse(s.observe(listOf(b)))
         assertEquals(ScanOutcome.Confirm(listOf(a)),s.complete(ScanOutcome.Unreadable)!!.outcome)
     }
+    @Test fun invalidStillCannotPromoteLiveOnlyCandidateToAutomaticLookup() {
+        val s = LiveScanSession(); s.observe(listOf(a)); s.beginCapture()
+        assertEquals(ScanOutcome.Confirm(listOf(a)), s.complete(ScanOutcome.Decoded(ProductCode("4006381333932")))!!.outcome)
+    }
 }

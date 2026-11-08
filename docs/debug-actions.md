@@ -97,3 +97,7 @@ existing google_apis emulator, this test is explicitly SKIPPED with “OCR corre
 That is an open engine-validation gap, NOT passing OCR correctness. Test XML/reports are retained
 on success as well as failure so skipped tests can be inspected. The sanitized blurry-photo replay
 is separately a safe-failure/live-fallback test, regardless of OCR availability.
+
+## Reviewed scanner integration
+
+Live-only fallback remains a human-confirmed candidate even after a photo error or low-memory image failure. `scan.image_outcome.*` describes saved-image processing; `scan.outcome.*` describes the final session resolution and its source (`live_confirmation`, `combined_confirmation`, `saved_photo`, or `none`). The session and lookup gates suppress stale/cancelled/duplicate completion. Candidate and OCR diagnostics contain counts/format/checksum metadata, not arbitrary recognized label text. Review corrections from scanner-decode are real-merged before scanner-reliability; debug-off attachment retention and the 20 MiB/7-day limits are unchanged.
