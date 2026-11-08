@@ -1,0 +1,3 @@
+Density remembers grams and fills empty nutrition
+
+When you type an ingredient's grams by hand, Diurna keeps that density as yours and won't overwrite it later. Looked-up density is stored on the ingredient so amount edits stay in grams. Empty nutrition on recipe lines is filled from USDA FoodData Central when a key is set and the name matches, or from an AI per-100g estimate otherwise (shown as an AI estimate, cached like densities). Recipe-blog noise in names — asterisks, parentheticals, "to taste" — is cleaned before lookups. Water and salt stay at zero macros once filled; numbers you entered by hand are never overwritten. Opening Edit recipe (or the background lookup) backfills older imported lines that still show zeros.

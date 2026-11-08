@@ -1,0 +1,3 @@
+Track your own daily metrics
+
+The evening check-in is no longer just mood and energy. In Setup → Check-in → Daily metrics you can add anything you want to track each day: a scale (like 1 to 10, with a word for each step if you want), a number (hours slept, glasses of water), yes or no (took meds, meditated), or a few words of text. Each one gets a row on the Day screen's Check-in card and its own chart on Metrics. Mood and Energy are still there with all their history, and you can rename, reorder or archive them like the rest. The 9pm reminder now waits for all of them and tells you what's still missing; text is always optional.
