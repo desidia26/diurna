@@ -73,8 +73,19 @@ import java.io.File
 
 class AppContainer(context: Context) {
     val appContext = context.applicationContext
+    val debug = app.diurna.debug.DebugLog(appContext)
+    val actions = debug.actions
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val db = AppDatabase.build(context)
+    init {
+        db.invalidationTracker.addObserver(object : androidx.room.InvalidationTracker.Observer(
+            "exercise", "workout_template", "template_exercise", "routine_day", "day", "day_workout", "logged_exercise", "exercise_set", "food_entry", "meal", "recipe_ingredient", "food_photo", "fdc_food_cache", "ingredient_density_cache"
+        ) {
+            override fun onInvalidated(tables: Set<String>) {
+                tables.sorted().forEach { actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.BACKGROUND, "repository.changed.$it", result = app.diurna.debug.Action.Result.OK)) }
+            }
+        })
+    }
     val settings = SettingsStore(context)
     val days = DayRepository(db)
     val dailyMetrics = DailyMetricRepository(db)
@@ -82,7 +93,7 @@ class AppContainer(context: Context) {
     val foodPhotos = FoodPhotos(File(context.filesDir, "food-photos"))
     val foodPhotoStore = FoodPhotoStore(db, foodPhotos)
     val food = FoodRepository(db, foodPhotos, foodPhotoStore)
-    val photoImporter = PhotoImporter(context, foodPhotos)
+    val photoImporter = PhotoImporter(context, foodPhotos, debug)
     val library = LibraryRepository(db, photoStore = foodPhotoStore)
     val backups = Backups(context, db, foodPhotos)
     /** What's new entries, read from assets once. */
@@ -97,6 +108,7 @@ class AppContainer(context: Context) {
     val gateway = GatewaySettingsStore(context)
     val apiKeys: Map<AiProvider, ApiKeyStore> = AiProvider.entries.associateWith { ApiKeyStore(context, it) }
     val usdaKey = ApiKeyStore.usda(context)
+    init { debug.recorder.knownSecrets = { apiKeys.values.mapNotNull { it.get() } + listOfNotNull(usdaKey.get()) } }
     val fdcClient = FdcClient(apiKey = { usdaKey.get() })
     val aminoResolver = AminoResolver(fdcClient, db.fdcFoodCacheDao())
     val network = NetworkMonitor(context)
@@ -129,7 +141,7 @@ class AppContainer(context: Context) {
             supportsImages = { gateway.supportsImages(AiProvider.OPENAI_COMPAT) },
             configured = openAiConfigured,
         ),
-    ))
+    )).let { app.diurna.debug.LoggedFoodEstimator(it, debug) }
     val estimates = EstimateRunner(
         db,
         foodEstimator,
@@ -158,7 +170,7 @@ class AppContainer(context: Context) {
             supportsImages = { gateway.supportsImages(AiProvider.OPENAI_COMPAT) },
             configured = openAiConfigured,
         ),
-    ))
+    )).let { app.diurna.debug.LoggedCardioReader(it, debug) }
     /** HTTPS schema.org Recipe import; never sees API keys. */
     val recipeImporter = RecipeImporter()
     /** Reads Nutrition Facts labels into the meal editor; person confirms before saving. */
@@ -180,7 +192,7 @@ class AppContainer(context: Context) {
             supportsImages = { gateway.supportsImages(AiProvider.OPENAI_COMPAT) },
             configured = openAiConfigured,
         ),
-    ))
+    )).let { app.diurna.debug.LoggedLabelReader(it, debug) }
 
     val densityEstimator: DensityEstimator = SelectedDensityEstimator({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeDensityEstimator(

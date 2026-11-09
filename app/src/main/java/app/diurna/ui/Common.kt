@@ -34,9 +34,20 @@ class SelectedDate {
 }
 
 /** Base for the screen ViewModels: fire-and-forget writes and a shorthand for exposing flows. */
-abstract class ScreenViewModel : ViewModel() {
-    protected fun io(block: suspend () -> Unit) {
-        viewModelScope.launch { block() }
+abstract class ScreenViewModel(private val actionStore: app.diurna.debug.Store? = null) : ViewModel() {
+    protected fun io(name: String = "screen.write", block: suspend () -> Unit) {
+        val id = java.util.UUID.randomUUID().toString()
+        val screen = runCatching { app.diurna.debug.Screen.valueOf(javaClass.simpleName.removeSuffix("ViewModel").uppercase()) }.getOrDefault(app.diurna.debug.Screen.BACKGROUND)
+        fun record(result: app.diurna.debug.Action.Result, latency: Long? = null) {
+            actionStore?.dispatch(app.diurna.debug.Action.Event(screen, name, id, result, latency))
+        }
+        record(app.diurna.debug.Action.Result.STARTED)
+        viewModelScope.launch {
+            val start = System.nanoTime()
+            try { block(); record(app.diurna.debug.Action.Result.OK, (System.nanoTime() - start) / 1_000_000) }
+            catch (e: kotlin.coroutines.cancellation.CancellationException) { record(app.diurna.debug.Action.Result.CANCELLED); throw e }
+            catch (e: Exception) { record(app.diurna.debug.Action.Result.FAILED); throw e }
+        }
     }
 
     protected fun <T> Flow<T>.state(initial: T): StateFlow<T> =

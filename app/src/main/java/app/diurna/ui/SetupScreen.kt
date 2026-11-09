@@ -1,5 +1,7 @@
 package app.diurna.ui
 
+import app.diurna.container
+
 import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationManager
@@ -62,6 +64,12 @@ private data class Check(val label: String, val detail: String, val ok: Boolean,
 @Composable
 fun SetupScreen(vm: SetupViewModel, library: LibraryViewModel, contentPadding: PaddingValues) {
     var page by rememberSaveable { mutableStateOf<String?>(null) }
+    val debugContext = LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(page) {
+        debugContext.container.actions.dispatch(app.diurna.debug.Action.Event(
+            if (page == "meals" || page == "exercises") app.diurna.debug.Screen.LIBRARY else app.diurna.debug.Screen.SETUP,
+            "setup.page." + (page ?: "main")))
+    }
     BackHandler(enabled = page != null) { page = null }
     when (page) {
         "meals" -> MealsPage(library) { page = null }
@@ -86,6 +94,10 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
     var scanning by remember { mutableStateOf(false) }
     var confirmReplace by remember { mutableStateOf(false) }
 
+    androidx.compose.runtime.LaunchedEffect(scanning, confirmReplace) {
+        context.container.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.SETUP,
+            if (scanning) "setup.dialog.porch_scan" else if (confirmReplace) "setup.dialog.replace_code" else "setup.dialog.closed"))
+    }
     val checks = remember(refresh) { permissionChecks(context) { requestPermission.launch(it) } }
 
     LazyColumn(
