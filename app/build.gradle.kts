@@ -114,6 +114,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.mlkit.text.recognition) // Unbundled Play Services OCR; sideloads download the model when first needed.
     implementation(libs.zxing.core)
     implementation(libs.anthropic.java)
     // Raises the SDK's Jackson (it parses every AI reply) to a release with the security fixes.
@@ -133,11 +134,14 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     // Android's built-in org.json is a stub in JVM unit tests.
     testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.room.testing)
