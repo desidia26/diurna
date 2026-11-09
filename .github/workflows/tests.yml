@@ -1,5 +1,8 @@
 # Unit tests and device tests on every pull request and every push to main.
-# Device tests run on an emulator only (see CLAUDE.md); the runner never has a phone attached.
+# Device tests run on an emulator only (see AGENTS.md); the runner never has a phone attached.
+# Hardware profile: built-in pixel_9 (1080x2424 @ 420dpi), matching Pixel 11 and Pixel 10a displays.
+# Custom pixel_11/pixel_10a defs live in .github/avd/devices.xml for local use; CI avdmanager
+# on Actions runners does not reliably load custom ~/.android/devices.xml.
 name: Tests
 
 on:
@@ -44,6 +47,7 @@ jobs:
     timeout-minutes: 60
     env:
       API_LEVEL: 33
+      AVD_PROFILE: pixel_9
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,7 +69,7 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-${{ env.API_LEVEL }}-google_apis-x86_64
+          key: avd-${{ env.API_LEVEL }}-${{ env.AVD_PROFILE }}-google_apis-x86_64
       # A booted snapshot is cached once, so later runs skip the cold boot.
       - name: Create AVD and snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
@@ -74,6 +78,7 @@ jobs:
           api-level: ${{ env.API_LEVEL }}
           target: google_apis
           arch: x86_64
+          profile: ${{ env.AVD_PROFILE }}
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
@@ -84,6 +89,7 @@ jobs:
           api-level: ${{ env.API_LEVEL }}
           target: google_apis
           arch: x86_64
+          profile: ${{ env.AVD_PROFILE }}
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
