@@ -2,4 +2,5 @@
 <!-- Only the camera's scratch folder is shared, and only with the camera app for one shot. -->
 <paths>
     <cache-path name="camera" path="camera/" />
+    <cache-path name="debug_reports" path="debug-reports/" />
 </paths>
