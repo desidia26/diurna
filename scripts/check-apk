@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Compares a built APK's attack surface with security/apk-baseline.txt: requested permissions,
+# exported components (and the permission guarding each), the application flags that must stay
+# off, and which hosts may use cleartext http. Anything new fails, so a new permission or
+# exported receiver is always seen and approved in the PR that updates the baseline, not
+# discovered on a phone.
+#
+#   scripts/check-apk <apk>                     check against the baseline
+#   scripts/check-apk <apk> --write-baseline    rewrite the baseline from this APK (review the diff)
+source "$(dirname "$0")/_lib.sh"
+
+apk="${1:?usage: scripts/check-apk <apk> [--write-baseline]}"
+[[ -f "$apk" ]] || die "no APK at $apk"
+tools="$SDK/build-tools/$(ls "$SDK/build-tools" | sort -V | tail -1)"
+baseline="$ROOT/security/apk-baseline.txt"
+
+surface="$("$tools/aapt2" dump xmltree --file AndroidManifest.xml "$apk" \
+  | python3 -I "$ROOT/scripts/check-apk.py" "$ROOT/app/src/main/res/xml/network_security_config.xml")"
+
+if [[ "${2:-}" == --write-baseline ]]; then
+  {
+    echo "# What a release APK exposes; scripts/check-apk fails on anything not listed here."
+    echo "# Regenerate with scripts/check-apk <apk> --write-baseline and explain each change in the PR."
+    echo "$surface"
+  } >"$baseline"
+  echo "wrote $baseline"
+  exit 0
+fi
+
+export LC_ALL=C # comm needs both sides in one byte order
+added="$(comm -13 <(grep -v '^#' "$baseline" | sort) <(sort <<<"$surface"))"
+removed="$(comm -23 <(grep -v '^#' "$baseline" | sort) <(sort <<<"$surface"))"
+[[ -n "$removed" ]] && echo "no longer in the APK (fine; update the baseline):" && sed 's/^/  - /' <<<"$removed"
+if [[ -n "$added" ]]; then
+  echo "new in this APK, not in security/apk-baseline.txt:"
+  sed 's/^/  + /' <<<"$added"
+  exit 1
+fi
+echo "APK surface matches the baseline ($(wc -l <<<"$surface") entries)"

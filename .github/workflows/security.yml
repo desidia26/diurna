@@ -1,0 +1,131 @@
+# Security checks on every pull request and every push to main. The nightly runs the same CVE
+# gate itself against fresh data, and refuses to publish on open high/critical CodeQL alerts.
+#
+#   CVE scan     scripts/security-gate: OSV advisories in what ships (release runtime classpath)
+#   CodeQL       static analysis of the Kotlin; alerts land in the Security tab and on PRs
+#   zizmor       workflow security lint (injection, unpinned actions, token scope)
+#   AI review    Claude reads the PR's diff and leaves one advisory comment; never blocks, never
+#                has a GitHub token, and only runs on same-repo PRs once CLAUDE_REVIEW_KEY is set
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+# Actions are pinned to full commit SHAs (release tag in the comment), so a moved or
+# compromised tag can't change what runs here. Bump the SHA and the comment together.
+permissions:
+  contents: read
+
+jobs:
+  cve:
+    name: Known vulnerabilities (what ships)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # versionCode is the commit count
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - run: scripts/security-gate
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write # upload results
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: true
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          queries: security-extended
+      # CodeQL reads the code by watching the compiler, so nothing may come from a cache.
+      - run: ./gradlew --no-daemon --no-build-cache --no-configuration-cache :app:compileReleaseKotlin
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:java-kotlin
+
+  zizmor:
+    name: Workflow lint (zizmor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write # findings go to the Security tab
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          version: 1.31.1
+
+  ai-review:
+    name: AI security review (advisory)
+    # Same-repo PRs only: fork PRs get no secrets anyway. Dependabot bumps are the CVE gate's job.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write # the one comment, posted by the workflow, not by Claude
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Review
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_REVIEW_KEY }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ -z "$ANTHROPIC_API_KEY" ]]; then
+            echo "CLAUDE_REVIEW_KEY isn't set; skipping the AI review." >>"$GITHUB_STEP_SUMMARY"
+            echo "skipped=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          scripts/ai-review "$BASE" "$HEAD" review.json
+      - name: Comment
+        if: steps.review.outputs.skipped != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        # One comment per PR, found again by its hidden marker and updated on each push.
+        run: |
+          python3 -I scripts/ai-review-comment.py review.json >comment.md
+          id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- diurna-ai-review -->")))][0].id // empty')"
+          if [[ -n "$id" ]]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md >/dev/null
+          else
+            gh pr comment "$PR" --body-file comment.md
+          fi

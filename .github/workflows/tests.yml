@@ -1,14 +1,17 @@
-# Unit tests and device tests on every pull request and every push to main.
+# Unit tests, lint and device tests on every pull request and every push to main.
 # Device tests run on an emulator only (see AGENTS.md); the runner never has a phone attached.
 # Hardware profile: built-in pixel_9 (1080x2424 @ 420dpi), matching Pixel 11 and Pixel 10a displays.
 # Custom pixel_11/pixel_10a defs live in .github/avd/devices.xml for local use; CI avdmanager
 # on Actions runners does not reliably load custom ~/.android/devices.xml.
+# workflow_dispatch lets the nightly's autofix job test its branch: PRs opened with the workflow
+# token don't start pull_request runs on their own.
 name: Tests
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: tests-${{ github.ref }}
@@ -29,6 +32,7 @@ jobs:
         with:
           # versionCode is the commit count, so the build needs the full history.
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -41,6 +45,30 @@ jobs:
           name: unit-test-reports
           path: app/build/reports/tests/testDebugUnitTest/
 
+  lint:
+    name: Lint (security checks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # A tampered gradle-wrapper.jar would run as the first thing in every build.
+      - uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      # app/lint.xml makes the security checks errors; app/lint-baseline.xml holds what predates them.
+      - run: ./gradlew lintRelease
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-release.*
+
   device:
     name: Device tests (emulator)
     runs-on: ubuntu-latest
@@ -52,6 +80,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
