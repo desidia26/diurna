@@ -3,8 +3,7 @@
 # Hardware profile: built-in pixel_9 (1080x2424 @ 420dpi), matching Pixel 11 and Pixel 10a displays.
 # Custom pixel_11/pixel_10a defs live in .github/avd/devices.xml for local use; CI avdmanager
 # on Actions runners does not reliably load custom ~/.android/devices.xml.
-# workflow_dispatch lets the nightly's autofix job test its branch: PRs opened with the workflow
-# token don't start pull_request runs on their own.
+# workflow_dispatch runs the tests on any branch by hand.
 name: Tests
 
 on:

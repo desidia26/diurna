@@ -8,8 +8,8 @@
 # certificate is checked against RELEASE_CERT_SHA256, so a wrong key never reaches anyone's phone.
 #
 # Security, before anything is signed: high/critical advisories in what ships (scripts/security-gate,
-# today's OSV data) or open high/critical CodeQL alerts block the night, and the autofix job asks
-# Claude for a fix PR. Claude also reviews everything since the last release; a finding sends the
+# today's OSV data) or open high/critical CodeQL alerts block the night, and the autofix jobs ask
+# Claude for a fix and file it, checked, as an issue for a person to apply. Claude also reviews everything since the last release; a finding sends the
 # night's publish to the release-held environment, which waits for a person. AI can hold a release
 # or propose a fix, never clear one. scripts/check-apk fails on a new permission or exported component.
 name: Nightly
@@ -360,7 +360,8 @@ jobs:
         run: rm -rf signing
 
   # Two jobs on two machines: Claude's edits run through Gradle in the first, which has only a
-  # read token; the second holds the write token and runs nothing from the patch.
+  # read token; the second can write issues and runs nothing from the patch. Neither can push,
+  # open PRs or start workflows: a person applies the fix from the issue.
   autofix:
     name: Security autofix (Claude proposes a fix)
     needs: [check, security]
@@ -370,7 +371,7 @@ jobs:
     environment: security # CLAUDE_AUTOFIX_KEY; main only
     permissions:
       contents: read
-      pull-requests: read # is an autofix PR already open?
+      issues: read # does the open issue already cover these findings?
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -400,17 +401,15 @@ jobs:
           if-no-files-found: ignore
 
   autofix-publish:
-    name: Security autofix (open the PR or issue)
+    name: Security autofix (file the issue)
     needs: [check, security, autofix]
-    # Also after a failed autofix job, so a blocked night always leaves a PR or an issue behind.
+    # Also after a failed autofix job, so a blocked night always leaves an issue behind.
     if: always() && needs.check.outputs.skip == 'false' && needs.security.outputs.blocked == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write # push the fix branch
-      pull-requests: write # open the PR
-      issues: write # or the issue, when there's no safe fix
-      actions: write # start Tests on the branch
+      contents: read
+      issues: write # the issue, with the checked patch when there is one
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -425,7 +424,7 @@ jobs:
         with:
           name: autofix
           path: ${{ runner.temp }}/autofix
-      - name: Open the PR or the issue
+      - name: File the issue
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/security-autofix publish "$RUNNER_TEMP/findings" "$RUNNER_TEMP/autofix"
