@@ -21,6 +21,12 @@ android {
     namespace = "app.diurna"
     compileSdk = 37
 
+    lint {
+        // app/lint.xml raises the security checks to errors. The baseline holds problems that
+        // were there before the gate existed, so only new ones fail; shrink it, never grow it.
+        baseline = file("lint-baseline.xml")
+    }
+
     defaultConfig {
         // Kept from the app's first name, Daybook: changing it would make Android treat it as a
         // different app, with none of this one's data. The code package (namespace) is app.diurna.
@@ -108,6 +114,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.mlkit.text.recognition) // Unbundled Play Services OCR; sideloads download the model when first needed.
     implementation(libs.zxing.core)
     implementation(libs.anthropic.java)
     // Raises the SDK's Jackson (it parses every AI reply) to a release with the security fixes.
@@ -127,11 +134,14 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     // Android's built-in org.json is a stub in JVM unit tests.
     testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.room.testing)
@@ -182,5 +192,29 @@ afterEvaluate {
                 if (!v.isNullOrBlank()) environment(name, v)
             }
         }
+    }
+}
+
+// What ships to phones, for scripts/security-gate: every module on the release runtime classpath,
+// written in Gradle's lockfile format because OSV-Scanner reads it as is. Build tooling (AGP and
+// the plugins) isn't on this classpath, so its advisories don't gate a release.
+//   ./gradlew :app:shippedDependencies  →  app/build/security/gradle.lockfile
+tasks.register("shippedDependencies") {
+    group = "verification"
+    description = "Write the release runtime classpath as a gradle.lockfile for the CVE scan"
+    val graph = configurations.named("releaseRuntimeClasspath").flatMap { it.incoming.resolutionResult.rootComponent }
+    val out = layout.buildDirectory.file("security/gradle.lockfile")
+    outputs.file(out)
+    outputs.upToDateWhen { false } // the point is a fresh look each time
+    doLast {
+        val modules = sortedSetOf<String>()
+        val seen = mutableSetOf<org.gradle.api.artifacts.result.ResolvedComponentResult>()
+        fun walk(c: org.gradle.api.artifacts.result.ResolvedComponentResult) {
+            if (!seen.add(c)) return
+            (c.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier)?.let { modules += "${it.group}:${it.module}:${it.version}" }
+            c.dependencies.filterIsInstance<org.gradle.api.artifacts.result.ResolvedDependencyResult>().forEach { walk(it.selected) }
+        }
+        walk(graph.get())
+        out.get().asFile.writeText(modules.joinToString("") { "$it=releaseRuntimeClasspath\n" } + "empty=\n")
     }
 }

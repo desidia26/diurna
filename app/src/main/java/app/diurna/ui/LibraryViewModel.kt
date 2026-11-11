@@ -1,6 +1,7 @@
 package app.diurna.ui
 
 import android.net.Uri
+import app.diurna.debug.operation
 import app.diurna.AppContainer
 import app.diurna.ai.FoodEstimate
 import app.diurna.ai.NutritionLabelReading
@@ -31,7 +32,7 @@ sealed interface RestaurantEstimateResult {
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoImportHost {
+class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), PhotoImportHost {
     /** null = All, [MealEntity.KIND_SIMPLE] = Meals, [MealEntity.KIND_RECIPE] = Recipes. */
     private val mealFilter = MutableStateFlow<String?>(null)
     val mealKindFilter = mealFilter
@@ -53,8 +54,8 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoIm
         if (on) all else all.filter { !it.isCardio || it.logged > 0 }
     }.state(emptyList())
 
-    fun setCardio(on: Boolean) = io { c.settings.setCardio(on) }
-    fun setDetailedNutrition(on: Boolean) = io { c.settings.setDetailedNutrition(on) }
+    fun setCardio(on: Boolean) = io("library.set_cardio") { c.settings.setCardio(on) }
+    fun setDetailedNutrition(on: Boolean) = io("library.set_detailed_nutrition") { c.settings.setDetailedNutrition(on) }
 
     // Suspend so dialogs can show a problem (e.g. a duplicate name) instead of closing.
     suspend fun saveMeal(meal: MealEntity): Result =
@@ -73,21 +74,24 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(), PhotoIm
 
     suspend fun searchFdc(query: String): List<FdcSearchHit> = c.fdcClient.search(query)
     suspend fun loadFdcNutrition(fdcId: Int): FdcNutritionProfile? = c.fdcClient.nutritionProfile(fdcId)
-    suspend fun scanBarcode(raw: String, upcE: Boolean = false) = c.library.scan(raw, upcE)
+    suspend fun scanBarcode(raw: String, upcE: Boolean = false) = c.debug.operation("barcode.lookup", app.diurna.debug.Screen.LIBRARY) {
+        c.debug.registerAttachment(raw.toByteArray(), app.diurna.debug.AttachmentKind.BARCODE)
+        c.library.scan(raw, upcE)
+    }
 
     suspend fun addExercise(name: String, cardio: Cardio.Style? = null): Result = c.library.addExercise(name, cardio)
     suspend fun setExerciseCardio(id: Long, cardio: Cardio.Style?): Result = c.library.setExerciseCardio(id, cardio)
     suspend fun renameExercise(id: Long, name: String): Result = c.library.renameExercise(id, name)
     suspend fun setExerciseNote(id: Long, note: String) = c.library.setExerciseNote(id, note)
 
-    fun deleteMeal(id: Long) = io { c.library.deleteMeal(id) }
-    fun setExerciseHidden(id: Long, hidden: Boolean) = io { c.library.setExerciseHidden(id, hidden) }
-    fun deleteExercise(id: Long) = io { c.library.deleteExercise(id) }
+    fun deleteMeal(id: Long) = io("library.delete_meal") { c.library.deleteMeal(id) }
+    fun setExerciseHidden(id: Long, hidden: Boolean) = io("library.set_exercise_hidden") { c.library.setExerciseHidden(id, hidden) }
+    fun deleteExercise(id: Long) = io("library.delete_exercise") { c.library.deleteExercise(id) }
 
     override val captureFile get() = c.photoImporter.captureFile
     override suspend fun importPhoto(uri: Uri) = c.photoImporter.import(uri)
     override suspend fun importCapture() = c.photoImporter.importCapture()
-    fun discardPhoto(name: String?) = io {
+    fun discardPhoto(name: String?) = io("library.discard_photo") {
         withContext(Dispatchers.IO) { c.foodPhotos.delete(name) }
     }
 

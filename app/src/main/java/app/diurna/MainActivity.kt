@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
                 var showWhatsNew by rememberSaveable { mutableStateOf(launcherOpen) }
                 if (showWhatsNew) WhatsNewDialog(whatsNewVm) { showWhatsNew = false }
                 var tab by rememberSaveable { mutableStateOf(Tab.Day) }
+                LaunchedEffect(tab) { c.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.valueOf(tab.name.uppercase()), "navigation.tab")) }
                 LaunchedEffect(showDayRequests) { if (showDayRequests > 0) tab = Tab.Day }
                 // An exercise opened from Day's menu goes back to Day, not to the Metrics list.
                 var backToDay by rememberSaveable { mutableStateOf(false) }
@@ -127,6 +128,8 @@ class MainActivity : ComponentActivity() {
                     // The padding is applied here rather than inside each list: as list content
                     // padding, the tab bar's space stayed reserved even with the keyboard covering
                     // it, so lists stopped scrolling one bar-height short of the keyboard.
+                    val debugScreen by c.debug.currentScreen.collectAsStateWithLifecycle()
+                    app.diurna.debug.DebugHost(c, if (tab == Tab.Setup && debugScreen == app.diurna.debug.Screen.LIBRARY) debugScreen else app.diurna.debug.Screen.valueOf(tab.name.uppercase())) {
                     Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
                         val inner = PaddingValues()
                         when (tab) {
@@ -143,6 +146,7 @@ class MainActivity : ComponentActivity() {
                             Tab.Routine -> RoutineScreen(routineVm, inner)
                             Tab.Setup -> SetupScreen(setupVm, libraryVm, inner)
                         }
+                    }
                     }
                 }
             }

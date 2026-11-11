@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Known-vulnerability check of what ships to phones: the release runtime classpath, scanned with
+# OSV-Scanner against today's OSV data. Exits 1 when a high or critical advisory (CVSS 7.0+, or
+# GitHub's HIGH/CRITICAL when there's no score) isn't waived in security/osv-scanner.toml.
+# Medium and low advisories, and waivers about to expire, are reported without failing.
+#
+#   scripts/security-gate                 scan, print a summary, write app/build/security/gate.json
+#   scripts/security-gate --osv-json F    judge an existing OSV-Scanner JSON report instead
+#
+# Build tooling (AGP, Gradle plugins) is deliberately out of scope: it never reaches a phone.
+source "$(dirname "$0")/_lib.sh"
+
+# Pinned scanner, checked against the release's published SHA-256 before it ever runs.
+OSV_VERSION=2.7.0
+OSV_SHA256=160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
+OUT="$ROOT/app/build/security"
+mkdir -p "$OUT"
+
+osv_json=""
+if [[ "${1:-}" == --osv-json ]]; then
+  osv_json="${2:?usage: scripts/security-gate --osv-json <file>}"
+else
+  scanner="${OSV_SCANNER:-}"
+  if [[ -z "$scanner" ]]; then
+    [[ "$(uname -s)-$(uname -m)" == Linux-x86_64 ]] || die "set OSV_SCANNER to an osv-scanner $OSV_VERSION binary on this platform"
+    scanner="${XDG_CACHE_HOME:-$HOME/.cache}/diurna/osv-scanner-$OSV_VERSION"
+    if [[ ! -x "$scanner" ]] || ! sha256sum "$scanner" | grep -q "^$OSV_SHA256 "; then
+      mkdir -p "$(dirname "$scanner")"
+      curl -fsSL --proto '=https' -o "$scanner.tmp" \
+        "https://github.com/google/osv-scanner/releases/download/v$OSV_VERSION/osv-scanner_linux_amd64"
+      echo "$OSV_SHA256  $scanner.tmp" | sha256sum -c --quiet - || { rm -f "$scanner.tmp"; die "osv-scanner checksum mismatch"; }
+      chmod +x "$scanner.tmp" && mv "$scanner.tmp" "$scanner"
+    fi
+  fi
+  (cd "$ROOT" && ./gradlew -q :app:shippedDependencies)
+  osv_json="$OUT/osv.json"
+  set +e
+  "$scanner" scan -L "$OUT/gradle.lockfile" --config "$ROOT/security/osv-scanner.toml" --format json >"$osv_json"
+  rc=$?
+  set -e
+  # 0: nothing found, 1: vulnerabilities found; anything else means the scan itself failed.
+  (( rc <= 1 )) || die "osv-scanner failed (exit $rc)"
+fi
+
+python3 -I "$ROOT/scripts/security-gate.py" "$osv_json" "$ROOT/security/osv-scanner.toml" "$OUT/gate.json"

@@ -212,7 +212,7 @@ data class ExerciseDetail(
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
+class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
     private val today = minuteTicker.map { it.toLocalDate() }.distinctUntilChanged()
 
     private val snapshot = combine(c.settings.metricsRange, today, ::Pair)
@@ -256,8 +256,8 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel() {
     fun openCardio(id: Long) { cardioMetric.value = null; openCardio.value = id }
     fun setCardioMetric(m: CardioMetric) { cardioMetric.value = m }
 
-    fun setRange(range: Metrics.Range) = io { c.settings.setMetricsRange(range) }
-    fun setMacroChartMode(mode: Metrics.MacroChartMode) = io { c.settings.setMacroChartMode(mode) }
+    fun setRange(range: Metrics.Range) = io("metrics.set_range") { c.settings.setMetricsRange(range) }
+    fun setMacroChartMode(mode: Metrics.MacroChartMode) = io("metrics.set_macro_chart_mode") { c.settings.setMacroChartMode(mode) }
     fun openExercise(id: Long) { metric.value = LiftMetric.E1RM; openExercise.value = id }
     fun closeExercise() { openExercise.value = null; openCardio.value = null }
     fun setMetric(m: LiftMetric) { metric.value = m }

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Android lint's security checks, raised to errors so CI fails on them (tests.yml runs
+     lintRelease). Most default to warnings, which nobody reads. -->
+<lint>
+    <!-- TLS and hostname checks turned off -->
+    <issue id="TrustAllX509TrustManager" severity="error" />
+    <issue id="BadHostnameVerifier" severity="error" />
+    <issue id="AllowAllHostnameVerifier" severity="error" />
+    <issue id="SSLCertificateSocketFactoryCreateSocket" severity="error" />
+    <issue id="SSLCertificateSocketFactoryGetInsecure" severity="error" />
+    <issue id="InsecureBaseConfiguration" severity="error" />
+    <issue id="AcceptsUserCertificates" severity="error" />
+    <!-- Components and intents other apps can reach -->
+    <issue id="ExportedReceiver" severity="error" />
+    <issue id="ExportedService" severity="error" />
+    <issue id="ExportedContentProvider" severity="error" />
+    <issue id="UnprotectedSMSBroadcastReceiver" severity="error" />
+    <issue id="UnsafeProtectedBroadcastReceiver" severity="error" />
+    <issue id="UnsafeImplicitIntentLaunch" severity="error" />
+    <issue id="UnsafeIntentLaunch" severity="error" />
+    <issue id="MutableImplicitPendingIntent" severity="error" />
+    <!-- WebViews, code loading, files other apps can read -->
+    <issue id="SetJavaScriptEnabled" severity="error" />
+    <issue id="AddJavascriptInterface" severity="error" />
+    <issue id="UnsafeDynamicallyLoadedCode" severity="error" />
+    <issue id="WorldReadableFiles" severity="error" />
+    <issue id="WorldWriteableFiles" severity="error" />
+    <issue id="SetWorldReadable" severity="error" />
+    <issue id="SetWorldWritable" severity="error" />
+    <!-- Crypto and build flags -->
+    <issue id="SecureRandom" severity="error" />
+    <issue id="TrulyRandom" severity="error" />
+    <issue id="GetInstance" severity="error" />
+    <issue id="HardcodedDebugMode" severity="error" />
+</lint>

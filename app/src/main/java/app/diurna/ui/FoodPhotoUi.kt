@@ -1,5 +1,7 @@
 package app.diurna.ui
 
+import app.diurna.container
+
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
@@ -105,12 +107,15 @@ fun rememberPhotoAttacher(host: PhotoImportHost, onAttached: (String) -> Unit): 
         }
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+        context.container.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.BACKGROUND,
+            "photo.camera_result", result = if (saved) app.diurna.debug.Action.Result.OK else app.diurna.debug.Action.Result.CANCELLED))
         // Some camera apps write EXTRA_OUTPUT then return RESULT_CANCELED; trust a non-empty file.
         if (PhotoCapture.shouldImport(saved, host.captureFile.length())) {
             import { host.importCapture() }
         }
     }
     fun launchCamera() {
+        context.container.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.BACKGROUND, "photo.capture"))
         val file = PhotoCapture.prepareScratch(host.captureFile)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.photos", file)
         try {
@@ -133,6 +138,7 @@ fun rememberPhotoAttacher(host: PhotoImportHost, onAttached: (String) -> Unit): 
                 if (granted) launchCamera() else askCamera.launch(Manifest.permission.CAMERA)
             },
             choosePhoto = {
+                context.container.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.BACKGROUND, "photo.pick"))
                 error = null
                 picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             },

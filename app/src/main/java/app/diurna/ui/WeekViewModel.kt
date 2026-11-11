@@ -28,7 +28,7 @@ data class WeekUi(val start: LocalDate, val today: LocalDate, val days: List<Wee
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class WeekViewModel(private val c: AppContainer) : ScreenViewModel() {
+class WeekViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
     val week: StateFlow<WeekUi?> = c.selectedDate.value.flatMapLatest { d ->
         val start = d.with(DayOfWeek.MONDAY)
         combine(
