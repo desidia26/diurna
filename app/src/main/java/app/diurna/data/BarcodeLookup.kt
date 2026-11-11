@@ -401,3 +401,35 @@ fun OffSnapshot.servingGrams(): Double {
     }
     return basisGrams
 }
+
+/**
+ * Grams in one serving when the snapshot actually knows it: OFF's `serving_quantity`, or a gram
+ * weight in the serving text. Null when OFF had per-serving numbers with no weight (unlike
+ * [servingGrams], which then falls back to the 100 g stand-in basis).
+ */
+fun OffSnapshot.knownServingGrams(): Double? {
+    if (!lookupOk) return null
+    rawJson?.let { raw ->
+        try {
+            val p = JSONObject(raw).optJSONObject("product")
+            val q = p?.opt("serving_quantity")?.toString()?.toDoubleOrNull()
+            if (q != null && q.isFinite() && q > 0 && q <= MAX_GRAMS) return q
+        } catch (_: JSONException) { }
+    }
+    return servingSize?.let(::gramsInServingText)
+}
+
+/** A gram weight written in a serving description ("1 bar (50 g)", "30g"), else null. */
+fun gramsInServingText(text: String): Double? {
+    val m = Regex("""(\d+(?:\.\d+)?)\s*g\b""", RegexOption.IGNORE_CASE).find(text) ?: return null
+    return m.groupValues[1].toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 && it <= MAX_GRAMS }
+}
+
+/**
+ * Grams that one serving of [meal]'s numbers stands for: the OFF snapshot's serving weight, else a
+ * gram weight in the meal's serving note ("100 g" for per-100 g products). Null when unknown, so
+ * callers ask for servings instead of guessing a per-100 g basis.
+ */
+fun gramsPerServing(meal: MealEntity): Double? =
+    OffSnapshot.decode(meal.offSnapshotJson)?.knownServingGrams()
+        ?: meal.note?.let(::gramsInServingText)
