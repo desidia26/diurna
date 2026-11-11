@@ -94,9 +94,26 @@ class LibraryRepository(
                 "\"${blocked.name}\" needs a density (or grams) before volume can convert to mass.",
             )
         }
+        val withTotals = withRecipeTotals(meal, lines)
+        when (val v = validate(withTotals)) {
+            is Validated.Bad -> v.problem
+            is Validated.Good -> {
+                val id = if (v.meal.id == 0L) meals.insert(v.meal) else {
+                    meals.update(v.meal)
+                    v.meal.id
+                }
+                ingredients.deleteForMeal(id)
+                ingredients.insertAll(lines.mapIndexed { i, line -> line.copy(id = 0, mealId = id, position = i) })
+                Result.Ok
+            }
+        }
+    }
+
+    /** [meal] as a recipe whose per-serving totals are [lines] summed over its yield ([RecipeMath]). */
+    private fun withRecipeTotals(meal: MealEntity, lines: List<RecipeIngredientEntity>): MealEntity {
         val yield = meal.servingsYield?.takeIf { it > 0 } ?: 1.0
         val totals = RecipeMath.perServing(lines.map { it.toNutrition() }, yield)
-        val withTotals = meal.copy(
+        return meal.copy(
             kind = MealEntity.KIND_RECIPE,
             servingsYield = yield,
             kcal = totals.kcal,
@@ -131,18 +148,6 @@ class LibraryRepository(
             aminoMatched = totals.aminoMatched,
             aminoTotal = totals.aminoTotal,
         )
-        when (val v = validate(withTotals)) {
-            is Validated.Bad -> v.problem
-            is Validated.Good -> {
-                val id = if (v.meal.id == 0L) meals.insert(v.meal) else {
-                    meals.update(v.meal)
-                    v.meal.id
-                }
-                ingredients.deleteForMeal(id)
-                ingredients.insertAll(lines.mapIndexed { i, line -> line.copy(id = 0, mealId = id, position = i) })
-                Result.Ok
-            }
-        }
     }
 
     private sealed interface Validated {
@@ -312,6 +317,54 @@ class LibraryRepository(
     }
 
     /**
+     * Logs a meal made of [lines] (e.g. the packages confirmed from one photo) on [date] as one
+     * entry with the recipe's exact totals (one serving: the whole of every line). With
+     * [saveToLibrary] the recipe is also saved to the Library under [name] and the entry linked to
+     * it; otherwise nothing but the entry is stored, and its numbers stay its own.
+     */
+    suspend fun logRecipe(
+        date: LocalDate,
+        name: String,
+        lines: List<RecipeIngredientEntity>,
+        saveToLibrary: Boolean,
+        photos: List<String> = emptyList(),
+    ): Result {
+        val clean = name.trim()
+        if (clean.isEmpty()) return Result.Problem("Give the meal a name.")
+        if (lines.isEmpty()) return Result.Problem("Add at least one ingredient.")
+        lines.firstOrNull { it.grams == null && IngredientNeedsMass(it) }?.let {
+            return Result.Problem("\"${it.name}\" needs a density (or grams) before volume can convert to mass.")
+        }
+        val recipe = withRecipeTotals(MealEntity(name = clean, kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_RECIPE, servingsYield = 1.0), lines)
+        val entryId = db.withTransaction {
+            val saved = if (!saveToLibrary) recipe else when (val v = validate(recipe)) {
+                is Validated.Bad -> return@withTransaction v.problem
+                is Validated.Good -> {
+                    val id = meals.insert(v.meal)
+                    ingredients.insertAll(lines.mapIndexed { i, line -> line.copy(id = 0, mealId = id, position = i) })
+                    v.meal.copy(id = id)
+                }
+            }
+            val t = now()
+            db.dayDao().insertIgnore(DayEntity(date.key()))
+            val id = food.insert(
+                FoodEntryEntity(
+                    date = date.key(),
+                    time = if (date == t.toLocalDate()) t.hhmm() else "12:00",
+                    text = clean,
+                    loggedAt = System.currentTimeMillis(),
+                    photo = photos.firstOrNull(),
+                )
+            )
+            applyMeal(id, saved, 1.0)
+            id
+        }
+        if (entryId !is Long) return entryId as Result
+        if (photos.isNotEmpty()) photoStore?.replaceAll(FoodPhotoEntity.OWNER_ENTRY, entryId, photos)
+        return Result.Ok
+    }
+
+    /**
      * Changes how many servings a meal entry was. Scales from the saved meal when it still exists,
      * otherwise from the entry's own numbers.
      */
@@ -364,7 +417,7 @@ class LibraryRepository(
         fun s(x: Int) = (x * servings).roundToInt()
         fun o(x: Int?) = x?.let { (it * servings).roundToInt() }
         food.setMeal(
-            entryId, meal.id, servings, text, s(meal.kcal), s(meal.proteinG), s(meal.carbsG), s(meal.fatG),
+            entryId, meal.id.takeIf { it > 0 }, servings, text, s(meal.kcal), s(meal.proteinG), s(meal.carbsG), s(meal.fatG),
             o(meal.fiberG), o(meal.solubleFiberG), o(meal.insolubleFiberG),
             o(meal.sugarsG), o(meal.addedSugarsG), o(meal.starchG),
             o(meal.satFatG), o(meal.monoFatG), o(meal.polyFatG), o(meal.transFatG),

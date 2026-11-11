@@ -100,6 +100,8 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
     var savingAsMeal by remember { mutableStateOf<FoodEntryEntity?>(null) }
     // Barcode flow: scanning → (new product: check and save) → how many servings → logged.
     var scanning by remember { mutableStateOf(false) }
+    // Meal from photo: the packages in one photo → confirmed amounts → one entry today.
+    var mealFromPhoto by remember { mutableStateOf(false) }
     var scannedDraft by remember { mutableStateOf<MealEntity?>(null) }
     var servingsOf by remember { mutableStateOf<MealEntity?>(null) }
     val hidden by vm.hiddenFood.collectAsStateWithLifecycle()
@@ -130,7 +132,8 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
                     IconButton(onClick = { attachOpen = true }, enabled = !attacher.busy) {
                         Icon(painterResource(R.drawable.ic_add), contentDescription = "Add photo or scan barcode", tint = MaterialTheme.colorScheme.primary)
                     }
-                    AttachMenu(attachOpen, attacher, onClose = { attachOpen = false }, onScan = { scanning = true }, allowPhotos = photos.size < 5)
+                    AttachMenu(attachOpen, attacher, onClose = { attachOpen = false }, onScan = { scanning = true }, allowPhotos = photos.size < 5,
+                        onMealFromPhoto = { mealFromPhoto = true })
                 }
             },
             trailingIcon = {
@@ -196,6 +199,13 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         undoable?.let { id -> s.food.find { it.id == id } }?.let { gone ->
             UndoBar("Deleted \u201c${gone.text.lines().first()}\u201d", onUndo = vm::undoDeleteFood)
         }
+    }
+    if (mealFromPhoto) {
+        MealFromPhotoFlow(
+            scan = vm::scanBarcode,
+            onDismiss = { mealFromPhoto = false },
+            onLog = { name, lines, save -> vm.logMealFromPhoto(name, lines, save).also { if (it == LibraryRepository.Result.Ok) mealFromPhoto = false } },
+        )
     }
     if (scanning) {
         BarcodeScanDialog(

@@ -3,6 +3,7 @@ package app.diurna.ui
 import android.net.Uri
 import app.diurna.debug.operation
 import app.diurna.AppContainer
+import app.diurna.data.LibraryRepository
 import app.diurna.ai.CardioReading
 import app.diurna.domain.CardioPiece
 import app.diurna.data.DayEntity
@@ -218,6 +219,22 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
         c.library.scan(code, upcE)
     }
     suspend fun saveMeal(meal: MealEntity) = c.library.saveMeal(meal)
+    /**
+     * Meal from photo: the ingredients confirmed from one photo become one entry on this day, and
+     * with [saveToLibrary] a Library recipe too. Debug log: counts and the outcome only.
+     */
+    suspend fun logMealFromPhoto(name: String, lines: List<IngredientDraft>, saveToLibrary: Boolean): LibraryRepository.Result {
+        val start = System.nanoTime()
+        val r = c.library.logRecipe(date, name, lines.mapIndexed { i, d -> d.toEntity(0, i) }, saveToLibrary)
+        c.actions.dispatch(app.diurna.debug.Action.Event(
+            app.diurna.debug.Screen.DAY, "day.meal_from_photo",
+            result = if (r == LibraryRepository.Result.Ok) app.diurna.debug.Action.Result.OK else app.diurna.debug.Action.Result.FAILED,
+            latencyMs = (System.nanoTime() - start) / 1_000_000,
+            details = mapOf("ingredients" to lines.size.toString(), "save_to_library" to saveToLibrary.toString(),
+                "outcome" to if (r == LibraryRepository.Result.Ok) "logged" else "problem"),
+        ))
+        return r
+    }
     suspend fun mealByBarcode(code: String) = c.library.mealByBarcode(code)
     fun setServings(entryId: Long, servings: Double) = io("day.set_servings") { c.library.setServings(entryId, servings) }
     suspend fun saveEntryAsMeal(entryId: Long, meal: MealEntity) = c.library.saveEntryAsMeal(entryId, meal)
