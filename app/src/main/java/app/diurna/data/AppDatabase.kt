@@ -31,8 +31,9 @@ import app.diurna.domain.DailyMetrics
         IngredientNutritionCacheEntity::class,
         DailyMetricEntity::class,
         DailyMetricValueEntity::class,
+        NutrientValueEntity::class,
     ],
-    version = 19,
+    version = 21,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -67,6 +68,10 @@ import app.diurna.domain.DailyMetrics
         // v18 is idempotent: see MIGRATION_17_18 (g_per_ml + nutrition cache, and
         // exercise.note when upgrading from an earlier #48 preview build at v17).
         // v19: check-in metrics defined in Setup; mood and energy move into them (MIGRATION_18_19).
+        // v20: extensible micronutrient amounts (nutrient_value).
+        AutoMigration(from = 19, to = 20),
+        // v21: one-photo capture columns on meal + recipe_ingredient (all nullable; unknown stays null).
+        AutoMigration(from = 20, to = 21),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -82,6 +87,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun ingredientDensityCacheDao(): IngredientDensityCacheDao
     abstract fun ingredientNutritionCacheDao(): IngredientNutritionCacheDao
     abstract fun dailyMetricDao(): DailyMetricDao
+    abstract fun nutrientValueDao(): NutrientValueDao
 
     /** v2: food estimates, body weight, finalized-day snapshots. The v1 estimate columns were never written. */
     @DeleteColumn(tableName = "food_entry", columnName = "kcal_estimate")

@@ -31,3 +31,9 @@ local.properties
 
 # Local AI eval reports (JSON/markdown); never commit live replies that might leak prompts+PII
 /ai-evals/out/
+
+# scripts/ai-review writes this for Claude to read and removes it after.
+.ai-review.diff
+
+# scripts/security-autofix: findings handed to Claude, removed after.
+.security-findings.json

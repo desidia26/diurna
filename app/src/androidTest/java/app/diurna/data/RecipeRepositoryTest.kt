@@ -55,6 +55,27 @@ class RecipeRepositoryTest {
         assertEquals(1.0, food.servings, 0.0)
     }
 
+    @Test fun capturedFactsSurviveSavingAndResavingTheRecipe() = runBlocking {
+        val captured = CapturedFacts(
+            ingredientsText = "PECANS.", ingredientsSource = "label", servingGrams = 28.0,
+            servingText = "1 oz (28g)", factsJson = """{"basis":"per_100g","fields":{"kcal":{"v":714.3,"s":"label"}}}""",
+        )
+        val line = RecipeIngredientEntity(
+            mealId = 0, position = 0, name = "Pecans", amount = 56.0, unit = "g", grams = 56.0,
+            proteinG = 6, carbsG = 8, fatG = 40, kcal = 400, source = "photo", barcode = "0078742202334",
+            captured = captured,
+        )
+        val meal = MealEntity(name = "Pecan pie bits", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_RECIPE)
+        assertEquals(LibraryRepository.Result.Ok, lib.saveRecipe(meal, listOf(line)))
+        val saved = lib.observeMeals(MealEntity.KIND_RECIPE).first().single()
+        val first = lib.ingredientsFor(saved.id).single()
+        assertEquals(captured, first.captured)
+        // Editing the recipe re-inserts lines; the capture travels with the line.
+        assertEquals(LibraryRepository.Result.Ok, lib.saveRecipe(saved.copy(name = "Pecan bits"), listOf(first.copy(id = 0))))
+        assertEquals(captured, lib.ingredientsFor(saved.id).single().captured)
+        assertEquals(714.3, lib.ingredientsFor(saved.id).single().captured!!.facts().getValue("kcal").value, 1e-9)
+    }
+
     @Test fun logByGramsUsesCookedWeight() = runBlocking {
         val line = RecipeIngredientEntity(
             mealId = 0, position = 0, name = "Chicken", amount = 200.0, unit = "g", grams = 200.0,
