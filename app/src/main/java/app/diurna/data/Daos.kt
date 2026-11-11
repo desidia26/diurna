@@ -150,6 +150,9 @@ interface MealDao {
     @Query("SELECT * FROM meal WHERE barcode = :code")
     suspend fun byBarcode(code: String): MealEntity?
 
+    @Query("SELECT * FROM meal")
+    suspend fun all(): List<MealEntity>
+
     @Insert
     suspend fun insert(meal: MealEntity): Long
 
@@ -402,6 +405,12 @@ interface FoodDao {
     @Query("SELECT * FROM food_entry WHERE date = :date ORDER BY time, id")
     fun observe(date: String): Flow<List<FoodEntryEntity>>
 
+    @Query("SELECT * FROM food_entry WHERE date = :date ORDER BY time, id")
+    suspend fun forDate(date: String): List<FoodEntryEntity>
+
+    @Query("SELECT * FROM food_entry WHERE date BETWEEN :from AND :to ORDER BY date, time, id")
+    suspend fun forDateRange(from: String, to: String): List<FoodEntryEntity>
+
     /** Each day's calories from estimated entries, the same sum as the Day screen's (midpoint per entry). */
     @Query(
         "SELECT date, SUM((kcal_low + kcal_high) / 2) AS kcal FROM food_entry " +
@@ -461,6 +470,9 @@ interface FoodDao {
 
     @Query("SELECT * FROM food_entry WHERE id = :id")
     suspend fun get(id: Long): FoodEntryEntity?
+
+    @Query("SELECT * FROM food_entry WHERE off_snapshot_json IS NOT NULL")
+    suspend fun withOffSnapshot(): List<FoodEntryEntity>
 
     /** Waiting for an estimate: never estimated and no recorded failure. */
     @Query("SELECT * FROM food_entry WHERE estimated_at IS NULL AND estimate_error IS NULL ORDER BY logged_at")
@@ -690,4 +702,28 @@ interface DailyMetricDao {
 
     @Query("DELETE FROM daily_metric_value WHERE date = :date AND metric_id = :id")
     suspend fun deleteValue(date: String, id: Long)
+}
+
+@Dao
+interface NutrientValueDao {
+    @Query(
+        "SELECT * FROM nutrient_value WHERE owner_kind = :kind AND owner_id = :ownerId",
+    )
+    suspend fun forOwner(kind: String, ownerId: Long): List<NutrientValueEntity>
+
+    @Query(
+        "SELECT * FROM nutrient_value WHERE owner_kind = :kind AND owner_id IN (:ownerIds)",
+    )
+    suspend fun forOwners(kind: String, ownerIds: List<Long>): List<NutrientValueEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(rows: List<NutrientValueEntity>)
+
+    @Query("DELETE FROM nutrient_value WHERE owner_kind = :kind AND owner_id = :ownerId")
+    suspend fun deleteOwner(kind: String, ownerId: Long)
+
+    @Query(
+        "DELETE FROM nutrient_value WHERE owner_kind = :kind AND owner_id = :ownerId AND nutrient_id = :nutrientId",
+    )
+    suspend fun deleteOne(kind: String, ownerId: Long, nutrientId: String)
 }

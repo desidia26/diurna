@@ -626,3 +626,30 @@ data class DailyMetricValueEntity(
     /** Text metrics only. */
     val text: String? = null,
 )
+
+/**
+ * One micronutrient amount attached to a meal, food entry, recipe ingredient, or FDC food id.
+ * Amounts are in [unit] (canonical: mg or ug). Missing nutrients have no row (≠ zero).
+ * Unique on (owner_kind, owner_id, nutrient_id); snapshots are replaced only by explicit writes.
+ */
+@Entity(
+    tableName = "nutrient_value",
+    primaryKeys = ["owner_kind", "owner_id", "nutrient_id"],
+    indices = [
+        Index(value = ["owner_kind", "owner_id"]),
+        Index(value = ["nutrient_id"]),
+    ],
+)
+data class NutrientValueEntity(
+    @ColumnInfo(name = "owner_kind") val ownerKind: String,
+    @ColumnInfo(name = "owner_id") val ownerId: Long,
+    @ColumnInfo(name = "nutrient_id") val nutrientId: String,
+    val amount: Double,
+    /** Canonical unit wire: "mg" or "ug". */
+    val unit: String,
+    /** fdc | off | manual */
+    val source: String,
+    /** When this row is an aggregate: how many children contributed. Leaf rows leave null. */
+    val contributing: Int? = null,
+    @ColumnInfo(name = "total_items") val totalItems: Int? = null,
+)
