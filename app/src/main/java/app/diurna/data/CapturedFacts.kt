@@ -26,6 +26,11 @@ data class CapturedFacts(
     /** Serving line as printed, e.g. "1 oz (28g)". */
     @ColumnInfo(name = "serving_text") val servingText: String? = null,
     @ColumnInfo(name = "facts_json") val factsJson: String? = null,
+    /**
+     * Append-only decision log plus every interpretation revision (the original AI / database
+     * reading stays as revision 0), written by the one-photo flow; see `DecisionLog`.
+     */
+    @ColumnInfo(name = "decision_log_json") val decisionLogJson: String? = null,
 ) {
     fun basis(): String? = obj()?.optString("basis")?.ifEmpty { null }
 

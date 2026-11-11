@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 21,
-    "identityHash": "a0a5cd5823c1a3fff72a1b55a66842b5",
+    "identityHash": "b8dcc86bc64eb0ad906a0eb02dbd0a9f",
     "entities": [
       {
         "tableName": "exercise",
@@ -861,7 +861,7 @@
       },
       {
         "tableName": "meal",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `kcal` INTEGER NOT NULL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `note` TEXT, `barcode` TEXT, `off_snapshot_json` TEXT, `kind` TEXT NOT NULL DEFAULT 'simple', `servings_yield` REAL, `cooked_weight_g` REAL, `restaurant_name` TEXT, `nutrition_source` TEXT, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `ingredients_json` TEXT, `amino_matched` INTEGER, `amino_total` INTEGER, `ingredients_text` TEXT, `ingredients_source` TEXT, `serving_grams` REAL, `serving_text` TEXT, `facts_json` TEXT)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `kcal` INTEGER NOT NULL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `note` TEXT, `barcode` TEXT, `off_snapshot_json` TEXT, `kind` TEXT NOT NULL DEFAULT 'simple', `servings_yield` REAL, `cooked_weight_g` REAL, `restaurant_name` TEXT, `nutrition_source` TEXT, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `ingredients_json` TEXT, `amino_matched` INTEGER, `amino_total` INTEGER, `ingredients_text` TEXT, `ingredients_source` TEXT, `serving_grams` REAL, `serving_text` TEXT, `facts_json` TEXT, `decision_log_json` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -1105,6 +1105,11 @@
             "fieldPath": "captured.factsJson",
             "columnName": "facts_json",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "captured.decisionLogJson",
+            "columnName": "decision_log_json",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -1145,7 +1150,7 @@
       },
       {
         "tableName": "recipe_ingredient",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `meal_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `unit` TEXT NOT NULL, `grams` REAL, `density_id` TEXT, `grams_per_each` REAL, `g_per_ml` REAL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `kcal` INTEGER NOT NULL, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `source` TEXT, `fdc_id` INTEGER, `barcode` TEXT, `source_meal_id` INTEGER, `ingredients_text` TEXT, `ingredients_source` TEXT, `serving_grams` REAL, `serving_text` TEXT, `facts_json` TEXT, FOREIGN KEY(`meal_id`) REFERENCES `meal`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `meal_id` INTEGER NOT NULL, `position` INTEGER NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `unit` TEXT NOT NULL, `grams` REAL, `density_id` TEXT, `grams_per_each` REAL, `g_per_ml` REAL, `protein_g` INTEGER NOT NULL, `carbs_g` INTEGER NOT NULL, `fat_g` INTEGER NOT NULL, `kcal` INTEGER NOT NULL, `fiber_g` INTEGER, `soluble_fiber_g` INTEGER, `insoluble_fiber_g` INTEGER, `sugars_g` INTEGER, `added_sugars_g` INTEGER, `starch_g` INTEGER, `sat_fat_g` INTEGER, `mono_fat_g` INTEGER, `poly_fat_g` INTEGER, `trans_fat_g` INTEGER, `cholesterol_mg` INTEGER, `omega3_g` INTEGER, `omega6_g` INTEGER, `omega9_g` INTEGER, `his_mg` INTEGER, `ile_mg` INTEGER, `leu_mg` INTEGER, `lys_mg` INTEGER, `met_mg` INTEGER, `phe_mg` INTEGER, `thr_mg` INTEGER, `trp_mg` INTEGER, `val_mg` INTEGER, `cys_mg` INTEGER, `tyr_mg` INTEGER, `source` TEXT, `fdc_id` INTEGER, `barcode` TEXT, `source_meal_id` INTEGER, `ingredients_text` TEXT, `ingredients_source` TEXT, `serving_grams` REAL, `serving_text` TEXT, `facts_json` TEXT, `decision_log_json` TEXT, FOREIGN KEY(`meal_id`) REFERENCES `meal`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -1395,6 +1400,11 @@
           {
             "fieldPath": "captured.factsJson",
             "columnName": "facts_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "captured.decisionLogJson",
+            "columnName": "decision_log_json",
             "affinity": "TEXT"
           }
         ],
@@ -1956,7 +1966,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a0a5cd5823c1a3fff72a1b55a66842b5')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b8dcc86bc64eb0ad906a0eb02dbd0a9f')"
     ]
   }
 }

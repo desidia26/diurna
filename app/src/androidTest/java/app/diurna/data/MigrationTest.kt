@@ -721,9 +721,9 @@ class MigrationTest {
         }
         val db = helper.runMigrationsAndValidate(dbName + "-21", 21, true)
         for (table in listOf("meal", "recipe_ingredient")) {
-            db.query("SELECT ingredients_text, ingredients_source, serving_grams, serving_text, facts_json FROM $table WHERE id = 1").use {
+            db.query("SELECT ingredients_text, ingredients_source, serving_grams, serving_text, facts_json, decision_log_json FROM $table WHERE id = 1").use {
                 assertTrue(table, it.moveToFirst())
-                for (col in 0..4) assertTrue("$table col $col starts null (unknown, not zero)", it.isNull(col))
+                for (col in 0..5) assertTrue("$table col $col starts null (unknown, not zero)", it.isNull(col))
             }
         }
         db.query("SELECT name, kcal, barcode FROM meal WHERE id = 1").use {
@@ -745,12 +745,13 @@ class MigrationTest {
         }
         db.execSQL(
             "UPDATE recipe_ingredient SET ingredients_text='Rolled oats', ingredients_source='label', serving_grams=40.0, " +
-                "serving_text='1/2 cup (40g)', facts_json='{}' WHERE id = 1"
+                "serving_text='1/2 cup (40g)', facts_json='{}', decision_log_json='{\"entries\":[]}' WHERE id = 1"
         )
-        db.query("SELECT ingredients_text, serving_grams FROM recipe_ingredient WHERE id = 1").use {
+        db.query("SELECT ingredients_text, serving_grams, decision_log_json FROM recipe_ingredient WHERE id = 1").use {
             assertTrue(it.moveToFirst())
             assertEquals("Rolled oats", it.getString(0))
             assertEquals(40.0, it.getDouble(1), 0.0)
+            assertEquals("{\"entries\":[]}", it.getString(2))
         }
         db.close()
     }
