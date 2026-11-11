@@ -1,0 +1,46 @@
+{
+ "products": [
+  {
+   "has_nutrition_panel": true,
+   "product_name": "Old Fashioned Oats",
+   "brand": "",
+   "size_text": "",
+   "printed_barcode": "",
+   "center_x": -1,
+   "serving_text": "1/2 cup dry (40g)",
+   "serving_grams": 40,
+   "servings_per_container": 13,
+   "kcal": 150,
+   "protein_g": 5,
+   "carbs_g": 27,
+   "fat_g": 3,
+   "fiber_g": 4,
+   "sugars_g": 1,
+   "added_sugars_g": 0,
+   "sat_fat_g": 0.5,
+   "trans_fat_g": 0,
+   "mono_fat_g": -1,
+   "poly_fat_g": -1,
+   "cholesterol_mg": 0,
+   "sodium_mg": 0,
+   "potassium_mg": -1,
+   "calcium_mg": -1,
+   "iron_mg": -1,
+   "vitamin_d_ug": -1,
+   "ingredients_text": "WHOLE GRAIN ROLLED OATS.",
+   "note": ""
+  }
+ ],
+ "questions": [
+  {
+   "product_index": 0,
+   "topic": "serving_basis",
+   "text": "The panel has Dry and Prepared columns; I used Dry. Which one should be saved?",
+   "suggested_answers": [
+    "Dry",
+    "Prepared"
+   ]
+  }
+ ],
+ "note": ""
+}

@@ -11,7 +11,7 @@ Eval harness for every prompt that ships on `main`. It calls the **same** Kotlin
 | `EstimatePrompt` (detailed + ingredients) | Food estimate / backfill when Detailed + FDC key | text ± photo, `ingredients=true` | `food` + `input.ingredients` |
 | `CardioPrompt` | Claude + Grok cardio readers | workout-summary photo | `cardio` |
 | `LabelPrompt` | Claude + Grok label readers | Nutrition Facts photo | `label` |
-| `PackagePrompt` | Claude / Grok / OpenAI-compat package readers (one-photo ingredient capture) | one package photo: panel per serving + ingredients list | `package` |
+| `PackagePrompt` | Claude / Grok / OpenAI-compat package readers (one-photo ingredient capture) | one photo of one or more packages: per-product panel, ingredients and identity (brand, name, size, printed barcode digits), plus clarifying questions; refinement re-reads the previous interpretation with the user's answer (photo only while still in memory) | `package`, `package_refine` |
 | `DensityPrompt` | Claude / Grok / OpenAI-compat density estimators (USDA FDC miss fallback) | ingredient name + `unit_kind` (`volume` / `each`) | `density` |
 
 **Not AI prompts** (no eval cases): Open Food Facts barcode lookup, schema.org recipe import, FDC amino resolution and FDC portion→density derivation (API, not a model call). AI density fallback is covered above.
@@ -81,7 +81,7 @@ Expectations are **bands and tolerances**, not exact values (kcal ±%, macro ran
 ### Adding a case
 
 1. Edit the JSON under `ai-evals/cases/` (or add an image under `ai-evals/images/` — see `images/SOURCE.md`; only generate or use public-domain/CC0).
-2. Set `prompt` to `food`, `cardio`, `label`, `package`, `density`, or `barcode_ingredients`. For detailed/ingredients food paths set `input.detailed` / `input.ingredients`.
+2. Set `prompt` to `food`, `cardio`, `label`, `package`, `package_refine`, `density`, or `barcode_ingredients`. A `package_refine` case sets `input.previous` (a stored interpretation JSON under `ai-evals/refine/`) and `input.answer`; `input.image` is optional (omit it to test the text-only refinement used after the photo is deleted). Package cases can also set `expect.minProducts`, `expect.products` (each with `nameContainsAny`, `nutrients`, `servingGrams`), `expect.identityContainsAny`, `expect.questions` (`none` or `required`) and `expect.questionTopicsAny`. For detailed/ingredients food paths set `input.detailed` / `input.ingredients`.
 3. Set `expect.outcome` to `estimate`, `not_food`, `not_food_or_zeros`, `reading`, `no_panel` (package: rejected or no panel numbers, never invented ones), or `reject`.
    Package cases use `expect.nutrients` (`{"kcal": {"min": 190, "max": 210}}`, keys from `PackagePrompt.NUTRIENT_KEYS`; add `"required": false` for values that are hard to read, so a miss is recorded but doesn't fail), `servingGrams`, `ingredientsContainsAny` and `requirePanel`. Bands come from what the photo actually shows; leave out anything you can't read confidently.
 4. Run `./gradlew aiEval -Pprovider=… -Pset=…` and adjust bands if a healthy model is consistently outside them.

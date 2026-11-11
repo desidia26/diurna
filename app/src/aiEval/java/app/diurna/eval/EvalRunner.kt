@@ -170,7 +170,20 @@ class EvalRunner(
                     if (photo == null) {
                         return CaseScore(case.id, pid.id, case.prompt, passed = false, error = "package case needs image")
                     }
-                    EvalScoring.scorePackage(case, reader.read(photo), clients.scoringMode).copy(provider = pid.id)
+                    EvalScoring.scorePackagePhoto(case, reader.read(photo), clients.scoringMode).copy(provider = pid.id)
+                }
+                "package_refine" -> {
+                    if (pid == EvalProviderId.OLLAMA && config.ollamaTextOnly && photo != null) {
+                        return CaseScore(case.id, pid.id, case.prompt, passed = true, skipped = true, skipReason = "ollama smoke skips vision")
+                    }
+                    val reader = clients.pkg
+                        ?: return CaseScore(case.id, pid.id, case.prompt, passed = true, skipped = true, skipReason = "no package client")
+                    val prevFile = case.input.previous?.let { File(imagesRoot, it) }
+                    if (prevFile == null || !prevFile.isFile || case.input.answer.isNullOrBlank()) {
+                        return CaseScore(case.id, pid.id, case.prompt, passed = false, error = "package_refine needs previous + answer")
+                    }
+                    val previous = app.diurna.ai.PackagePrompt.parse(prevFile.readText())
+                    EvalScoring.scorePackagePhoto(case, reader.refine(photo, previous, case.input.answer), clients.scoringMode).copy(provider = pid.id)
                 }
                 "density" -> {
                     val dens = clients.density
@@ -234,7 +247,7 @@ class EvalRunner(
                     case.id, pid.id, case.prompt, passed = false, error = e.message ?: "EstimateFailed",
                 )
                 "label" -> EvalScoring.scoreLabelFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
-                "package" -> EvalScoring.scorePackageFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
+                "package", "package_refine" -> EvalScoring.scorePackageFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "density" -> EvalScoring.scoreDensityFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "ingredient_nutrition" -> EvalScoring.scoreIngredientNutritionFailure(
                     case, e.message ?: "EstimateFailed",
