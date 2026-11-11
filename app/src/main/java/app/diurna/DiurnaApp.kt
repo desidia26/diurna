@@ -195,6 +195,26 @@ class AppContainer(context: Context) {
             configured = openAiConfigured,
         ),
     )).let { app.diurna.debug.LoggedLabelReader(it, debug) }
+    /** One-photo package read (label + ingredients) for the confirm screen; the barcode is decoded on the phone. */
+    val packageReader: app.diurna.ai.PackageReader = app.diurna.ai.SelectedPackageReader({ aiProvider.get() }, mapOf(
+        AiProvider.ANTHROPIC to app.diurna.ai.ClaudePackageReader(
+            apiKey = { apiKeys.getValue(AiProvider.ANTHROPIC).get() },
+            baseUrl = { gateway.anthropicBaseOrNull() },
+            supportsImages = { gateway.supportsImages(AiProvider.ANTHROPIC) },
+        ),
+        AiProvider.XAI to app.diurna.ai.GrokPackageReader(
+            apiKey = { apiKeys.getValue(AiProvider.XAI).get() },
+            transport = xaiTransport,
+            supportsImages = { gateway.supportsImages(AiProvider.XAI) },
+        ),
+        AiProvider.OPENAI_COMPAT to app.diurna.ai.OpenAiCompatPackageReader(
+            apiKey = { apiKeys.getValue(AiProvider.OPENAI_COMPAT).get() },
+            modelProvider = { gateway.get().openAiModel.trim() },
+            transportProvider = { openAiTransport },
+            supportsImages = { gateway.supportsImages(AiProvider.OPENAI_COMPAT) },
+            configured = openAiConfigured,
+        ),
+    ))
 
     val densityEstimator: DensityEstimator = SelectedDensityEstimator({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeDensityEstimator(

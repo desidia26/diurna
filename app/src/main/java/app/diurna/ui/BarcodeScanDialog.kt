@@ -165,10 +165,5 @@ fun BarcodeScanDialog(
 }
 
 /** Debug-log outcome and details for a lookup: codes and reasons only, never product text. */
-internal fun lookupDiagnostic(result: ScanResult): Pair<String, Map<String, String>> = when (result) {
-    is ScanResult.Known -> "known" to emptyMap()
-    is ScanResult.Found -> "found" to emptyMap()
-    is ScanResult.NotFound -> "not_found" to mapOf("spellings_tried" to result.tried.size.toString())
-    is ScanResult.Incomplete -> "incomplete" to mapOf("problem" to result.problem.wire)
-    is ScanResult.Failed -> result.reason to emptyMap()
-}
+internal fun lookupDiagnostic(result: ScanResult): Pair<String, Map<String, String>> =
+    app.diurna.data.OnePhotoCapture.lookupDiagnostic(result)

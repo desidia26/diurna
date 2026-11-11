@@ -1,0 +1,3 @@
+One photo adds a packaged ingredient
+
+In the recipe editor, Package photo replaces typing a barcode. Take one picture of the package and Diurna reads the barcode on the phone, looks it up in Open Food Facts and, if you've added a USDA key, USDA's branded foods, while your AI provider reads the Nutrition Facts and the ingredients. It shows where each number came from and flags sources that disagree. Enter grams or servings (servings when the serving weight is known), then Save. The photo is deleted once it's read. Anything not found can be typed in. Nothing found no longer adds a zero-calorie "Scanned item". When you're offline or have no AI key, the barcode result is kept and the line offers Read label for later. Live scan is still there as a fallback.

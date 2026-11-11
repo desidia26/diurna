@@ -14,7 +14,7 @@ import org.json.JSONObject
  * [factsJson]: `{"basis":"per_100g","serving_grams_source":"label","flags":[…],
  * "fields":{"kcal":{"v":714.3,"s":"label","alt":[{"s":"off","v":700}]}, …}}`. Values are per
  * 100 g; `s` is a [Source.wire] (manual / label / fdc_branded / off); `alt` holds disagreeing
- * lower sources shown on the confirm screen. The line's own macro columns stay the snapshot
+ * lower sources shown on the confirm screen; `label_pending` marks a capture whose label wasn't read. The line's own macro columns stay the snapshot
  * for the amount used, as for every other ingredient.
  */
 data class CapturedFacts(
@@ -34,6 +34,9 @@ data class CapturedFacts(
     fun flags(): Set<PackageMerge.Flag> = obj()?.optJSONArray("flags")?.let { a ->
         (0 until a.length()).mapNotNull { i -> PackageMerge.Flag.entries.firstOrNull { it.name == a.optString(i) } }.toSet()
     } ?: emptySet()
+
+    /** The label wasn't read yet (offline / no AI key / failed read); a later label photo can fill it in. */
+    fun labelPending(): Boolean = obj()?.optBoolean("label_pending", false) == true
 
     /** Per-100 g facts by key; empty when none were stored or the JSON is unreadable. */
     fun facts(): Map<String, PackageMerge.Fact> {
@@ -65,7 +68,7 @@ data class CapturedFacts(
          * From a merge, with per-100 g values the person typed on the confirm screen in [manual]
          * (recorded as [Source.MANUAL], keeping the value they replaced as a disagreement).
          */
-        fun from(m: PackageMerge.Merged, manual: Map<String, Double> = emptyMap()): CapturedFacts {
+        fun from(m: PackageMerge.Merged, manual: Map<String, Double> = emptyMap(), labelPending: Boolean = false): CapturedFacts {
             val facts = LinkedHashMap(m.per100g)
             manual.forEach { (k, v) ->
                 if (!v.isFinite() || v < 0) return@forEach
@@ -84,6 +87,7 @@ data class CapturedFacts(
             val json = JSONObject().put("basis", BASIS_PER_100G).put("fields", fields)
             m.servingGrams?.let { json.put("serving_grams_source", it.source.wire) }
             if (m.flags.isNotEmpty()) json.put("flags", JSONArray(m.flags.map { it.name }.sorted()))
+            if (labelPending) json.put("label_pending", true)
             return CapturedFacts(
                 ingredientsText = m.ingredients?.first?.take(MAX_TEXT),
                 ingredientsSource = m.ingredients?.second?.wire,
