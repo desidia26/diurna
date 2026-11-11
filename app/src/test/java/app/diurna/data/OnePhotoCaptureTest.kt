@@ -3,6 +3,7 @@ package app.diurna.data
 import app.diurna.ai.EstimateFailed
 import app.diurna.ai.EstimateRetryable
 import app.diurna.ai.NoApiKey
+import app.diurna.ai.PackageCrops
 import app.diurna.ai.PackagePhotoReading
 import app.diurna.ai.PackageQuestion
 import app.diurna.ai.PackageReader
@@ -68,7 +69,8 @@ class OnePhotoCaptureTest {
         fdcSearch: suspend (String) -> List<FdcBrandedFood> = { emptyList() },
         offSearch: suspend (String) -> String? = { null },
         events: MutableList<String> = mutableListOf(),
-    ) = OnePhotoCapture(lookup, fdcByCode, reader, online, fdcSearch, offSearch) { name, result, details -> events += "$name:$result:$details" }
+        twoPass: Boolean = true,
+    ) = OnePhotoCapture(lookup, fdcByCode, reader, online, fdcSearch, offSearch, twoPass) { name, result, details -> events += "$name:$result:$details" }
 
     private fun decoded(vararg codes: String): suspend () -> PhotoCodes = {
         if (codes.size == 1) PhotoCodes(ScanOutcome.Decoded(ProductCode(codes[0])))
@@ -245,5 +247,90 @@ class OnePhotoCaptureTest {
         val names = events.map { it.substringBefore(":{") }
         assertTrue(names.toString(), names.containsAll(listOf("onephoto.decode:decoded", "onephoto.lookup:found", "onephoto.fdc:found", "onephoto.label:read", "onephoto.merge:ok")))
         assertFalse(events.any { "Almond" in it || "0076991000411" in it || "076991000411" in it })
+    }
+
+    private class Crops(val boxes: List<PackageCrops.Box>) : PackageCrops.Source {
+        override suspend fun detect() = boxes
+        // The crop's bytes say which box it is, so the fake reader can answer per package.
+        override suspend fun cut(box: PackageCrops.Box) = byteArrayOf(if (box.left < 0.5) 1 else 2)
+    }
+    private val twoBoxes = listOf(PackageCrops.Box(0.05, 0.1, 0.45, 0.9), PackageCrops.Box(0.55, 0.1, 0.95, 0.9))
+
+    @Test fun severalPackagesAreReadFromTheirOwnCropsAndPairWithBarcodesByPosition() = runBlocking {
+        val sent = mutableListOf<Int>()
+        val events = mutableListOf<String>()
+        val reader = FakeReader({ b -> synchronized(sent) { sent += b[0].toInt() }
+            when (b[0].toInt()) {
+                1 -> PackagePhotoReading(listOf(flax.copy(centerX = 0.5)))
+                2 -> PackagePhotoReading(listOf(almonds.copy(centerX = 0.5)))
+                else -> error("whole photo should not be read")
+            } })
+        val c = capture(reader = reader, events = events, twoPass = false, lookup = { code, _ -> found(code, if (code.endsWith("411")) "Almonds" else "Flax", 600) })
+            .run(byteArrayOf(0), decoded(flaxCode, almondsCode), crops = Crops(twoBoxes))
+        assertEquals(listOf(1, 2), sent.sorted())
+        assertEquals(2, c.rows.size)
+        assertTrue(c.log.entries.any { it.text.startsWith("Found 2 packages on the phone") })
+        assertEquals(listOf(0, 1), c.log.entries.filter { it.text.contains("read from its own close-up crop") }.map { it.product })
+        assertTrue(events.any { it.startsWith("onephoto.crops:cropped:") && "calls=2" in it })
+    }
+
+    @Test fun onePackageFoundReadsTheWholePhoto() = runBlocking {
+        val sent = mutableListOf<Int>()
+        val c = capture(reader = FakeReader({ b -> sent += b[0].toInt(); PackagePhotoReading(listOf(almonds)) }), twoPass = false)
+            .run(byteArrayOf(0), decoded(almondsCode), crops = Crops(twoBoxes.take(1)))
+        assertEquals(listOf(0), sent)
+        assertEquals(1, c.rows.size)
+        assertTrue(c.log.entries.any { it.text.contains("read the photo whole") })
+        assertTrue(c.log.entries.none { it.text.contains("own close-up crop") })
+    }
+
+    @Test fun noKeyStillSkipsTheLabelWithCrops() = runBlocking {
+        val c = capture(reader = FakeReader({ throw NoApiKey("no key") })).run(byteArrayOf(0), decoded(almondsCode), crops = Crops(twoBoxes))
+        assertTrue(c.label is LabelStatus.Skipped)
+    }
+
+    /** Pass 1 names each package, the lookups find records, pass 2 reads with them: all of it in the log. */
+    private inner class TwoPassReader : PackageReader {
+        override val model = "fake"
+        val known = mutableMapOf<Int, List<app.diurna.ai.KnownProduct>>()
+        var whole = 0
+        override suspend fun read(photo: ByteArray): PackagePhotoReading { whole++; return PackagePhotoReading(listOf(almonds)) }
+        override suspend fun refine(photo: ByteArray?, previous: PackagePhotoReading, answer: String) = previous
+        override suspend fun identify(photo: ByteArray, closeUp: Boolean) = listOf(
+            if (photo[0].toInt() == 1) app.diurna.ai.PackageIdentity("Roots Circle", "Flax Seeds", centerX = 0.5)
+            else app.diurna.ai.PackageIdentity("Mariani", "Sliced Almonds", printedBarcode = "076991000411", centerX = 0.5))
+        override suspend fun readWithKnown(photo: ByteArray, closeUp: Boolean, known: List<app.diurna.ai.KnownProduct>): PackagePhotoReading {
+            synchronized(this.known) { this.known[photo[0].toInt()] = known }
+            return if (photo[0].toInt() == 1) PackagePhotoReading(listOf(flax.copy(hasPanel = false, perServing = emptyMap(), centerX = 0.5,
+                guessed = mapOf("fiber_g" to 2.0))))
+            else PackagePhotoReading(listOf(almonds.copy(centerX = 0.5, perServing = almonds.perServing + ("kcal" to 300.0),
+                // Ignored: the app compares the panel with the records itself.
+                conflicts = listOf(app.diurna.ai.LabelConflict("fat_g", 1.0, 2.0, "made_up")))))
+        }
+    }
+
+    @Test fun twoPassReadsEachPackageWithItsRecordsAndLogsEveryStep() = runBlocking {
+        val r = TwoPassReader()
+        val events = mutableListOf<String>()
+        val searched = mutableListOf<String>()
+        val lookedUp = mutableListOf<String>()
+        val c = capture(reader = r, events = events, fdcSearch = { q -> searched += q; emptyList() },
+            lookup = { code, _ -> synchronized(lookedUp) { lookedUp += code }; found(code) })
+            .run(byteArrayOf(0), decoded(almondsCode), crops = Crops(twoBoxes))
+        assertEquals(0, r.whole)
+        // The almonds' printed barcode is looked up once, for pass 2 and the merge alike.
+        assertEquals(1, lookedUp.count { normalizeBarcode(it) == normalizeBarcode(almondsCode) })
+        assertEquals("usda_branded", r.known.getValue(2).single().facts.first().source)
+        assertEquals(listOf("Roots Circle Flax Seeds"), searched)
+        val text = c.log.entries.map { it.text }
+        assertTrue(text.any { it.startsWith("Pass 1 (identity) for package 1") && "Flax Seeds" in it })
+        assertTrue(text.any { it.startsWith("Lookup by barcode 076991000411") })
+        assertTrue(text.any { it.startsWith("Lookup by name “Roots Circle Flax Seeds”: no database record") })
+        assertTrue(text.any { it.startsWith("AI guesses for product 1") && "fiber_g 2" in it })
+        assertTrue(text.any { it.startsWith("Label and usda_branded disagree on kcal for product 2: label 300") })
+        assertTrue(text.any { it.startsWith("Label and open_food_facts disagree on kcal for product 2: label 300") })
+        assertTrue(text.none { "made_up" in it })
+        assertTrue(events.any { it.startsWith("onephoto.two_pass:ok:") && "guessed=1" in it && "conflicts=2" in it })
+        assertEquals(2, c.rows.size)
     }
 }

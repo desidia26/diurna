@@ -114,7 +114,7 @@ object PackageMerge {
     }
 
     /** Within 10% (and a small absolute slack for rounding on the label) counts as agreeing. */
-    private fun disagree(key: String, a: Double, b: Double): Boolean {
+    fun disagree(key: String, a: Double, b: Double): Boolean {
         val slack = when {
             key == "kcal" -> 10.0
             key.endsWith("_g") -> 1.0

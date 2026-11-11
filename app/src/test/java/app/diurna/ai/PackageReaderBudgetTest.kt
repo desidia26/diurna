@@ -52,4 +52,23 @@ class PackageReaderBudgetTest {
         OpenAiCompatPackageReader(apiKey = { "k" }, modelProvider = { "m" }, transportProvider = { transport }).read(byteArrayOf(1))
         assertEquals(PackagePrompt.MAX_COMPLETION_TOKENS, JSONObject(sent.single()).getInt("max_completion_tokens"))
     }
+
+    @Test fun closeUpReadsAskForTheCentrePackageOnly() = runTest {
+        val (sent, transport) = capture()
+        GrokPackageReader(apiKey = { "k" }, transport = transport).readCloseUp(byteArrayOf(1))
+        OpenAiCompatPackageReader(apiKey = { "k" }, modelProvider = { "m" }, transportProvider = { transport }).readCloseUp(byteArrayOf(1))
+        assertEquals(2, sent.size)
+        sent.forEach {
+            assertTrue(it.contains(PackagePrompt.CLOSE_UP_TEXT.take(40)))
+            assertTrue(!it.contains(PackagePrompt.USER_TEXT))
+            assertEquals(PackagePrompt.MAX_COMPLETION_TOKENS, JSONObject(it).getInt("max_completion_tokens"))
+        }
+        // A reader without its own close-up read falls back to the whole-photo read.
+        val plain = object : PackageReader {
+            override val model = "x"
+            override suspend fun read(photo: ByteArray) = PackagePhotoReading(emptyList(), note = "whole")
+            override suspend fun refine(photo: ByteArray?, previous: PackagePhotoReading, answer: String) = previous
+        }
+        assertEquals("whole", plain.readCloseUp(byteArrayOf(1)).note)
+    }
 }

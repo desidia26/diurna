@@ -10,6 +10,8 @@ class EvalRunner(
     private val casesDir: File = File(root, "ai-evals/cases"),
     private val imagesRoot: File = File(root, "ai-evals"),
 ) {
+    private val detections by lazy { EvalDetections(File(imagesRoot, "detections.json")) }
+
     data class Config(
         val providers: List<EvalProviderId>,
         val setName: String = "default",
@@ -20,6 +22,8 @@ class EvalRunner(
         val ollamaBaseUrl: String? = null,
         /** When true, ollama skips cardio/vision/label cases (default for CPU smoke). */
         val ollamaTextOnly: Boolean = true,
+        /** Package photos: "twopass" (identity, lookups, label read with records; the app's default) or "closeup" (one read per crop). */
+        val pipeline: String = "twopass",
     )
 
     suspend fun run(config: Config): EvalReport {
@@ -170,8 +174,31 @@ class EvalRunner(
                     if (photo == null) {
                         return CaseScore(case.id, pid.id, case.prompt, passed = false, error = "package case needs image")
                     }
-                    // Sent as the phone sends it: scaled to PhotoSizing.MAX_EDGE.
-                    EvalScoring.scorePackagePhoto(case, reader.read(EvalImages.fit(photo)), clients.scoringMode).copy(provider = pid.id)
+                    // As the phone reads it: each package the finder sees is read from its own close-up
+                    // crop of the full-resolution photo, or the photo is read whole (scaled to MAX_EDGE).
+                    val rel = case.input.image!!
+                    if (!detections.has(rel)) return CaseScore(case.id, pid.id, case.prompt, passed = false, error = "no recorded detections for $rel in ai-evals/detections.json")
+                    val started = System.nanoTime()
+                    val appReader = reader.reader
+                    val twoPass = config.pipeline == "twopass" && appReader != null
+                    var passes = ""
+                    val o = if (twoPass) {
+                        // No live network: the lookups answer from ai-evals/lookups.json. The phone's barcode decoder
+                        // (ML Kit) can't run here, so only digits pass 1 reads off the package are looked up by code.
+                        val lookups = EvalLookups(File(imagesRoot, "lookups.json"))
+                        val t = app.diurna.ai.PackageTwoPass.read(detections.source(rel, photo), EvalImages.fit(photo), appReader!!, lookups)
+                        passes = " pass1_ms=${t.identifyMs} lookup_ms=${t.lookupMs} pass2_ms=${t.readMs} lookups=[${lookups.asked.joinToString(",")}]" +
+                            " guessed=${t.result.reading.products.sumOf { it.guessed.size }} conflicts=${t.result.reading.products.sumOf { it.conflicts.size }}" +
+                            " conflict_list=[" + t.result.reading.products.flatMap { p -> p.conflicts.map { c -> "${p.productName.take(14)}:${c.key} ${c.label}/${c.known} ${c.source}" } }.joinToString(",") + "]" +
+                            (if (t.singlePassFallback) " single_pass_fallback" else "")
+                        t.result
+                    } else app.diurna.ai.PackageCrops.read(detections.source(rel, photo), EvalImages.fit(photo), reader = { reader.read(it) }, closeUp = { reader.readCloseUp(it) })
+                    val ms = (System.nanoTime() - started) / 1_000_000
+                    val score = EvalScoring.scorePackagePhoto(case, o.reading, clients.scoringMode)
+                    val detail = (if (twoPass) "twopass " else "closeup ") + (o.fallback?.let { "whole photo (${it.name.lowercase()})" } ?: "crops read=${o.read}/${o.crops.size}") +
+                        " calls=${o.calls} ms=$ms$passes products=${o.reading.products.size}: " +
+                        o.reading.products.joinToString("; ") { p -> "${(p.brand + " " + p.productName).trim().take(28)}@${p.centerX?.let { "%.2f".format(it) }} kcal=${p.perServing["kcal"]}" }
+                    score.copy(provider = pid.id, checks = score.checks + CheckResult("crops", true, detail, required = false))
                 }
                 "package_refine" -> {
                     if (pid == EvalProviderId.OLLAMA && config.ollamaTextOnly && photo != null) {

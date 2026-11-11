@@ -3,6 +3,9 @@ package app.diurna.data
 import app.diurna.ai.EstimateFailed
 import app.diurna.ai.EstimateRetryable
 import app.diurna.ai.NoApiKey
+import app.diurna.ai.KnownFacts
+import app.diurna.ai.PackageCrops
+import app.diurna.ai.PackageTwoPass
 import app.diurna.ai.PackagePhotoReading
 import app.diurna.ai.PackageQuestion
 import app.diurna.ai.PackageReader
@@ -39,8 +42,31 @@ class OnePhotoCapture(
     private val online: () -> Boolean,
     private val fdcSearch: suspend (String) -> List<FdcBrandedFood> = { emptyList() },
     private val offSearch: suspend (String) -> String? = { null },
+    /**
+     * With crops: identity first, then lookups, then each label read with what the databases say
+     * ([PackageTwoPass]); false reads each crop once, without lookups.
+     */
+    private val twoPass: Boolean = true,
     private val log: (name: String, result: String, details: Map<String, String>) -> Unit = { _, _, _ -> },
 ) {
+    /** Barcode lookups of the current run, so pass 2's context and the merge share one request per code. */
+    private val codeReads = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<CodeRead>>()
+    /** Name searches asked this run (pass 2 and the front-of-pack guesses share them): one request per query. */
+    private val fdcSearches = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<List<FdcBrandedFood>>>()
+    private val offSearches = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<String?>>()
+
+    private suspend fun searchFdc(q: String): List<FdcBrandedFood> = coroutineScope {
+        fdcSearches.computeIfAbsent(q) { _ -> async(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            try { fdcSearch(q).take(3) } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
+        } }.await()
+    }
+
+    private suspend fun searchOff(q: String): String? = coroutineScope {
+        offSearches.computeIfAbsent(q) { _ -> async(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            try { offSearch(q) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+        } }.await()
+    }
+
     sealed interface LabelStatus {
         data object Read : LabelStatus
         /** Not attempted: [reason] is `offline` or `no_key`. */
@@ -141,9 +167,22 @@ class OnePhotoCapture(
         fun note(kind: String, text: String, product: Int? = null) = copy(log = log.add(kind, text, product))
     }
 
-    suspend fun run(photo: ByteArray?, decode: suspend () -> PhotoCodes, fallbackCode: String? = null): Capture = coroutineScope {
-        val label = async { readLabel(photo) }
-        val codes = try { decode() } catch (e: CancellationException) { throw e } catch (_: Exception) { PhotoCodes(ScanOutcome.Unreadable) }
+    /**
+     * [crops] finds the packages in the photo and cuts each out of the full-resolution photo, so a
+     * photo of several packages is read one package at a time ([PackageCrops]); null reads it whole.
+     */
+    suspend fun run(
+        photo: ByteArray?,
+        decode: suspend () -> PhotoCodes,
+        fallbackCode: String? = null,
+        crops: PackageCrops.Source? = null,
+    ): Capture = coroutineScope {
+        codeReads.clear()
+        fdcSearches.clear()
+        offSearches.clear()
+        val decoding = async { try { decode() } catch (e: CancellationException) { throw e } catch (_: Exception) { PhotoCodes(ScanOutcome.Unreadable) } }
+        val label = async { readLabel(photo, crops, decoding) }
+        val codes = decoding.await()
         val o = codes.outcome
         log("onephoto.decode", when (o) {
             is ScanOutcome.Decoded -> "decoded"
@@ -167,9 +206,15 @@ class OnePhotoCapture(
         })
         val toLook = verified.map { it.digits to it.upcE }.ifEmpty { listOfNotNull(fallbackCode?.let { it to false }) }
         val looked = toLook.take(MAX_CODES).map { (d, e) -> async { lookUp(d, e, codes.positions[normalizeBarcode(d, e) ?: d]) } }.awaitAll()
-        val (status, reading) = label.await()
+        val (status, reading, cropped, passes) = label.await()
         looked.forEach { dlog = logCode(dlog, it) }
+        cropped?.let { dlog = dlog.add(DecisionLog.SOURCE, cropSummary(it)) }
+        passes?.let { dlog = logPasses(dlog, it) }
         dlog = logLabel(dlog, status, reading)
+        if (passes != null && reading != null) dlog = logPassTwo(dlog, reading)
+        cropped?.origins?.forEachIndexed { i, box ->
+            if (box != null) dlog = dlog.add(DecisionLog.SOURCE, "Product ${i + 1} read from its own close-up crop ($box of the photo)", i)
+        }
         val first = Capture(status, dlog, looked, choose)
         done(identify(first.withMatchLog()))
     }
@@ -193,7 +238,7 @@ class OnePhotoCapture(
 
     /** A label read after the first one was skipped or failed: it becomes an AI interpretation. */
     suspend fun withLabel(prev: Capture, photo: ByteArray): Capture {
-        val (status, reading) = readLabel(photo)
+        val (status, reading) = readLabel(photo, null)
         val c = prev.copy(label = if (reading == null) status else LabelStatus.Read, log = logLabel(prev.log, status, reading))
         return done(identify(c.withMatchLog()))
     }
@@ -269,10 +314,10 @@ class OnePhotoCapture(
     private suspend fun candidatesFor(r: PackageReading): List<Candidate> = coroutineScope {
         val q = listOf(r.brand.trim(), r.productName.trim()).filter { it.isNotEmpty() }.joinToString(" ").take(120)
         val usda = async {
-            try { fdcSearch(q).take(3) } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
+            searchFdc(q)
         }
         val off = async {
-            try { offSearch(q)?.let { parseOffSearch(it) }.orEmpty() } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
+            try { searchOff(q)?.let { parseOffSearch(it) }.orEmpty() } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
         }
         val a = usda.await().mapNotNull { f ->
             val input = fdcMergeInput(f).takeIf { PackageMerge.merge(listOf(it)).hasNutrition } ?: return@mapNotNull null
@@ -301,7 +346,16 @@ class OnePhotoCapture(
         return c
     }
 
-    private suspend fun lookUp(digits: String, upcE: Boolean, centerX: Double?): CodeRead = coroutineScope {
+    private suspend fun lookUp(digits: String, upcE: Boolean, centerX: Double?): CodeRead = codeRead(digits, upcE, centerX)
+
+    /** One lookup per code per run, shared by pass 2's context and the merge. */
+    private suspend fun codeRead(digits: String, upcE: Boolean, centerX: Double?): CodeRead = coroutineScope {
+        val code = normalizeBarcode(digits, upcE) ?: digits
+        val shared = codeReads.computeIfAbsent(code) { _ -> async(start = kotlinx.coroutines.CoroutineStart.LAZY) { freshLookUp(digits, upcE) } }
+        shared.await().copy(centerX = centerX)
+    }
+
+    private suspend fun freshLookUp(digits: String, upcE: Boolean): CodeRead = coroutineScope {
         val code = normalizeBarcode(digits, upcE) ?: digits
         val usda = async { usda(code) }
         val off = try {
@@ -309,7 +363,7 @@ class OnePhotoCapture(
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             log("onephoto.lookup", "failed", mapOf("exception" to e.javaClass.simpleName)); null
         }
-        CodeRead(code, centerX, off, usda.await())
+        CodeRead(code, null, off, usda.await())
     }
 
     private suspend fun usda(code: String): FdcBrandedFood? = try {
@@ -350,17 +404,122 @@ class OnePhotoCapture(
         return out
     }
 
-    private suspend fun readLabel(photo: ByteArray?): Pair<LabelStatus, PackagePhotoReading?> {
-        val r: Pair<LabelStatus, PackagePhotoReading?> = when {
-            photo == null -> LabelStatus.NoPhoto to null
-            reader == null -> LabelStatus.Skipped("no_key", NO_KEY) to null
-            !online() -> LabelStatus.Skipped("offline", OFFLINE) to null
+    /** A label read: its status, the interpretation, and how crops were used (null: read whole without trying). */
+    private data class LabelRead(
+        val status: LabelStatus,
+        val reading: PackagePhotoReading?,
+        val crops: PackageCrops.Outcome? = null,
+        val passes: PackageTwoPass.Outcome? = null,
+    )
+
+    /** Pass 1 and the lookups, per package. */
+    private fun logPasses(l: DecisionLog, o: PackageTwoPass.Outcome): DecisionLog {
+        var out = l
+        o.targets.forEachIndexed { i, t ->
+            val where = t.box?.let { "package ${i + 1} ($it)" } ?: "the photo"
+            out = out.add(DecisionLog.SOURCE, when {
+                t.identifyFailed -> "Pass 1 (identity) failed for $where; its label read went ahead without database records"
+                t.identities.isEmpty() -> "Pass 1 (identity) found no package in $where"
+                else -> "Pass 1 (identity) for $where: " + t.identities.joinToString("; ") { "“$it”" }
+            })
+            t.known.forEach { k ->
+                val how = k.barcode?.let { "barcode $it" } ?: "name “${k.identity.query}”"
+                out = out.add(DecisionLog.SOURCE, if (k.facts.isEmpty()) "Lookup by $how: no database record" else
+                    "Lookup by $how: " + k.facts.joinToString("; ") { f -> "${f.source} “${f.title}”" + if (f.byName) " (name search: a guess, not used as values)" else "" })
+            }
+        }
+        if (o.singlePassFallback) out = out.add(DecisionLog.SOURCE, "Every pass-2 label read failed; read the photo whole in one pass")
+        return out
+    }
+
+    /** What pass 2 read from the label, guessed, and found in conflict with a record, per product. */
+    private fun logPassTwo(l: DecisionLog, r: PackagePhotoReading): DecisionLog {
+        var out = l
+        r.products.forEachIndexed { i, p ->
+            out = out.add(DecisionLog.SOURCE, "Pass 2 for product ${i + 1}: read ${p.perServing.size} value(s) from the label", i)
+            if (p.guessed.isNotEmpty()) out = out.add(DecisionLog.GUESS,
+                "AI guesses for product ${i + 1}, not on the label or in a record (not used as values): " +
+                    p.guessed.entries.joinToString { (k, v) -> "$k ${fmt(v)}" }, i)
+            p.conflicts.forEach { c ->
+                out = out.add(DecisionLog.SOURCE, "Label and ${c.source.ifEmpty { "a record" }} disagree on ${c.key} for product ${i + 1}: " +
+                    "label ${fmt(c.label)}, record ${fmt(c.known)} (the label is used; both are kept)", i)
+            }
+        }
+        return out
+    }
+
+    private fun fmt(v: Double) = if (v == Math.rint(v)) v.toLong().toString() else "%.1f".format(v)
+
+    /** Lookups for pass 2, through this run's barcode lookups and the name searches. */
+    private val passLookups = object : PackageTwoPass.Lookups {
+        override suspend fun byCode(digits: String): List<KnownFacts> {
+            if (!online()) return emptyList()
+            val c = codeRead(digits, false, null)
+            val off = offDraft(c.off)?.let { d -> OffSnapshot.decode(d.offSnapshotJson)?.let { knownFromOff(it, d.name, byName = false) } }
+            return listOfNotNull(c.fdc?.let { knownFromFdc(it, byName = false) }, off)
+        }
+
+        override suspend fun byName(query: String): List<KnownFacts> = coroutineScope {
+            if (!online()) return@coroutineScope emptyList()
+            val usda = async { searchFdc(query).take(2) }
+            val off = try { searchOff(query)?.let { parseOffSearch(it, 1) }.orEmpty() } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
+            usda.await().mapNotNull { knownFromFdc(it, byName = true) } + off.mapNotNull { (_, json) -> knownFromOffJson(json, byName = true) }
+        }
+    }
+
+    /** Verified codes from the phone's decode, each with its horizontal centre when known. */
+    private fun decodedCodes(c: PhotoCodes): List<Pair<String, Double?>> = when (val o = c.outcome) {
+        is ScanOutcome.Decoded -> listOf((o.code.key ?: o.code.digits) to c.positions[o.code.key])
+        is ScanOutcome.Confirm -> o.codes.filter { it.key in c.positions }.map { it.key!! to c.positions[it.key] }
+        else -> emptyList()
+    }
+
+    private fun cropSummary(o: PackageCrops.Outcome): String = when (o.fallback) {
+        null -> "Found ${o.crops.size} packages on the phone and read each from its own close-up crop: ${o.read} of ${o.crops.size} read, " +
+            "${o.reading.products.size} product(s) after merging"
+        PackageCrops.Fallback.FEW_BOXES -> "Package finder saw ${if (o.detected == 0) "no separate packages" else "one package"}; read the photo whole"
+        PackageCrops.Fallback.DETECTOR_FAILED -> "Package finder unavailable; read the photo whole"
+        PackageCrops.Fallback.CROPS_FAILED -> "Found ${o.crops.size} packages but no close-up crop could be read; read the photo whole"
+    }
+
+    private suspend fun readLabel(photo: ByteArray?, crops: PackageCrops.Source?, decoding: kotlinx.coroutines.Deferred<PhotoCodes>? = null): LabelRead {
+        var started = 0L
+        val r: LabelRead = when {
+            photo == null -> LabelRead(LabelStatus.NoPhoto, null)
+            reader == null -> LabelRead(LabelStatus.Skipped("no_key", NO_KEY), null)
+            !online() -> LabelRead(LabelStatus.Skipped("offline", OFFLINE), null)
             else -> try {
-                LabelStatus.Read to reader.read(photo)
+                if (crops == null) LabelRead(LabelStatus.Read, reader.read(photo)) else if (twoPass) {
+                    started = System.nanoTime()
+                    val o = PackageTwoPass.read(crops, photo, reader, passLookups, decoded = { decoding?.await()?.let(::decodedCodes).orEmpty() })
+                    LabelRead(LabelStatus.Read, o.result.reading, o.result, o)
+                } else {
+                    started = System.nanoTime()
+                    val o = PackageCrops.read(crops, photo, reader = { reader.read(it) }, closeUp = { reader.readCloseUp(it) })
+                    LabelRead(LabelStatus.Read, o.reading, o)
+                }
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 val (reason, msg) = labelProblem(e)
-                (if (reason == null) LabelStatus.Failed(msg) else LabelStatus.Skipped(reason, msg)) to null
+                LabelRead(if (reason == null) LabelStatus.Failed(msg) else LabelStatus.Skipped(reason, msg), null)
             }
+        }
+        r.crops?.let { o ->
+            // Counts and timing only: no boxes, names or numbers.
+            log("onephoto.crops", o.fallback?.name?.lowercase() ?: "cropped", mapOf("detected" to o.detected.toString(),
+                "crops" to o.crops.size.toString(), "read" to o.read.toString(), "products" to o.reading.products.size.toString(),
+                "calls" to o.calls.toString(), "ms" to ((System.nanoTime() - started) / 1_000_000).toString()))
+        }
+        r.passes?.let { p ->
+            // Counts and timing only.
+            log("onephoto.two_pass", if (p.singlePassFallback) "single_pass_fallback" else "ok", mapOf(
+                "targets" to p.targets.size.toString(),
+                "identified" to p.targets.sumOf { it.identities.size }.toString(),
+                "code_hits" to p.targets.sumOf { t -> t.known.count { it.barcode != null && it.facts.isNotEmpty() } }.toString(),
+                "name_hits" to p.targets.sumOf { t -> t.known.count { it.barcode == null && it.facts.isNotEmpty() } }.toString(),
+                "guessed" to (r.reading?.products?.sumOf { it.guessed.size } ?: 0).toString(),
+                "conflicts" to (r.reading?.products?.sumOf { it.conflicts.size } ?: 0).toString(),
+                "identify_ms" to p.identifyMs.toString(), "lookup_ms" to p.lookupMs.toString(), "read_ms" to p.readMs.toString(),
+            ))
         }
         val (s, reading) = r
         log("onephoto.label", when (s) {
@@ -397,7 +556,7 @@ class OnePhotoCapture(
             null -> null
         }
 
-        private fun offBrand(json: String): String? = try {
+        internal fun offBrand(json: String): String? = try {
             org.json.JSONObject(json).optJSONObject("product")?.optString("brands")?.split(',')?.firstOrNull()?.trim()?.ifEmpty { null }?.take(40)
         } catch (_: org.json.JSONException) { null }
 

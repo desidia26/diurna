@@ -120,11 +120,17 @@ fun OnePhotoIngredientDialog(
         problem = null
         scope.launch {
             var barcodeCopy: File? = null
+            var cropCopy: File? = null
             try {
                 // Full-resolution copy for the on-device barcode decoder; the AI gets the downscaled photo.
                 barcodeCopy = if (labelOnly) null else try {
                     val dir = File(context.cacheDir, "barcode-capture").apply { mkdirs() }
                     File.createTempFile("barcode-raw-", ".jpg", dir).also { raw.copyTo(it, overwrite = true) }
+                } catch (_: Exception) { null }
+                // Its own copy for finding and cutting out each package (the barcode decoder deletes its copy as it goes).
+                cropCopy = if (labelOnly) null else try {
+                    val dir = File(context.cacheDir, "barcode-capture").apply { mkdirs() }
+                    File.createTempFile("crop-raw-", ".jpg", dir).also { raw.copyTo(it, overwrite = true) }
                 } catch (_: Exception) { null }
                 val name = c.photoImporter.importCapture()
                 val bytes = name?.let { c.foodPhotos.read(it) }
@@ -139,7 +145,9 @@ fun OnePhotoIngredientDialog(
                         val positions = mutableMapOf<String, Double>()
                         val outcome = if (copy == null) app.diurna.domain.ScanOutcome.Unreadable else readCapturedBarcode(copy, positions = positions)
                         PhotoCodes(outcome, positions)
-                    }, fallbackCode = fallbackCode ?: prev?.rows?.firstNotNullOfOrNull { it.code?.code })
+                    }, fallbackCode = fallbackCode ?: prev?.rows?.firstNotNullOfOrNull { it.code?.code },
+                        // Several packages: each is found on the phone and read from its own close-up.
+                        crops = cropCopy?.let { app.diurna.scan.PhotoPackageSource(it) })
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -149,6 +157,7 @@ fun OnePhotoIngredientDialog(
                 attachLog(capture, "pipeline_failed")
             } finally {
                 barcodeCopy?.delete()
+                cropCopy?.delete()
                 raw.delete()
                 busy = null
                 labelOnly = false
