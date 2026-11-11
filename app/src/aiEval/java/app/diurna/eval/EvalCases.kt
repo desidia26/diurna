@@ -64,6 +64,10 @@ data class CaseExpect(
     val requirePanel: Boolean = false,
     /** package: at least this many products in the photo. */
     val minProducts: Int? = null,
+    /** package: at most this many products (catches one package split in two, or clutter read as packages). */
+    val maxProducts: Int? = null,
+    /** package: a product whose brand + name contains one of these (a background box, fresh fruit) must not come back with panel numbers. */
+    val noPanelForAny: List<String> = emptyList(),
     /** package: each listed product must be found (by name/brand) and meet its own bands. */
     val products: List<ProductExpect> = emptyList(),
     /** package: some product's brand + name contains one of these (front-of-package identification). */
@@ -79,6 +83,8 @@ data class ProductExpect(
     val nameContainsAny: List<String>,
     val nutrients: Map<String, NutrientExpect> = emptyMap(),
     val servingGrams: DoubleRangeExpect? = null,
+    /** true: its Nutrition Facts panel must be read; false: no panel is visible, so no numbers; null: not checked. */
+    val panel: Boolean? = null,
 )
 
 data class CaseInput(
@@ -207,11 +213,14 @@ object EvalCases {
                         ?.map { it.asText() }.orEmpty(),
                     requirePanel = expect.path("requirePanel").asBoolean(false),
                     minProducts = expect.path("minProducts").takeIf { it.isNumber }?.asInt(),
+                    maxProducts = expect.path("maxProducts").takeIf { it.isNumber }?.asInt(),
+                    noPanelForAny = expect.path("noPanelForAny").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
                     products = expect.path("products").takeIf { it.isArray }?.map { p ->
                         ProductExpect(
                             p.path("nameContainsAny").map { it.asText() },
                             nutrientBands(p.path("nutrients")),
                             doubleRange(p.path("servingGrams")),
+                            p.path("panel").takeIf { it.isBoolean }?.asBoolean(),
                         )
                     }.orEmpty(),
                     identityContainsAny = expect.path("identityContainsAny").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
