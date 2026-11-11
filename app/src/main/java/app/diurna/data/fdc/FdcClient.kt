@@ -76,6 +76,38 @@ class FdcClient(
         parseNutritionProfile(JSONObject(body))
     }
 
+    /**
+     * The USDA Branded Foods record whose GTIN/UPC is [code] (a normalized EAN-13 or EAN-8), or
+     * null. Asks for the 12-digit UPC-A spelling first (how most US records store it), then the
+     * 13-digit one; only an exact code match counts, so a full-text hit can't stand in for it.
+     */
+    suspend fun brandedByGtin(code: String): FdcBrandedFood? = withContext(Dispatchers.IO) {
+        val key = apiKey()?.takeIf { it.isNotBlank() } ?: return@withContext null
+        val want = normalizeGtin(code) ?: return@withContext null
+        val spellings = if (want.length == 13 && want[0] == '0') listOf(want.substring(1), want) else listOf(want)
+        for (q in spellings) {
+            val match = brandedFoods(q, 5, key).firstOrNull { it.gtin == want }
+            if (match != null) return@withContext match
+        }
+        null
+    }
+
+    /** Branded Foods matching [query] (product name, brand), best first. Empty without a key. */
+    suspend fun brandedSearch(query: String, pageSize: Int = 5): List<FdcBrandedFood> = withContext(Dispatchers.IO) {
+        val key = apiKey()?.takeIf { it.isNotBlank() } ?: return@withContext emptyList()
+        val q = query.trim().take(MAX_QUERY)
+        if (q.isEmpty()) return@withContext emptyList()
+        brandedFoods(q, pageSize.coerceIn(1, 10), key)
+    }
+
+    private fun brandedFoods(query: String, size: Int, key: String): List<FdcBrandedFood> {
+        val q = URLEncoder.encode(query, "UTF-8") // the Charset overload is API 33+
+        val body = transport.get("/fdc/v1/foods/search?query=$q&dataType=Branded&pageSize=$size&pageNumber=1", key)
+            ?: return emptyList()
+        val foods = runCatching { JSONObject(body).optJSONArray("foods") }.getOrNull() ?: return emptyList()
+        return (0 until foods.length()).mapNotNull { i -> foods.optJSONObject(i)?.let(::parseBranded) }
+    }
+
     companion object {
         const val HOST = "api.nal.usda.gov"
         /** Public demo key — heavily rate-limited; fine for manual probes, never for production. */
@@ -128,6 +160,64 @@ class FdcClient(
         const val N_VITAMIN_D_IU = 1110
         const val N_VITAMIN_B12 = 1178
         const val N_FOLATE_DFE = 1177
+
+        private const val MAX_QUERY = 120
+        /** Above this a per-100 g energy is a typo (pure fat is ~900 kcal/100 g). */
+        private const val MAX_KCAL_PER_100G = 950.0
+
+        /** GTIN-14/13/12/8 digits as the app's normalized barcode (EAN-13 or EAN-8), else null. */
+        fun normalizeGtin(raw: String): String? {
+            val digits = raw.trim()
+            if (digits.isEmpty() || !digits.all { it in '0'..'9' } || digits.length > 14) return null
+            var d = digits
+            while (d.length > 13 && d[0] == '0') d = d.substring(1)
+            return app.diurna.data.normalizeBarcode(d)
+        }
+
+        /**
+         * One Branded Foods record (search hit or detail) as plain per-100 g values. Keys match
+         * the OFF snapshot's per100 keys. Missing nutrients are absent, never 0. Null without a
+         * usable, plausible energy value.
+         */
+        fun parseBranded(food: JSONObject): FdcBrandedFood? {
+            val nutrients = food.optJSONArray("foodNutrients") ?: return null
+            val byId = mutableMapOf<Int, Double>()
+            val normalized = org.json.JSONArray()
+            for (i in 0 until nutrients.length()) {
+                val n = nutrients.optJSONObject(i) ?: continue
+                val id = nutrientId(n) ?: continue
+                // Search hits say "value"; food detail says "amount".
+                val v = n.optDouble("amount", n.optDouble("value", Double.NaN))
+                if (!v.isFinite() || v < 0) continue
+                byId[id] = v
+                normalized.put(JSONObject().put("nutrientId", id).put("amount", v))
+            }
+            val kcal = byId[N_ENERGY_KCAL]?.takeIf { it <= MAX_KCAL_PER_100G } ?: return null
+            val per100 = linkedMapOf("kcal" to kcal)
+            fun put(key: String, id: Int, max: Double = 100.0) { byId[id]?.takeIf { it <= max }?.let { per100[key] = it } }
+            put("protein_g", N_PROTEIN); put("carbs_g", N_CARBS); put("fat_g", N_FAT)
+            put("fiber_g", N_FIBER); put("sugars_g", N_SUGARS); put("added_sugars_g", N_ADDED_SUGARS)
+            put("starch_g", N_STARCH); put("sat_fat_g", N_SAT); put("mono_fat_g", N_MONO)
+            put("poly_fat_g", N_POLY); put("trans_fat_g", N_TRANS); put("cholesterol_mg", N_CHOL, max = 5_000.0)
+            fun text(name: String, max: Int): String? =
+                food.optString(name).takeIf { food.has(name) && !food.isNull(name) }
+                    ?.map { if (it.isISOControl()) ' ' else it }?.joinToString("")
+                    ?.replace(Regex("\\s+"), " ")?.trim()?.take(max)?.ifEmpty { null }
+            val unit = food.optString("servingSizeUnit").trim().lowercase()
+            val size = food.optDouble("servingSize", Double.NaN)
+            val servingGrams = size.takeIf { it.isFinite() && it > 0 && it <= 1_000 && (unit == "g" || unit == "grm") }
+            return FdcBrandedFood(
+                fdcId = food.optInt("fdcId", 0),
+                description = text("description", 120).orEmpty(),
+                brand = text("brandName", 80) ?: text("brandOwner", 80),
+                gtin = text("gtinUpc", 20)?.let(::normalizeGtin),
+                ingredients = text("ingredients", 2_000),
+                servingGrams = servingGrams,
+                servingText = text("householdServingFullText", 60),
+                per100 = per100,
+                micros = parseMicronutrients(JSONObject().put("foodNutrients", normalized)),
+            )
+        }
 
         fun parseAminoProfile(food: JSONObject): AminoProfile? {
             val nutrients = food.optJSONArray("foodNutrients") ?: return null
@@ -264,6 +354,22 @@ class FdcClient(
 
 data class FdcSearchHit(val fdcId: Int, val description: String)
 
+/**
+ * A USDA Branded Foods record. [per100] uses the OFF snapshot keys (kcal, protein_g, …,
+ * cholesterol_mg) per 100 g; absent keys are unknown. [servingGrams] is null for volume servings.
+ */
+data class FdcBrandedFood(
+    val fdcId: Int,
+    val description: String,
+    val brand: String?,
+    val gtin: String?,
+    val ingredients: String?,
+    val servingGrams: Double?,
+    val servingText: String?,
+    val per100: Map<String, Double>,
+    val micros: MicronutrientProfile?,
+)
+
 /** Per-100g amino milligrams from one FDC food. */
 data class AminoProfile(
     val fdcId: Int,
@@ -305,13 +411,30 @@ class DefaultFdcTransport(
         }
         return try {
             val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val body = stream?.bufferedReader()?.use { it.readText() }
-            if (code in 200..299) body else null
+            if (code !in 200..299) return null
+            conn.inputStream.use { readCapped(it) }
         } catch (_: Exception) {
             null
         } finally {
             conn.disconnect()
         }
+    }
+
+    /** A hostile or broken server can't make the app buffer an unbounded answer. */
+    private fun readCapped(input: java.io.InputStream): String? {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(8192)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            out.write(buf, 0, n)
+            if (out.size() > MAX_BYTES) return null
+        }
+        return out.toString(Charsets.UTF_8.name())
+    }
+
+    companion object {
+        /** Food detail with portions and branded search pages are well under this. */
+        const val MAX_BYTES = 4 * 1024 * 1024
     }
 }
