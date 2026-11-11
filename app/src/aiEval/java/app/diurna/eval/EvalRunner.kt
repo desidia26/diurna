@@ -155,6 +155,23 @@ class EvalRunner(
                     val reading = reader.read(photo)
                     EvalScoring.scoreLabel(case, reading, clients.scoringMode).copy(provider = pid.id)
                 }
+                "package" -> {
+                    if (pid == EvalProviderId.OLLAMA && config.ollamaTextOnly) {
+                        return CaseScore(
+                            case.id, pid.id, case.prompt, passed = true, skipped = true,
+                            skipReason = "ollama smoke skips package/vision by default",
+                        )
+                    }
+                    val reader = clients.pkg
+                        ?: return CaseScore(
+                            case.id, pid.id, case.prompt, passed = true, skipped = true,
+                            skipReason = "no package client",
+                        )
+                    if (photo == null) {
+                        return CaseScore(case.id, pid.id, case.prompt, passed = false, error = "package case needs image")
+                    }
+                    EvalScoring.scorePackage(case, reader.read(photo), clients.scoringMode).copy(provider = pid.id)
+                }
                 "density" -> {
                     val dens = clients.density
                         ?: return CaseScore(
@@ -217,6 +234,7 @@ class EvalRunner(
                     case.id, pid.id, case.prompt, passed = false, error = e.message ?: "EstimateFailed",
                 )
                 "label" -> EvalScoring.scoreLabelFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
+                "package" -> EvalScoring.scorePackageFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "density" -> EvalScoring.scoreDensityFailure(case, e.message ?: "EstimateFailed").copy(provider = pid.id)
                 "ingredient_nutrition" -> EvalScoring.scoreIngredientNutritionFailure(
                     case, e.message ?: "EstimateFailed",
