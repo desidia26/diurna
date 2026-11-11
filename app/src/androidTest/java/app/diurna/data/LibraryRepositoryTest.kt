@@ -197,6 +197,7 @@ class LibraryRepositoryTest {
     @Test fun unknownAndUnreachable() = runTest {
         val missing = lib.scan("0012345678905") as LibraryRepository.ScanResult.NotFound
         assertEquals("0012345678905", missing.draft.barcode)
+        assertEquals(listOf("0012345678905", "012345678905"), missing.tried)
         assertNotNull(missing.draft.offSnapshotJson)
         assertFalse(OffSnapshot.decode(missing.draft.offSnapshotJson)!!.lookupOk)
         val bad = lib.scan("not a barcode") as LibraryRepository.ScanResult.NotFound
@@ -218,10 +219,32 @@ class LibraryRepositoryTest {
         assertNotNull(e.offSnapshotJson)
     }
 
-    @Test fun garbageAnswerIsNotFound() = runTest {
+    @Test fun garbageAnswerIsAnUnreadableFailureNotAMissingProduct() = runTest {
         t.products["0012345678905"] = "<html>not json</html>"
-        val r = lib.scan("0012345678905") as LibraryRepository.ScanResult.NotFound
+        val r = lib.scan("0012345678905") as LibraryRepository.ScanResult.Failed
+        assertEquals("unreadable", r.reason)
         assertEquals("0012345678905", r.draft.barcode)
+    }
+
+    @Test fun upcAMissingAsEan13IsFoundUnderItsTwelveDigitSpelling() = runTest {
+        t.products["012345678905"] = shakeJson
+        val found = lib.scan("012345678905") as LibraryRepository.ScanResult.Found
+        // Stored under the one normalized spelling so the library still matches either scan.
+        assertEquals("0012345678905", found.draft.barcode)
+        assertEquals(listOf("0012345678905", "012345678905"), t.productFetches)
+    }
+
+    @Test fun productWithoutNutritionIsIncompleteAndKeepsItsName() = runTest {
+        t.products["0012345678905"] = """{"status":1,"product":{"product_name":"Mystery snack","brands":"Acme",
+            "serving_size":"1 bag (40 g)","ingredients_text":"Oats, honey"}}"""
+        val r = lib.scan("0012345678905") as LibraryRepository.ScanResult.Incomplete
+        assertEquals(OffProblem.NO_NUTRITION, r.problem)
+        assertEquals("Mystery snack (Acme)", r.draft.name)
+        assertEquals("0012345678905", r.draft.barcode)
+        val snap = OffSnapshot.decode(r.draft.offSnapshotJson)!!
+        assertFalse("never read as macros", snap.lookupOk)
+        assertEquals("Oats, honey", snap.ingredientsText)
+        assertNull(snap.toMacros(40.0))
     }
 
     @Test fun failedLookupStillPersistsBarcodeOnLog() = runTest {
