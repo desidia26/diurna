@@ -48,6 +48,10 @@ class CapturedFactsTest {
         assertNull(f["fiber_g"])
     }
 
+    @Test fun aMergeAloneHasNoDecisionLog() {
+        assertEquals(null, CapturedFacts.from(PackageMerge.merge(emptyList())).decisionLogJson)
+    }
+
     @Test fun corruptJsonDecodesAsNoFacts() {
         assertTrue(CapturedFacts(factsJson = "{not json").facts().isEmpty())
         assertTrue(CapturedFacts(factsJson = null).facts().isEmpty())
