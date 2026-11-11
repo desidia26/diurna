@@ -128,7 +128,7 @@
       }
     },
     {
-      "id": "food-photo-plate",
+      "id": "food-photo-plate-real",
       "prompt": "food",
       "tags": [
         "vision",
@@ -136,23 +136,23 @@
       ],
       "input": {
         "text": "lunch on a plate",
-        "image": "images/food-synthetic-plate.jpg"
+        "image": "images/food-plate-chicken-asparagus.jpg"
       },
       "expect": {
         "outcome": "estimate",
-        "kcalMid": 450,
+        "kcalMid": 700,
         "kcalTolPct": 80,
         "proteinG": {
-          "min": 5,
-          "max": 60
-        },
-        "carbsG": {
-          "min": 10,
+          "min": 25,
           "max": 80
         },
+        "carbsG": {
+          "min": 15,
+          "max": 90
+        },
         "fatG": {
-          "min": 5,
-          "max": 50
+          "min": 10,
+          "max": 60
         },
         "macrosConsistentWithKcal": true
       }
