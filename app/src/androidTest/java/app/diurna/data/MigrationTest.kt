@@ -670,4 +670,38 @@ class MigrationTest {
         }
         db.close()
     }
+    @Test fun v19ToV20AddsNutrientValueTable() {
+        helper.createDatabase(dbName + "-20", 19).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-11-05', 0)")
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind) " +
+                    "VALUES (1, 'Oats', 150, 5, 27, 3, 'simple')"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-20", 20, true)
+        db.query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='nutrient_value'"
+        ).use {
+            assertTrue(it.moveToFirst())
+            assertEquals("nutrient_value", it.getString(0))
+        }
+        db.execSQL(
+            "INSERT INTO nutrient_value " +
+                "(owner_kind, owner_id, nutrient_id, amount, unit, source, contributing, total_items) " +
+                "VALUES ('meal', 1, 'sodium', 10.0, 'mg', 'off', NULL, NULL)"
+        )
+        db.query(
+            "SELECT amount, unit FROM nutrient_value WHERE owner_kind='meal' AND owner_id=1 AND nutrient_id='sodium'"
+        ).use {
+            assertTrue(it.moveToFirst())
+            assertEquals(10.0, it.getDouble(0), 0.0)
+            assertEquals("mg", it.getString(1))
+        }
+        db.query("SELECT name FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Oats", it.getString(0))
+        }
+        db.close()
+    }
+
 }

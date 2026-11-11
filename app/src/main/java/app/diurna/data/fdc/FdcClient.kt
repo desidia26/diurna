@@ -34,7 +34,8 @@ class FdcClient(
     /** Search Foundation + SR Legacy; up to [pageSize] hits (default 10). Empty without a key. */
     suspend fun search(query: String, pageSize: Int = 10): List<FdcSearchHit> = withContext(Dispatchers.IO) {
         val key = apiKey()?.takeIf { it.isNotBlank() } ?: return@withContext emptyList()
-        val q = URLEncoder.encode(query.trim(), Charsets.UTF_8)
+        // The Charset overload is API 33+; minSdk is 29, where it throws NoSuchMethodError.
+        val q = URLEncoder.encode(query.trim(), "UTF-8")
         val size = pageSize.coerceIn(1, 25)
         val path = "/fdc/v1/foods/search?query=$q" +
             "&dataType=Foundation,SR%20Legacy&pageSize=$size&pageNumber=1"
