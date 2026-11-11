@@ -62,11 +62,22 @@ cd /path/to/diurna
 ./gradlew aiEval -Pprovider=claude -Pset=default
 ./gradlew aiEval -Pprovider=ollama -Pset=smoke
 ./gradlew aiEval -Pprovider=all -Pset=full
+# Package photos only, single-pass close-ups for comparison
+./gradlew aiEval -Pprovider=grok -Pset=default -Ptag=multi -Ppipeline=closeup
 ```
 
 For Ollama locally: install from https://ollama.com/download/linux (or the same checksum-verified tarball the workflow uses), `ollama serve`, `ollama pull qwen2.5:1.5b-instruct`, then run the gradle task above.
 
 Reports: `ai-evals/out/summary.md` and `ai-evals/out/results.json` (gitignored). In Actions, each provider job uploads its own artifact; a combined summary job merges them into `$GITHUB_STEP_SUMMARY` and `ai-eval-results`.
+
+### Package photos: crops, two passes and recorded lookups
+
+Package cases run the same pipeline as the phone (`PackageCrops` + `PackageTwoPass`): find each package, cut it out, ask pass 1 who each one is, look up its barcode or name, then read each crop with those records (pass 2). `-Ppipeline=twopass` (default) runs all of that; `-Ppipeline=closeup` skips pass 1 and the lookups and reads each crop once, for comparison. A non-required `crops` check in the report carries the boxes, AI calls, time per pass, lookups, guesses and conflicts.
+
+Both inputs that would otherwise vary are recorded, so runs are repeatable and CI makes **no network calls besides the AI provider**:
+
+- `ai-evals/detections.json`: the boxes ML Kit's bundled object detector finds in each package photo (score ≥ 0.5, top 5, as fractions of the upright photo). The harness crops from these instead of running ML Kit (it can't run on the JVM); `PackageDetectorTest` (androidTest) checks the on-device detector still finds the same packages (IoU ≥ 0.5) and plans the same crops. Add an entry for every new package image; a package case without one fails.
+- `ai-evals/lookups.json`: Open Food Facts and USDA FoodData Central answers, recorded once. `byCode` holds, per 13-digit GTIN, the OFF product JSON (as a string) and the USDA branded record (or `null`); `byName` holds, per lowercase `match` term, the USDA search results a name containing it gets. They go through the app's own parsers. A code or name not in the file is a miss, exactly like a product the databases don't know. To record a new product, save the public OFF product response and the USDA `foods/search` response (a `DEMO_KEY` is enough; never commit a personal key) into the same shape.
 
 ## Case sets
 
