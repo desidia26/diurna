@@ -85,6 +85,12 @@ object PackagePrompt {
     val NUTRIENT_KEYS: List<String> = MAX.keys.toList()
     const val MAX_INGREDIENTS = 2_000
     const val MAX_PRODUCTS = 8
+    /**
+     * Reply budget for Grok / OpenAI-compatible package reads. Each product is a full object (every
+     * nutrient, ingredients, identity), so the chat default of 1,024 tokens cut off a real
+     * five-package photo. Sized for [MAX_PRODUCTS] products; only tokens actually written are billed.
+     */
+    const val MAX_COMPLETION_TOKENS = 8_192
     const val MAX_QUESTIONS = 4
     const val MAX_ANSWER = 500
     val TOPICS = listOf("serving_basis", "identity", "digits", "mapping", "other")
@@ -94,9 +100,9 @@ object PackagePrompt {
 Products:
 - One entry in "products" per distinct package, ordered left to right as they appear. Never merge two packages into one entry; never split one package into two. A package with nothing readable at all is left out.
 - center_x: the horizontal centre of that package in the photo, 0 = left edge, 1 = right edge; -1 if unsure.
-- product_name, brand, size_text: as printed on the package front or label (size_text is the net weight or size line, e.g. "NET WT 16 OZ (454g)"), else "". Do not guess a product you cannot read.
+- product_name, brand, size_text: as printed on the package front or label (size_text is the net weight or size line, e.g. "NET WT 16 OZ (454g)"), else "". Do not guess a product you cannot read. brand is only a brand name you can actually read on that package in this photo; when its front is turned away, leave brand "" rather than naming a brand it might be.
 - printed_barcode: the digits printed under that package's barcode, digits only, if every digit is clearly readable, else "".
-- has_nutrition_panel: true only if that package's Nutrition Facts panel is visible and at least Calories is readable.
+- has_nutrition_panel: true only if that package's own Nutrition Facts panel is visible in this photo and at least its Calories number is readable. A front label, logo, sticker or barcode is not a panel. A package whose panel is not visible has has_nutrition_panel false and every panel number -1, even if you know typical values for that food.
 - Report panel values for ONE serving exactly as printed (the "Amount per serving" column; if there are two columns, use the per-serving one, not per container).
 - Use -1 for any number that is not printed or that you cannot read with confidence. Never guess, estimate or compute a value. A value printed as 0 (e.g. "Trans Fat 0g") is 0, not -1.
 - Ignore % Daily Value numbers; report amounts only. "Potas." means potassium; "Vit. D" means vitamin D in micrograms (mcg = µg).
@@ -329,6 +335,7 @@ class GrokPackageReader(
         val request = XaiChat.request(
             model, PackagePrompt.SYSTEM, text, photo,
             schemaName = "food_package", schema = PackagePrompt.SCHEMA,
+            maxCompletionTokens = PackagePrompt.MAX_COMPLETION_TOKENS,
         )
         return PackagePrompt.parse(XaiChat.call(transport, key, model, request))
     }
@@ -358,6 +365,7 @@ class OpenAiCompatPackageReader(
         val request = XaiChat.request(
             model, PackagePrompt.SYSTEM, text, photo,
             schemaName = "food_package", schema = PackagePrompt.SCHEMA,
+            maxCompletionTokens = PackagePrompt.MAX_COMPLETION_TOKENS,
         )
         return PackagePrompt.parse(
             XaiChat.call(transportProvider(), apiKey().orEmpty(), model, request, classify = OpenAiCompatErrors::classify),

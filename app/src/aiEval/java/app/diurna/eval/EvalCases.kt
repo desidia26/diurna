@@ -11,7 +11,8 @@ data class IntRangeExpect(val min: Int, val max: Int) {
 }
 
 /** Inclusive double band for density / grams-per-each. */
-data class DoubleRangeExpect(val min: Double, val max: Double) {
+/** [required]=false (package product bands) records a miss without failing. */
+data class DoubleRangeExpect(val min: Double, val max: Double, val required: Boolean = true) {
     fun contains(v: Double): Boolean = v in min..max
 }
 
@@ -247,6 +248,6 @@ object EvalCases {
 
     private fun doubleRange(node: JsonNode): DoubleRangeExpect? {
         if (!node.isObject) return null
-        return DoubleRangeExpect(node.path("min").asDouble(), node.path("max").asDouble())
+        return DoubleRangeExpect(node.path("min").asDouble(), node.path("max").asDouble(), node.path("required").asBoolean(true))
     }
 }

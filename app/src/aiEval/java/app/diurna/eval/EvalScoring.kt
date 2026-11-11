@@ -349,7 +349,7 @@ object EvalScoring {
                     null -> {}
                 }
                 pe.servingGrams?.let { r -> checks += CheckResult("${tag}_serving_grams", p.servingGrams != null && r.contains(p.servingGrams!!),
-                    "got ${p.servingGrams}", required = bandsRequired) }
+                    "got ${p.servingGrams}", required = bandsRequired && r.required) }
                 pe.nutrients.forEach { (key, band) ->
                     val v = p.perServing[key]
                     checks += CheckResult("${tag}_$key", v != null && band.contains(v), "got ${v ?: "unknown"} want ${band.min}-${band.max}",
