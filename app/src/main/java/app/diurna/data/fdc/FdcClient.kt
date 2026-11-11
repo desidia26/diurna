@@ -102,7 +102,7 @@ class FdcClient(
     }
 
     private fun brandedFoods(query: String, size: Int, key: String): List<FdcBrandedFood> {
-        val q = URLEncoder.encode(query, Charsets.UTF_8)
+        val q = URLEncoder.encode(query, "UTF-8") // the Charset overload is API 33+
         val body = transport.get("/fdc/v1/foods/search?query=$q&dataType=Branded&pageSize=$size&pageNumber=1", key)
             ?: return emptyList()
         val foods = runCatching { JSONObject(body).optJSONArray("foods") }.getOrNull() ?: return emptyList()
