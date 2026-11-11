@@ -10,6 +10,7 @@ All images in this folder were **generated for this repo** (Python/Pillow drawin
 | `edge-abstract-shapes.jpg` | Non-food / non-workout / non-label edge case |
 | `label-cereal-synthetic.jpg` | Fake FDA Nutrition Facts panel (140 kcal cereal) for LabelPrompt |
 | `menu-chipotle-synthetic.jpg` | Short synthetic restaurant menu for menu-photo food estimate |
+| `label-oats-dual-column-synthetic.jpg` | Fake oats panel with Dry and Prepared columns (ambiguous serving basis) for `package-oats-dual-column-synthetic` (a question is required) and `package-refine-oats-prepared` |
 
 License: CC0-equivalent — generated for Diurna evals; free to reuse in this project.
 
@@ -24,6 +25,7 @@ Photos of packages Larry owns, contributed by him for evals and barcode tests, w
 | `real/flax-label.jpg` | Roots Circle flax seeds panel and ingredients | `package-flax-label-real` |
 | `real/flax-barcode.jpg` | Same jar, barcode side (UPC 860009719569), no panel | `package-flax-barcode-side-real` (`no_panel`); barcode (reliable) |
 | `real/almonds.jpg` | Mariani sliced almonds: panel, ingredients, barcode (UPC 076991000411) | `package-almonds-real`; barcode (reliable) |
+| `real/montage-pecans-almonds-flax.jpg` | 2×2 montage of `pecans.jpg`, `almonds.jpg` and `flax-label.jpg` (one cell blank), rebuilt from pixels | `package-montage-three-real` (multi-product) |
 
 ### Adding another real photo
 

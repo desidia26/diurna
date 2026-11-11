@@ -168,6 +168,7 @@ fun RecipeDialog(
     var addMode by remember { mutableStateOf<String?>(null) } // manual / fdc / photo / meal
     // Index of a package line whose label is being read later.
     var relabel by remember { mutableStateOf<Int?>(null) }
+    var decisionsFor by remember { mutableStateOf<app.diurna.data.DecisionLog?>(null) }
     var lookingUp by remember { mutableStateOf(false) }
 
     // Auto-resolve blocked volume/each lines (USDA → builtin → AI) once on open.
@@ -267,6 +268,9 @@ fun RecipeDialog(
                             }
                         }
                         if (line.captured?.labelPending() == true) TextButton(onClick = { relabel = i }) { Text("Read label") }
+                        app.diurna.data.DecisionLog.fromJson(line.captured?.decisionLogJson)?.let { log ->
+                            TextButton(onClick = { decisionsFor = log }) { Text("Decisions") }
+                        }
                         TextButton(onClick = { lines.removeAt(i) }) { Text("Remove") }
                     }
                 }
@@ -350,7 +354,7 @@ fun RecipeDialog(
         "photo" -> OnePhotoIngredientDialog(
             scan = scanBarcode,
             onDismiss = { addMode = null },
-            onAdd = { lines.add(it); addMode = null },
+            onAdd = { lines.addAll(it); addMode = null },
         )
         "meal" -> SavedMealIngredientDialog(
             meals = savedMeals.filter { it.id != initial.id && !it.isRecipe },
@@ -366,9 +370,14 @@ fun RecipeDialog(
             initialName = line.name,
             initialGrams = line.grams,
             onDismiss = { relabel = null },
-            onAdd = { if (i in lines.indices) lines[i] = it; relabel = null },
+            // A label re-read replaces the line; any other packages in the new photo are added after it.
+            onAdd = { drafts ->
+                if (i in lines.indices && drafts.isNotEmpty()) { lines[i] = drafts.first(); lines.addAll(i + 1, drafts.drop(1)) }
+                relabel = null
+            },
         )
     }
+    decisionsFor?.let { DecisionLogDialog(it, onDismiss = { decisionsFor = null }) }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

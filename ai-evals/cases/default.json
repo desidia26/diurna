@@ -730,7 +730,8 @@
         },
         "ingredientsContainsAny": [
           "flax"
-        ]
+        ],
+        "questions": "none"
       }
     },
     {
@@ -739,13 +740,17 @@
       "tags": [
         "vision",
         "real",
-        "edge"
+        "edge",
+        "identity"
       ],
       "input": {
         "image": "images/real/flax-barcode.jpg"
       },
       "expect": {
-        "outcome": "no_panel"
+        "outcome": "no_panel",
+        "identityContainsAny": [
+          "flax"
+        ]
       }
     },
     {
@@ -807,7 +812,8 @@
         },
         "ingredientsContainsAny": [
           "almond"
-        ]
+        ],
+        "questions": "none"
       }
     },
     {
@@ -855,6 +861,151 @@
       },
       "expect": {
         "outcome": "no_panel"
+      }
+    },
+    {
+      "id": "package-montage-three-real",
+      "prompt": "package",
+      "tags": [
+        "vision",
+        "real",
+        "multi"
+      ],
+      "input": {
+        "image": "images/real/montage-pecans-almonds-flax.jpg"
+      },
+      "expect": {
+        "outcome": "reading",
+        "minProducts": 3,
+        "products": [
+          {
+            "nameContainsAny": [
+              "pecan"
+            ],
+            "nutrients": {
+              "kcal": {
+                "min": 190,
+                "max": 210
+              }
+            }
+          },
+          {
+            "nameContainsAny": [
+              "almond"
+            ],
+            "nutrients": {
+              "kcal": {
+                "min": 160,
+                "max": 180
+              }
+            }
+          },
+          {
+            "nameContainsAny": [
+              "flax"
+            ],
+            "nutrients": {
+              "kcal": {
+                "min": 40,
+                "max": 50
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "package-oats-dual-column-synthetic",
+      "prompt": "package",
+      "tags": [
+        "vision",
+        "question"
+      ],
+      "input": {
+        "image": "images/label-oats-dual-column-synthetic.jpg"
+      },
+      "expect": {
+        "outcome": "reading",
+        "requirePanel": true,
+        "servingGrams": {
+          "min": 39,
+          "max": 41
+        },
+        "questions": "required",
+        "questionTopicsAny": [
+          "serving_basis"
+        ],
+        "nutrients": {
+          "kcal": {
+            "min": 145,
+            "max": 245
+          }
+        },
+        "ingredientsContainsAny": [
+          "oats"
+        ]
+      }
+    },
+    {
+      "id": "package-refine-oats-prepared",
+      "prompt": "package_refine",
+      "tags": [
+        "vision",
+        "refine"
+      ],
+      "input": {
+        "image": "images/label-oats-dual-column-synthetic.jpg",
+        "previous": "refine/oats-dual-previous.json",
+        "answer": "Prepared - I make it with 1 cup fat free milk."
+      },
+      "expect": {
+        "outcome": "reading",
+        "requirePanel": true,
+        "nutrients": {
+          "kcal": {
+            "min": 235,
+            "max": 245
+          },
+          "protein_g": {
+            "min": 12,
+            "max": 14
+          },
+          "carbs_g": {
+            "min": 38,
+            "max": 40
+          }
+        }
+      }
+    },
+    {
+      "id": "package-refine-flax-grams-text-only",
+      "prompt": "package_refine",
+      "tags": [
+        "refine",
+        "text"
+      ],
+      "input": {
+        "previous": "refine/flax-no-grams-previous.json",
+        "answer": "1 Tbsp is 7 g."
+      },
+      "expect": {
+        "outcome": "reading",
+        "requirePanel": true,
+        "servingGrams": {
+          "min": 6.5,
+          "max": 7.5
+        },
+        "nutrients": {
+          "kcal": {
+            "min": 45,
+            "max": 45
+          },
+          "fat_g": {
+            "min": 3,
+            "max": 3
+          }
+        },
+        "questions": "none"
       }
     }
   ]
