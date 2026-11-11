@@ -33,7 +33,7 @@ import app.diurna.domain.DailyMetrics
         DailyMetricValueEntity::class,
         NutrientValueEntity::class,
     ],
-    version = 20,
+    version = 21,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -70,6 +70,8 @@ import app.diurna.domain.DailyMetrics
         // v19: check-in metrics defined in Setup; mood and energy move into them (MIGRATION_18_19).
         // v20: extensible micronutrient amounts (nutrient_value).
         AutoMigration(from = 19, to = 20),
+        // v21: one-photo capture columns on meal + recipe_ingredient (all nullable; unknown stays null).
+        AutoMigration(from = 20, to = 21),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {

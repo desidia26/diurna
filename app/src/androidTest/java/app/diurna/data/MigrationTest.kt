@@ -704,4 +704,54 @@ class MigrationTest {
         db.close()
     }
 
+    @Test fun v20ToV21AddsCapturedFactsColumnsAndExistingRowsGetNull() {
+        helper.createDatabase(dbName + "-21", 20).use { db ->
+            db.execSQL(
+                "INSERT INTO meal (id, name, kcal, protein_g, carbs_g, fat_g, kind, barcode) " +
+                    "VALUES (1, 'Granola', 200, 4, 30, 8, 'recipe', '0012345678905')"
+            )
+            db.execSQL(
+                "INSERT INTO recipe_ingredient (id, meal_id, position, name, amount, unit, grams, protein_g, carbs_g, fat_g, kcal, source) " +
+                    "VALUES (1, 1, 0, 'Oats', 40.0, 'g', 40.0, 5, 27, 3, 150, 'fdc')"
+            )
+            db.execSQL(
+                "INSERT INTO nutrient_value (owner_kind, owner_id, nutrient_id, amount, unit, source) " +
+                    "VALUES ('meal', 1, 'sodium', 10.0, 'mg', 'off')"
+            )
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-21", 21, true)
+        for (table in listOf("meal", "recipe_ingredient")) {
+            db.query("SELECT ingredients_text, ingredients_source, serving_grams, serving_text, facts_json FROM $table WHERE id = 1").use {
+                assertTrue(table, it.moveToFirst())
+                for (col in 0..4) assertTrue("$table col $col starts null (unknown, not zero)", it.isNull(col))
+            }
+        }
+        db.query("SELECT name, kcal, barcode FROM meal WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Granola", it.getString(0))
+            assertEquals(200, it.getInt(1))
+            assertEquals("0012345678905", it.getString(2))
+        }
+        db.query("SELECT name, grams, kcal, source FROM recipe_ingredient WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Oats", it.getString(0))
+            assertEquals(40.0, it.getDouble(1), 0.0)
+            assertEquals(150, it.getInt(2))
+            assertEquals("fdc", it.getString(3))
+        }
+        db.query("SELECT amount FROM nutrient_value WHERE owner_kind='meal' AND owner_id=1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(10.0, it.getDouble(0), 0.0)
+        }
+        db.execSQL(
+            "UPDATE recipe_ingredient SET ingredients_text='Rolled oats', ingredients_source='label', serving_grams=40.0, " +
+                "serving_text='1/2 cup (40g)', facts_json='{}' WHERE id = 1"
+        )
+        db.query("SELECT ingredients_text, serving_grams FROM recipe_ingredient WHERE id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("Rolled oats", it.getString(0))
+            assertEquals(40.0, it.getDouble(1), 0.0)
+        }
+        db.close()
+    }
 }
