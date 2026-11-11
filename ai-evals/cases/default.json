@@ -915,6 +915,166 @@
       }
     },
     {
+      "id": "package-oatmeal-six-real",
+      "prompt": "package",
+      "tags": [
+        "vision",
+        "real",
+        "multi",
+        "multi-six"
+      ],
+      "input": {
+        "image": "images/real/oatmeal-six.jpg"
+      },
+      "expect": {
+        "outcome": "reading",
+        "minProducts": 5,
+        "maxProducts": 6,
+        "noPanelForAny": [
+          "mango",
+          "honey"
+        ],
+        "products": [
+          {
+            "nameContainsAny": [
+              "flax",
+              "roots"
+            ],
+            "panel": false
+          },
+          {
+            "nameContainsAny": [
+              "craisin",
+              "cranberr"
+            ],
+            "panel": true,
+            "servingGrams": {
+              "min": 38,
+              "max": 42,
+              "required": false
+            },
+            "nutrients": {
+              "kcal": {
+                "min": 120,
+                "max": 140
+              }
+            }
+          },
+          {
+            "nameContainsAny": [
+              "almond"
+            ],
+            "panel": true,
+            "servingGrams": {
+              "min": 29,
+              "max": 31
+            },
+            "nutrients": {
+              "kcal": {
+                "min": 160,
+                "max": 180
+              },
+              "fat_g": {
+                "min": 14,
+                "max": 16
+              },
+              "protein_g": {
+                "min": 5,
+                "max": 7
+              },
+              "carbs_g": {
+                "min": 5,
+                "max": 7,
+                "required": false
+              },
+              "fiber_g": {
+                "min": 3,
+                "max": 5,
+                "required": false
+              },
+              "potassium_mg": {
+                "min": 200,
+                "max": 240,
+                "required": false
+              }
+            }
+          },
+          {
+            "nameContainsAny": [
+              "pecan"
+            ],
+            "panel": true,
+            "servingGrams": {
+              "min": 27,
+              "max": 29
+            },
+            "nutrients": {
+              "kcal": {
+                "min": 190,
+                "max": 210
+              },
+              "fat_g": {
+                "min": 18,
+                "max": 22
+              },
+              "sat_fat_g": {
+                "min": 1.5,
+                "max": 2.5,
+                "required": false
+              },
+              "carbs_g": {
+                "min": 3,
+                "max": 5,
+                "required": false
+              }
+            }
+          },
+          {
+            "nameContainsAny": [
+              "oat"
+            ],
+            "panel": true,
+            "servingGrams": {
+              "min": 39,
+              "max": 41
+            },
+            "nutrients": {
+              "kcal": {
+                "min": 145,
+                "max": 155
+              },
+              "fat_g": {
+                "min": 2,
+                "max": 3
+              },
+              "carbs_g": {
+                "min": 25,
+                "max": 29
+              },
+              "fiber_g": {
+                "min": 3,
+                "max": 5
+              },
+              "protein_g": {
+                "min": 4,
+                "max": 6
+              },
+              "sugars_g": {
+                "min": 0,
+                "max": 2,
+                "required": false
+              },
+              "sodium_mg": {
+                "min": 0,
+                "max": 5,
+                "required": false
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
       "id": "package-oats-dual-column-synthetic",
       "prompt": "package",
       "tags": [
