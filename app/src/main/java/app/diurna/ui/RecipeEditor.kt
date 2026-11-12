@@ -562,16 +562,12 @@ private fun BarcodeIngredientDialog(
                 scope.launch {
                     when (val r = scan(code, false)) {
                         is app.diurna.data.LibraryRepository.ScanResult.Known -> {
-                            val m = r.meal
-                            // Treat saved meal macros as one serving; scale by grams/100 as a crude default
-                            // when note has no weight — prefer using "Saved item" for library meals.
-                            val factor = grams / 100.0
-                            onAdd(mealToDraft(m, grams, factor, barcode = m.barcode))
+                            val d = barcodeIngredientDraft(r.meal, grams, source = "meal")
+                            if (d != null) onAdd(d) else problem = UNKNOWN_SERVING_WEIGHT
                         }
                         is app.diurna.data.LibraryRepository.ScanResult.Found -> {
-                            val m = r.draft
-                            val factor = grams / 100.0
-                            onAdd(mealToDraft(m, grams, factor, barcode = m.barcode, source = "barcode"))
+                            val d = barcodeIngredientDraft(r.draft, grams, source = "barcode")
+                            if (d != null) onAdd(d) else problem = UNKNOWN_SERVING_WEIGHT
                         }
                         is app.diurna.data.LibraryRepository.ScanResult.NotFound -> {
                             val m = r.draft
@@ -630,6 +626,22 @@ private fun SavedMealIngredientDialog(
             }) { Text("Add") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+private const val UNKNOWN_SERVING_WEIGHT =
+    "This product's serving weight isn't known, so grams can't be scaled. Save it, then add it as a saved meal by servings."
+
+/**
+ * A barcode product's line for [grams] eaten. Its numbers are for one serving, so they scale by
+ * grams ÷ serving grams; null when the serving weight is unknown (never assume 100 g).
+ */
+internal fun barcodeIngredientDraft(m: MealEntity, grams: Double, source: String): IngredientDraft? {
+    if (!(grams > 0) || !grams.isFinite()) return null
+    val perServing = app.diurna.data.gramsPerServing(m) ?: return null
+    return mealToDraft(
+        m, grams, grams / perServing, barcode = m.barcode,
+        sourceMealId = m.id.takeIf { it > 0 }, source = source,
     )
 }
 
