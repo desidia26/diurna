@@ -3,8 +3,9 @@
 #   scripts/new-release-key
 #
 # Makes signing/release.keystore with random passwords in signing/release.properties (both
-# git-ignored, same shape as keystore.properties), creates the GitHub environment "release"
-# (deployable from main only) and stores the key there as secrets for the nightly workflow. The
+# git-ignored, same shape as keystore.properties), creates the GitHub environments "release" and
+# "release-held" (both deployable from main only; release-held also waits for you to approve, for
+# nights the security review holds) and stores the key in both as secrets for the nightly. The
 # certificate's SHA-256 goes into the repo variable RELEASE_CERT_SHA256, which every nightly is
 # checked against. No password is ever printed or passed on a command line.
 #
@@ -40,19 +41,26 @@ fingerprint="$(keytool -list -v -keystore "$ks" -storepass:env RELEASE_PASS \
 [[ ${#fingerprint} -eq 64 ]] || die "couldn't read the new certificate's fingerprint"
 echo "created $ks"
 
-# The environment's secrets are only handed to jobs running on main.
-gh api -X PUT "repos/$repo/environments/release" --input - >/dev/null <<'JSON'
-{"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
-JSON
-gh api "repos/$repo/environments/release/deployment-branch-policies" --jq '.branch_policies[].name' \
-  | grep -qx main || gh api -X POST "repos/$repo/environments/release/deployment-branch-policies" \
-    -f name=main -f type=branch >/dev/null
-base64 -w0 "$ks" | gh secret set RELEASE_KEYSTORE_B64 --env release --repo "$repo"
-printf '%s' "$RELEASE_PASS" | gh secret set RELEASE_STORE_PASSWORD --env release --repo "$repo"
-printf '%s' "$RELEASE_PASS" | gh secret set RELEASE_KEY_PASSWORD --env release --repo "$repo"
-printf '%s' "$alias_name" | gh secret set RELEASE_KEY_ALIAS --env release --repo "$repo"
+# Both environments' secrets are only handed to jobs running on main. release-held is where the
+# nightly publishes when the security review holds a night: same key, but a person must approve.
+me="$(gh api user --jq .id)"
+for env in release release-held; do
+  if [[ "$env" == release-held ]]; then
+    printf '{"reviewers":[{"type":"User","id":%s}],"prevent_self_review":false,' "$me"
+  else
+    printf '{'
+  fi | { cat; echo '"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}'; } \
+    | gh api -X PUT "repos/$repo/environments/$env" --input - >/dev/null
+  gh api "repos/$repo/environments/$env/deployment-branch-policies" --jq '.branch_policies[].name' \
+    | grep -qx main || gh api -X POST "repos/$repo/environments/$env/deployment-branch-policies" \
+      -f name=main -f type=branch >/dev/null
+  base64 -w0 "$ks" | gh secret set RELEASE_KEYSTORE_B64 --env "$env" --repo "$repo"
+  printf '%s' "$RELEASE_PASS" | gh secret set RELEASE_STORE_PASSWORD --env "$env" --repo "$repo"
+  printf '%s' "$RELEASE_PASS" | gh secret set RELEASE_KEY_PASSWORD --env "$env" --repo "$repo"
+  printf '%s' "$alias_name" | gh secret set RELEASE_KEY_ALIAS --env "$env" --repo "$repo"
+done
 gh variable set RELEASE_CERT_SHA256 --body "$fingerprint" --repo "$repo"
-echo "stored in the GitHub environment \"release\"; certificate SHA-256 $fingerprint"
+echo "stored in the GitHub environments \"release\" and \"release-held\"; certificate SHA-256 $fingerprint"
 
 echo
 echo "Now copy $ks and $props into your password manager. Without them (or the"

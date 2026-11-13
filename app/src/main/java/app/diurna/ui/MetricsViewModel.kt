@@ -5,6 +5,8 @@ import app.diurna.data.MetricsRepository
 import app.diurna.domain.Cardio
 import app.diurna.domain.DailyMetrics
 import app.diurna.domain.Metrics
+import app.diurna.domain.DailyMicros
+import app.diurna.domain.NutrientId
 import app.diurna.domain.WhoAminoRefs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +15,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -81,6 +84,10 @@ data class FatDetailCard(
 
 data class LipidDetailCard(
     val summary: Metrics.LipidSummary,
+)
+
+data class MicroDetailCard(
+    val day: DailyMicros,
 )
 
 data class AminoDetailCard(
@@ -174,6 +181,7 @@ data class MetricsUi(
     val fats: FatDetailCard?,
     val lipids: LipidDetailCard?,
     val aminos: AminoDetailCard?,
+    val micros: MicroDetailCard?,
     val training: TrainingCard,
     /** Null until any cardio has ever been logged, so people who only lift never see the card. */
     val cardio: CardioCard?,
@@ -212,11 +220,17 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
 
     private val targets = today.flatMapLatest { c.nutrition.observeTargets(it) }
 
+    private val micros = snapshot.mapLatest { (_, s) ->
+        runCatching {
+            c.nutrients.rangeTotals(s.from.toString(), s.to.toString())
+        }.getOrNull()
+    }
+
     val ui: StateFlow<MetricsUi?> = combine(
-        snapshot, targets, c.settings.macroChartMode, c.settings.detailedNutrition,
-    ) { snap, t, mode, detailed ->
+        snapshot, targets, c.settings.macroChartMode, c.settings.detailedNutrition, micros,
+    ) { snap, t, mode, detailed, microDay ->
         val (range, s) = snap
-        build(range, s, t?.kcal, mode, detailed)
+        build(range, s, t?.kcal, mode, detailed, microDay)
     }.state(null)
 
     /** Exercises with at least one session, so other screens can offer to open their detail. */
@@ -254,6 +268,7 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
         targetKcal: Int?,
         mode: Metrics.MacroChartMode,
         detailedNutrition: Boolean,
+        microDay: DailyMicros?,
     ): MetricsUi {
         val dates = Metrics.days(s.from, s.to)
         val byDate = s.days.associateBy { LocalDate.parse(it.date) }
@@ -327,10 +342,11 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
         val fats = if (showDetail) fatDetailCard(range, s) else null
         val lipids = if (showDetail) lipidDetailCard(s) else null
         val aminos = if (showDetail) aminoDetailCard(s) else null
+        val micros = if (detailedNutrition) microDay?.let(::MicroDetailCard) else null
 
         return MetricsUi(
             range, s.from, s.to, (range.days ?: Long.MAX_VALUE) <= 84,
-            weight, checkIn, macros, carbs, fats, lipids, aminos, training,
+            weight, checkIn, macros, carbs, fats, lipids, aminos, micros, training,
             cardioCard(s).takeIf { s.cardio.isNotEmpty() }, lifts,
         )
     }
