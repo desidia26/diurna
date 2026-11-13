@@ -144,6 +144,7 @@ class RecipeRepositoryTest {
         assertEquals(LibraryRepository.Result.Ok, lib.logRecipe(t.mon, "Oats and almonds", photoLines, saveToLibrary = false))
         val food = t.food.observe(t.mon).first().single()
         assertEquals("Oats and almonds", food.text)
+        // Labeled 150+85; not MacroEnergy 239 from the macros and fiber.
         assertEquals(235, food.kcalLow)
         assertEquals(8, food.proteinG)
         assertEquals(30, food.carbsG)

@@ -506,6 +506,7 @@ fun RecipeIngredientEntity.toNutrition(): RecipeMath.IngredientNutrition =
         proteinG = proteinG,
         carbsG = carbsG,
         fatG = fatG,
+        kcal = RecipeMath.explicitKcal(kcal, proteinG, carbsG, fatG),
         fiberG = fiberG,
         solubleFiberG = solubleFiberG,
         insolubleFiberG = insolubleFiberG,
