@@ -101,3 +101,7 @@ is separately a safe-failure/live-fallback test, regardless of OCR availability.
 ## Reviewed scanner integration
 
 Live-only fallback remains a human-confirmed candidate even after a photo error or low-memory image failure. `scan.image_outcome.*` describes saved-image processing; `scan.outcome.*` describes the final session resolution and its source (`live_confirmation`, `combined_confirmation`, `saved_photo`, or `none`). The session and lookup gates suppress stale/cancelled/duplicate completion. Candidate and OCR diagnostics contain counts/format/checksum metadata, not arbitrary recognized label text. Review corrections from scanner-decode are real-merged before scanner-reliability; debug-off attachment retention and the 20 MiB/7-day limits are unchanged.
+
+### Lookup outcomes
+
+`scan.lookup.<outcome>` distinguishes `known` (library), `found`, `not_found` (no Open Food Facts record under any spelling; `spellings_tried` counts the EAN-13 and, for UPC-A, the 12-digit form), `incomplete` (record exists but `problem` is `no_nutrition`, `no_calories` or `implausible`), `unreadable` (the answer wasn't a product response) and `unreachable`/`failed` (network). Details carry only these codes and counts, never product text.

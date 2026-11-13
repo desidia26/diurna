@@ -88,16 +88,18 @@ fun BarcodeScanDialog(
                     diagnostics.onEvent("lookup", "start")
                     val started = System.nanoTime()
                     val result = scan(code.digits, code.upcE)
-                    diagnostics.onEvent("lookup", when (result) {
-                        is ScanResult.Known -> "known"; is ScanResult.Found -> "found"
-                        is ScanResult.NotFound -> "not_found"; is ScanResult.Failed -> "failed"
-                    }, latencyMs = (System.nanoTime() - started) / 1_000_000)
+                    val (outcome, details) = lookupDiagnostic(result)
+                    diagnostics.onEvent("lookup", outcome, details, latencyMs = (System.nanoTime() - started) / 1_000_000)
                     when (result) {
                         is ScanResult.Known -> { if (lookupGate.finish(true)) onKnown(result.meal) }
                         is ScanResult.Found -> { if (lookupGate.finish(true)) onFound(result.draft) }
                         is ScanResult.NotFound -> {
                             draft = result.draft.takeIf { it.barcode != null }
                             problem = "Barcode read, but this product isn't in Open Food Facts. You can add its nutrition manually."
+                        }
+                        is ScanResult.Incomplete -> {
+                            draft = result.draft.takeIf { it.barcode != null }
+                            problem = "Barcode read. ${result.problem.message} You can add its nutrition manually."
                         }
                         is ScanResult.Failed -> {
                             draft = result.draft.takeIf { it.barcode != null }
@@ -160,4 +162,13 @@ fun BarcodeScanDialog(
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
     )
+}
+
+/** Debug-log outcome and details for a lookup: codes and reasons only, never product text. */
+internal fun lookupDiagnostic(result: ScanResult): Pair<String, Map<String, String>> = when (result) {
+    is ScanResult.Known -> "known" to emptyMap()
+    is ScanResult.Found -> "found" to emptyMap()
+    is ScanResult.NotFound -> "not_found" to mapOf("spellings_tried" to result.tried.size.toString())
+    is ScanResult.Incomplete -> "incomplete" to mapOf("problem" to result.problem.wire)
+    is ScanResult.Failed -> result.reason to emptyMap()
 }
