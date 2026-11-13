@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Claude's security review of a range of commits, for CI (PR comments and the nightly's hold).
+#
+#   scripts/ai-review <base> <head> <out.json>
+#
+# Writes {"verdict": "clean"|"hold", "findings": [...], "note": "..."} to out.json. Fails closed:
+# no key, an API error, a malformed answer or a diff too big to read all come back as "hold" with
+# a note, never as "clean". Claude runs with read-only file tools, no shell, no network tools, no
+# GitHub token, and a spending cap; posting or holding is up to the workflow that called this.
+source "$(dirname "$0")/_lib.sh"
+
+base="${1:?usage: scripts/ai-review <base> <head> <out.json>}"
+head="${2:?}"
+out="${3:?}"
+CLAUDE_CODE_VERSION=2.1.314
+MODEL="${AI_REVIEW_MODEL:-claude-sonnet-5-5}"
+MAX_DIFF_BYTES=600000
+
+hold() { # hold <note>
+  python3 -I -c 'import json,sys; json.dump({"verdict": "hold", "findings": [], "note": sys.argv[1]}, open(sys.argv[2], "w"))' "$1" "$out"
+  echo "AI review: hold ($1)"
+  exit 0
+}
+
+[[ -n "${ANTHROPIC_API_KEY:-}" ]] || hold "no Anthropic key, so nothing was reviewed"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+# Binary files and lockfile churn say nothing a reviewer can use; the CVE gate covers dependencies.
+# Three dots: only what <head> adds since it left <base>. With two, a branch behind main reads
+# as reverting everything main gained since, and the review flags changes the PR never made.
+git -C "$ROOT" diff --no-color --no-ext-diff "$base...$head" -- . ':(exclude)*.png' ':(exclude)*.jpg' \
+  ':(exclude)app/schemas/**' ':(exclude)app/lint-baseline.xml' >"$work/change.diff"
+[[ -s "$work/change.diff" ]] || { echo '{"verdict":"clean","findings":[],"note":"no reviewable changes"}' >"$out"; exit 0; }
+(( $(stat -c %s "$work/change.diff") <= MAX_DIFF_BYTES )) || hold "the change is too large to review in one pass ($(stat -c %s "$work/change.diff") bytes); review it by hand"
+cp "$work/change.diff" "$ROOT/.ai-review.diff"
+trap 'rm -rf "$work" "$ROOT/.ai-review.diff"' EXIT
+
+npm install --silent --no-audit --no-fund --prefix "$work/cli" "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" >/dev/null
+schema='{"type":"object","additionalProperties":false,"required":["verdict","findings"],"properties":{
+  "verdict":{"enum":["clean","hold"]},
+  "findings":{"type":"array","maxItems":20,"items":{"type":"object","additionalProperties":false,
+    "required":["severity","file","issue","why"],"properties":{
+      "severity":{"enum":["critical","high","medium","low"]},
+      "file":{"type":"string","maxLength":200},"line":{"type":"integer"},
+      "issue":{"type":"string","maxLength":300},"why":{"type":"string","maxLength":800}}}}}}'
+
+set +e
+(cd "$ROOT" && "$work/cli/node_modules/.bin/claude" -p \
+  "Review the change in .ai-review.diff (commits $base...$head) and answer with the verdict and findings." \
+  --bare --restricted --strict-mcp-config --no-session-persistence \
+  --tools "Read,Grep,Glob" \
+  --model "$MODEL" \
+  --max-budget-usd "${AI_REVIEW_BUDGET_USD:-2}" \
+  --append-system-prompt-file "$ROOT/security/review-prompt.md" \
+  --json-schema "$schema" \
+  --output-format json) >"$work/answer.json" 2>"$work/stderr.txt"
+rc=$?
+set -e
+(( rc == 0 )) || hold "Claude didn't finish (exit $rc): $(tail -c 300 "$work/stderr.txt" | tr '\n' ' ')"
+
+# Trust nothing about the answer's shape: re-check it here rather than in whoever reads out.json.
+python3 -I - "$work/answer.json" "$out" <<'EOF' || hold "the answer wasn't in the expected shape"
+import json, sys
+answer = json.load(open(sys.argv[1]))
+review = answer.get("structured_output")
+if review is None:
+    review = json.loads(answer.get("result", ""))
+assert review["verdict"] in ("clean", "hold")
+findings = review["findings"]
+assert isinstance(findings, list) and len(findings) <= 20
+for f in findings:
+    assert f["severity"] in ("critical", "high", "medium", "low")
+    assert all(isinstance(f[k], str) for k in ("file", "issue", "why"))
+# A high or critical finding holds the release even if the verdict says otherwise.
+if any(f["severity"] in ("critical", "high") for f in findings):
+    review["verdict"] = "hold"
+review["cost_usd"] = answer.get("total_cost_usd")
+json.dump(review, open(sys.argv[2], "w"), indent=2)
+print(f"AI review: {review['verdict']}, {len(findings)} finding(s)")
+EOF

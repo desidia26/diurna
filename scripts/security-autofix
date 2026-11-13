@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# The nightly's autofix. It only ever files issues: a checked fix arrives as a patch in the
+# issue, and a person applies it and opens the PR. Two halves run as separate jobs on separate
+# machines, so the token that can write issues never shares a machine with code Claude may have
+# edited: Gradle runs build scripts Claude can touch, and a Gradle daemon outlives the step that
+# started it. CI only.
+#
+#   scripts/security-autofix propose <findings-dir> <out-dir>
+#       Read-only GitHub token, ANTHROPIC_API_KEY. Asks Claude for a fix, runs the unit tests, lint
+#       and the security gate on it, and writes <out-dir>/outcome ("fix", "issue" or "skip"),
+#       reason.txt, summary.md and change.patch. Skips when the open issue already covers these
+#       findings, so Claude runs once per new set of findings, not every blocked night.
+#   scripts/security-autofix publish <findings-dir> <out-dir>
+#       Issue-writing token. Runs nothing from the patch: checks that it applies and which paths it
+#       touches, then files the issue or comments on the open one. Treats <out-dir> as untrusted (it
+#       came from the machine Claude's edits ran on); the findings are re-read from the security
+#       job's artifact.
+#
+# <findings-dir> is the nightly security job's artifact.
+source "$(dirname "$0")/_lib.sh"
+
+CLAUDE_CODE_VERSION=2.1.314
+MODEL="${AUTOFIX_MODEL:-claude-opus-5-5}"
+# Paths autofix may never change; checked in both halves, decisive in publish.
+FORBIDDEN='^(\.github/|signing/|security/|scripts/|gradle/wrapper/|gradlew(\.bat)?$|CLAUDE\.md$|AGENTS\.md$)'
+date="$(date -u +%F)"
+cd "$ROOT"
+
+write_findings() { # write_findings <findings-dir> <out.json>
+  local gate codeql
+  gate="$(find "$1" -name gate.json | head -1)"
+  codeql="$(find "$1" -name codeql.json | head -1)"
+  python3 -I - "${gate:-/dev/null}" "${codeql:-/dev/null}" "$2" <<'PY'
+import json, sys
+def load(p):
+    try: return json.load(open(p))
+    except Exception: return None
+gate, codeql = load(sys.argv[1]) or {}, load(sys.argv[2]) or []
+json.dump({"vulnerable_libraries": gate.get("blocking", []), "codeql_alerts": codeql}, open(sys.argv[3], "w"), indent=2)
+PY
+}
+
+# Identifies a set of findings across nights: which advisories in which packages, which rules in
+# which files (not lines, which move with unrelated edits).
+findings_key() { # findings_key <findings.json>
+  python3 -I - "$1" <<'PY'
+import hashlib, json, sys
+d = json.load(open(sys.argv[1]))
+libs = sorted([sorted(map(str, f.get("ids", []))), str(f.get("package")), str(f.get("version"))] for f in d["vulnerable_libraries"])
+rules = sorted([str(a.get("rule")), str(a.get("path"))] for a in d["codeql_alerts"])
+print(hashlib.sha256(json.dumps([libs, rules]).encode()).hexdigest()[:32])
+PY
+}
+
+open_issue_number() {
+  gh issue list --state open --label security --search 'in:title "Security gate blocked"' \
+    --json number --jq '.[0].number // empty' 2>/dev/null || true
+}
+
+changed_paths() { git status --porcelain --untracked-files=all | cut -c4-; }
+
+propose() {
+  local findings_dir="${1:?usage: scripts/security-autofix propose <findings-dir> <out-dir>}"
+  local out="${2:?}"
+  mkdir -p "$out"
+  : >"$out/summary.md"
+  finish() { # finish <outcome> [reason]
+    printf '%s' "$1" >"$out/outcome"
+    printf '%s' "${2:-}" >"$out/reason.txt"
+    exit 0
+  }
+
+  write_findings "$findings_dir" .security-findings.json
+  trap 'rm -f .security-findings.json' EXIT
+  # The open issue already has these findings (and Claude's take on them): nothing new to try.
+  local key existing
+  key="$(findings_key .security-findings.json)"
+  existing="$(open_issue_number)"
+  if [[ -n "$existing" ]] && gh issue view "$existing" --json body,comments --jq '.body, .comments[].body' \
+      | grep -qF "autofix-findings: $key"; then
+    echo "Issue #$existing already covers these findings."
+    finish skip
+  fi
+  local anthropic_key="${ANTHROPIC_API_KEY:-}"
+  unset GH_TOKEN GITHUB_TOKEN ANTHROPIC_API_KEY
+
+  local blocking
+  blocking="$(python3 -I -c 'import json; d=json.load(open(".security-findings.json")); print(len(d["vulnerable_libraries"]) + len(d["codeql_alerts"]))')"
+  (( blocking > 0 )) || finish issue "The gate failed without findings to fix: a scan didn't run or its results couldn't be read. See the nightly's Security job."
+  [[ -n "$anthropic_key" ]] || finish issue "CLAUDE_AUTOFIX_KEY isn't set, so no fix was attempted."
+
+  local work rc
+  work="$(mktemp -d)"
+  npm install --silent --no-audit --no-fund --prefix "$work/cli" "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" >/dev/null
+  set +e
+  ANTHROPIC_API_KEY="$anthropic_key" "$work/cli/node_modules/.bin/claude" -p \
+    "Resolve the blocking findings listed in .security-findings.json." \
+    --bare --restricted --strict-mcp-config --no-session-persistence \
+    --tools "Read,Grep,Glob,Edit,Write,Bash" \
+    --allowedTools "Read" "Grep" "Glob" "Edit" "Write" "Bash(./gradlew:*)" "Bash(scripts/security-gate:*)" \
+    --model "$MODEL" \
+    --max-budget-usd "${AUTOFIX_BUDGET_USD:-10}" \
+    --append-system-prompt-file security/autofix-prompt.md \
+    --output-format json >"$work/answer.json" 2>"$work/stderr.txt"
+  rc=$?
+  set -e
+  python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("result", "")[:3000])' "$work/answer.json" >"$out/summary.md" 2>/dev/null || true
+  (( rc == 0 )) || finish issue "Claude didn't finish (exit $rc)."
+
+  # Checked here, not taken on Claude's word.
+  local changed
+  changed="$(changed_paths)"
+  [[ -n "$changed" ]] || finish issue "Claude found no safe fix and changed nothing."
+  grep -qE "$FORBIDDEN" <<<"$changed" \
+    && finish issue "The proposed change touched files autofix may not edit: $(tr '\n' ' ' <<<"$changed")"
+  ./gradlew -q testDebugUnitTest lintRelease || finish issue "The proposed change broke the unit tests or lint."
+  scripts/security-gate >/dev/null || finish issue "The proposed change didn't clear the security gate."
+
+  git add -A
+  git diff --cached --binary >"$out/change.patch"
+  finish fix
+}
+
+publish() {
+  local findings_dir="${1:?usage: scripts/security-autofix publish <findings-dir> <out-dir>}"
+  local out="${2:?}"
+  : "${GH_TOKEN:?}" "${GITHUB_RUN_ID:?}"
+  local work key
+  work="$(mktemp -d)"
+  # The body renderer is copied before the patch is tried, so the patch can't change what renders it.
+  cp scripts/security-autofix-body.py "$work/body.py"
+  write_findings "$findings_dir" "$work/findings.json"
+  key="$(findings_key "$work/findings.json")"
+  # Claude's summary is escaped by the renderer; capped here as well.
+  head -c 20000 "$out/summary.md" >"$work/summary.md" 2>/dev/null || : >"$work/summary.md"
+
+  # Files a new issue, or adds the night's news to the one still open from an earlier night.
+  post() { # post <why> [patch]
+    python3 -I "$work/body.py" "$work/findings.json" "$1" "$work/summary.md" "${2:-}" "$GITHUB_RUN_ID" "$key" >"$work/issue.md"
+    local existing
+    existing="$(open_issue_number)"
+    if [[ -n "$existing" ]]; then
+      gh issue comment "$existing" --body-file "$work/issue.md"
+    else
+      gh issue create --title "Security gate blocked the nightly (since $date)" --label security --label P1 --body-file "$work/issue.md"
+    fi
+    exit 0
+  }
+
+  # gh refuses to create an issue with a label the repo doesn't have; fails harmlessly if it exists.
+  gh label create security --color B60205 --description "Security gate and autofix" >/dev/null 2>&1 || true
+
+  case "$(head -c 10 "$out/outcome" 2>/dev/null || true)" in
+    skip) echo "Nothing new to report."; exit 0 ;;
+    issue) post "$(head -c 600 "$out/reason.txt" 2>/dev/null || true)" ;;
+    fix) ;;
+    *) post "The autofix job didn't finish; see its log in the nightly run." ;;
+  esac
+
+  # Applied only to see what it touches; nothing here runs it, and nothing is committed.
+  [[ -s "$out/change.patch" ]] || post "The autofix job reported a fix but handed over no patch."
+  git apply --binary "$out/change.patch" || post "The proposed patch didn't apply to main."
+  local changed
+  changed="$(changed_paths)"
+  [[ -n "$changed" ]] || post "The proposed patch changed nothing."
+  grep -qE "$FORBIDDEN" <<<"$changed" \
+    && post "The proposed patch touched files autofix may not edit: $(tr '\n' ' ' <<<"$changed")"
+  post "" "$out/change.patch"
+}
+
+# On one line: bash reads a script as it runs, and the patch publish applies may rewrite this file.
+case "${1:-}" in propose|publish) mode="$1"; shift; "$mode" "$@"; exit ;; *) die "usage: scripts/security-autofix propose|publish <findings-dir> <out-dir>" ;; esac

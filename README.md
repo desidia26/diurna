@@ -53,6 +53,7 @@ Demo data on an emulator (`scripts/demo-data` fills one); none of it is real.
 | Targets: Mifflin–St Jeor × activity + goal, macros from body weight and fat % | `domain/Targets.kt` |
 | Food estimates: one AI call per entry (structured JSON) when logged or its text changes, to the provider picked in Setup: Claude (`claude-haiku-5-5`, the default), Grok (`grok-4.20-non-reasoning` via xAI's chat completions), or an OpenAI-compatible gateway (user base URL + model + optional key); optional Anthropic/xAI endpoint overrides; retried in the background by WorkManager, capped at 8 tries; every API error mapped to a plain message (`ai/EstimateErrors.kt`); keys encrypted with the Android Keystore | `ai/` |
 | Meal photos: optional photo on a food entry from the camera (`TakePicture` into a FileProvider scratch file) or the system photo picker, so no storage permission; decoded straight to at most 1568 px, saved as JPEG under 3.5 MB in `files/food-photos`, sent with the text as a base64 image (Claude image block, xAI `image_url` data URI). Kept out of cloud backup (its 25 MB cap), mirrored into self-backups; unused files swept at startup | `data/FoodPhotos.kt`, `data/PhotoImporter.kt`, `domain/PhotoSizing.kt`, `ui/FoodPhotoUi.kt` |
+| Food card: one line per entry (time, name, kcal; `~` marks an AI estimate, a plain number a saved meal), tap to open its numbers, assumption, photos and actions; swipe left or Delete hides it for 5 s with Undo before the real delete, so an app killed in that window keeps the entry; one + for photos and barcode scans | `ui/FoodCard.kt`, `domain/FoodLine.kt`, `ui/PendingDelete.kt` |
 | Barcode scanning: saved app-private photo with five bounded cleanup retries; a retained valid live read requires confirmation if the photo fails; Play Services digit OCR (confirmed before lookup; model downloads when first needed for sideloaded installs), EAN/UPC check-digit validation, tap-to-focus and light control; codes looked up on Open Food Facts and checked in the meal form before saving; rescans come from the library and work offline. Answers are treated as untrusted: HTTPS only, no redirects, size and time caps, sanity limits on numbers, plain short text | `domain/BarcodeDecode.kt`, `scan/ProductScanner.kt`, `scan/BarcodeImage.kt`, `data/BarcodeLookup.kt`, `ui/BarcodeScanDialog.kt` |
 | Recipes (Library): import from a schema.org link or build by hand; ingredient lines convert volume/`each` to grams via USDA FoodData Central portions when a key is set, else a short AI density estimate, with a shared Room cache and WorkManager backfill; AI estimates are marked; manual density is never overwritten | `domain/IngredientDensity.kt`, `data/density/`, `ai/DensityPrompt.kt`, `data/recipe/`, `ui/RecipeEditor.kt` |
 | Library: saved meals (exact numbers, tap to log, servings, optional barcode) and the exercise catalog (seeded with common lifts and a typical Planet Fitness lineup; rename, add a note, hide, delete if unused), under Setup | `data/LibraryRepository.kt`, `data/ExerciseSeed.kt`, `ui/LibraryScreens.kt` |
@@ -124,19 +125,44 @@ Day-to-day work goes through `scripts/`. Anything that touches a device picks th
 | `scripts/screenshot` | Capture the device screen to `~/Downloads` (`--last` copies the newest screenshot taken on the phone) |
 | `scripts/demo-data` | **Emulator only:** clear the app's data and fill it with 12 weeks of made-up history (or `scripts/demo-data <weeks>`), for screenshots |
 | `scripts/backup-db` | Copy the database off the device into `backups/<timestamp>/`, which git ignores |
-| `scripts/new-release-key` | **Once, ever:** create the release key in `signing/` and store it in the GitHub environment `release` for the nightly workflow (refuses if it exists) |
+| `scripts/new-release-key` | **Once, ever:** create the release key in `signing/` and store it in the GitHub environments `release` and `release-held` (the one a held night waits in) for the nightly workflow (refuses if it exists) |
 | `scripts/smoke <apk>` | **Emulator only:** install a minified build (`./gradlew assembleRelease -PsmokeTest`, which adds x86_64) and make the test alarm go off with the screen asleep, failing if the app crashes. The tests never run R8's output; this does |
 | `scripts/backup-signing-keys` | Encrypt `signing/` (both keys and their passwords) with a passphrase into `~/diurna-signing-keys-<date>.tar.gz.gpg`, and check it opens again; keep the file off this machine |
 | `scripts/alarm-check` | Show the armed alarm and permissions (`--doze` or `--reboot` to stress-test it) |
+| `scripts/security-gate` | Scan the libraries that ship in the APK for known vulnerabilities (OSV-Scanner, today's data); fails on high or critical ones that aren't waived. See [Security](#security) |
+| `scripts/check-apk <apk>` | Compare a built APK's permissions, exported components, debug flags and cleartext hosts with `security/apk-baseline.txt` (`--write-baseline` to update it after a deliberate change) |
 | `LIVE_API=1 ./gradlew testDebugUnitTest --tests '*LiveApiErrorTest*'` | Check a real API error end to end, using a deliberately invalid key (free) |
 
 **Release builds** are shrunk with R8 (about 25 MB, versus about 80 MB for debug) and not debuggable. `versionCode` is the git commit count, so every release is newer than the last.
 
 **Device tests never run on a real phone.** Gradle uninstalls the app after them, which deletes all of Diurna's data, so `scripts/test` refuses anything but the emulator. Run `./gradlew connectedDebugAndroidTest` by hand only if you know which device it will hit.
 
-**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key. `.github/workflows/nightly.yml` runs from `main` daily at 04:00 UTC (midnight Eastern, away from morning alarms): it first runs `scripts/smoke` on the minified build in an emulator, then builds the release, checks its certificate against `RELEASE_CERT_SHA256`, its version, its CPU type (arm64 only) and its size (30 MB at most), and publishes it as `v0.N` with the new What's new entries as release notes. It only runs on `main` and is the only job given the release key.
+**CI:** `.github/workflows/tests.yml` runs the unit tests and the device tests (on an API 33 emulator) for every pull request and every push to `main`. It needs no `signing/` or `local.properties`: debug builds use the standard debug key. `.github/workflows/nightly.yml` runs from `main` daily at 04:00 UTC (midnight Eastern, away from morning alarms): it first runs `scripts/smoke` on the minified build in an emulator, then builds the release, checks its certificate against `RELEASE_CERT_SHA256`, its version, its CPU type (arm64 only) and its size (30 MB at most), and publishes it as `v0.N` with the new What's new entries as release notes. It only runs on `main` and is the only job given the release key. Before publishing it runs the security checks below. `.github/workflows/security.yml` runs the vulnerability scan, CodeQL, workflow lint and an AI review on every pull request.
 
 **Wireless debugging** works with the scripts too: pair once in Developer options → Wireless debugging, and `adb` reconnects whenever it's turned on. Keep it on trusted networks only, and off when not in use.
+
+## Security
+
+The nightly only publishes what passes these checks, and every pull request runs them too.
+
+| Check | What it looks at | On a problem |
+|---|---|---|
+| Known vulnerabilities (`scripts/security-gate`) | Every library in the APK (the release runtime classpath), against the OSV database on the day | **Blocks** on CVSS 7.0+ or high/critical. Medium and low are listed in the run summary |
+| CodeQL | The Kotlin source, with GitHub's security-extended queries | **Blocks** the nightly while a high or critical alert is open on `main` |
+| Lint (`app/lint.xml`) | Android's security checks: TLS and hostname verification, exported components, implicit intents, WebViews, world-readable files, weak randomness | **Fails** the PR. `app/lint-baseline.xml` holds older non-security findings; it should only shrink |
+| APK surface (`scripts/check-apk`) | Permissions, exported components and what guards them, debug flags, cleartext hosts | **Blocks** anything not in `security/apk-baseline.txt`; a deliberate change updates the baseline in its PR |
+| Workflow lint (zizmor) and wrapper validation | GitHub Actions workflows and `gradle-wrapper.jar` | Findings in the Security tab; a bad wrapper fails the PR |
+| AI review (Claude) | The diff: a PR's, or everything since the last release for the nightly | Advisory comment on PRs. In the nightly, a high or critical finding **holds** the release in the `release-held` environment until someone approves it |
+
+When the nightly is blocked, its autofix job gives Claude the findings. Claude may edit the code and build files, but not workflows, scripts, the Gradle wrapper, signing or `security/`. The job then runs the unit tests, lint and the vulnerability scan itself, with only a read-only GitHub token. A second job on a fresh machine checks which files the patch touches, without running any of it, and files an issue (or comments on the open one) with the checked patch, or with why there's no fix. A person applies the patch and opens the PR; autofix can't push, open PRs or start workflows. Claude runs once per new set of findings, not every blocked night. A crashed AI review holds the night rather than passing it. Nothing ships until a person merges the fix. AI can hold a release or propose a fix; it never clears a release or merges anything.
+
+Build tooling (AGP, Gradle plugins) never reaches a phone, so its advisories don't block; Dependabot still raises them. An advisory that can't affect the app is waived in `security/osv-scanner.toml` with a reason and an `ignoreUntil` date, in a reviewed PR, and blocks again once the date passes.
+
+**Setup (once).** The AI parts stay off until these exist, and the rest works without them.
+
+- `CLAUDE_REVIEW_KEY`: repository secret, an Anthropic API key with a spend limit, for PR reviews. Anyone who can push a branch here could read it through a workflow, so keep the limit low.
+- `CLAUDE_AUTOFIX_KEY`: a secret in an environment named `security`, with deployments limited to `main`, for the nightly's review and autofix. Pull request code can't read it.
+- An environment named `release-held` with you as required reviewer, deployments limited to `main`, and the same four `RELEASE_*` secrets as `release` (`RELEASE_CERT_SHA256` is a repo variable, so it already applies). A held night waits there for approval. `scripts/new-release-key` sets up both environments, so a new key reaches both.
 
 ## Issues
 

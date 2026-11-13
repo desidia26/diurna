@@ -11,6 +11,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -148,25 +152,28 @@ fun rememberPhotoAttacher(host: PhotoImportHost, onAttached: (String) -> Unit): 
     }
 }
 
-/** The camera icon next to the food box: take a photo or choose one. */
+/**
+ * Take or choose a photo; with [onScan], scanning a barcode too, so the food composer has one
+ * "+" for everything that isn't text.
+ */
 @Composable
-fun PhotoMenuButton(attacher: PhotoAttacher, contentDescription: String = "Add photo") {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }, enabled = !attacher.busy) {
-            Icon(painterResource(R.drawable.ic_photo), contentDescription = contentDescription, tint = MaterialTheme.colorScheme.primary)
+fun AttachMenu(
+    open: Boolean, attacher: PhotoAttacher, onClose: () -> Unit,
+    onScan: (() -> Unit)? = null, allowPhotos: Boolean = true,
+) {
+    DropdownMenu(expanded = open, onDismissRequest = onClose) {
+        if (allowPhotos) {
+            DropdownMenuItem(text = { Text("Take photo") }, onClick = { onClose(); attacher.takePhoto() })
+            DropdownMenuItem(text = { Text("Choose photo") }, onClick = { onClose(); attacher.choosePhoto() })
         }
-        PhotoMenu(open, attacher) { open = false }
+        if (onScan != null) {
+            DropdownMenuItem(text = { Text("Scan barcode") }, onClick = { onClose(); onScan() })
+        }
     }
 }
 
 @Composable
-private fun PhotoMenu(open: Boolean, attacher: PhotoAttacher, onClose: () -> Unit) {
-    DropdownMenu(expanded = open, onDismissRequest = onClose) {
-        DropdownMenuItem(text = { Text("Take photo") }, onClick = { onClose(); attacher.takePhoto() })
-        DropdownMenuItem(text = { Text("Choose photo") }, onClick = { onClose(); attacher.choosePhoto() })
-    }
-}
+private fun PhotoMenu(open: Boolean, attacher: PhotoAttacher, onClose: () -> Unit) = AttachMenu(open, attacher, onClose)
 
 /** An attached photo before saving: thumbnail plus Replace and Remove. */
 @Composable
@@ -249,6 +256,8 @@ fun PhotoGalleryEditor(
     attacher: PhotoAttacher,
     onChange: (List<String>) -> Unit,
     max: Int = app.diurna.data.FoodPhotoEntity.MAX_PER_OWNER,
+    /** False where something else (the food composer's "+") already adds photos. */
+    showAdd: Boolean = true,
 ) {
     var viewing by remember { mutableStateOf<String?>(null) }
     if (attacher.busy) {
@@ -257,27 +266,38 @@ fun PhotoGalleryEditor(
     if (names.isNotEmpty()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, end = 8.dp),
         ) {
-            names.forEach { name ->
-                Box {
-                    PhotoThumb(photos, name, 56.dp) { viewing = name }
-                }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             names.forEachIndexed { i, name ->
-                TextButton(onClick = { onChange(names.filterIndexed { j, _ -> j != i }) }) {
-                    Text("Remove ${i + 1}")
+                Box {
+                    // The first photo is the one sent with an estimate; the outline says so.
+                    val first = i == 0 && names.size > 1
+                    Box(if (first) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp)).padding(2.dp) else Modifier) {
+                        PhotoThumb(photos, name, 56.dp) { viewing = name }
+                    }
+                    IconButton(
+                        onClick = { onChange(names.filterIndexed { j, _ -> j != i }) },
+                        modifier = Modifier.align(Alignment.TopEnd).offset(x = 16.dp, y = (-16).dp).size(40.dp),
+                    ) {
+                        Box(
+                            Modifier.size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_close), contentDescription = "Remove photo ${i + 1}",
+                                Modifier.size(14.dp), tint = MaterialTheme.colorScheme.surface,
+                            )
+                        }
+                    }
                 }
             }
         }
         if (names.size > 1) {
-            Hint("First photo is used for estimates.")
+            Hint("The outlined photo is used for estimates.")
         }
     }
-    if (names.size < max && !attacher.busy) {
+    if (showAdd && names.size < max && !attacher.busy) {
         Box {
             var open by remember { mutableStateOf(false) }
             OutlinedButton(onClick = { open = true }) {

@@ -1,0 +1,28 @@
+# What a release APK exposes; scripts/check-apk fails on anything not listed here.
+# Regenerate with scripts/check-apk <apk> --write-baseline and explain each change in the PR.
+cleartext 10.0.2.2
+cleartext 127.0.0.1
+cleartext ::1
+cleartext localhost
+exported activity app.diurna.BackupTriggerActivity guarded-by android.permission.DUMP
+exported activity app.diurna.MainActivity
+exported receiver androidx.profileinstaller.ProfileInstallReceiver guarded-by android.permission.DUMP
+exported receiver androidx.work.impl.diagnostics.DiagnosticsReceiver guarded-by android.permission.DUMP
+exported receiver app.diurna.alarm.BootReceiver
+exported service androidx.work.impl.background.systemjob.SystemJobService guarded-by android.permission.BIND_JOB_SERVICE
+permission android.permission.ACCESS_NETWORK_STATE
+permission android.permission.ACTIVITY_RECOGNITION
+permission android.permission.CAMERA
+permission android.permission.FOREGROUND_SERVICE
+permission android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK
+permission android.permission.INTERNET
+permission android.permission.POST_NOTIFICATIONS
+permission android.permission.RECEIVE_BOOT_COMPLETED
+permission android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+permission android.permission.SCHEDULE_EXACT_ALARM
+permission android.permission.SET_WALLPAPER
+permission android.permission.USE_EXACT_ALARM
+permission android.permission.USE_FULL_SCREEN_INTENT
+permission android.permission.VIBRATE
+permission android.permission.WAKE_LOCK
+permission app.daybook.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION

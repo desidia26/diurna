@@ -79,6 +79,7 @@ class DataTransfer(
 
     private fun stageOrThrow(input: InputStream): Staged {
         File(stagingDir, ExportArchive.PHOTO_DIR).mkdirs()
+        val stagingRoot = stagingDir.canonicalPath + File.separator
         val seen = mutableSetOf<String>()
         var total = 0L
         var photoCount = 0
@@ -88,7 +89,10 @@ class DataTransfer(
                 val kind = ExportArchive.kindOf(entry.name)
                 if (entry.isDirectory || kind == null || !seen.add(entry.name)) throw ImportFailed(Problem.NotAnExport)
                 if (kind == Kind.PHOTO && ++photoCount > ExportArchive.MAX_PHOTOS) throw ImportFailed(Problem.NotAnExport)
-                total += copyCapped(zip, File(stagingDir, entry.name), ExportArchive.maxBytes(kind), ExportArchive.MAX_TOTAL - total)
+                // kindOf already allows only exact names; this keeps every write inside stagingDir regardless.
+                val target = File(stagingDir, entry.name)
+                if (!target.canonicalPath.startsWith(stagingRoot)) throw ImportFailed(Problem.NotAnExport)
+                total += copyCapped(zip, target, ExportArchive.maxBytes(kind), ExportArchive.MAX_TOTAL - total)
             }
         }
         val manifest = File(stagingDir, ExportArchive.MANIFEST).takeIf { it.isFile }
