@@ -51,6 +51,7 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.TimeoutCancellationException
@@ -86,12 +87,14 @@ fun ProductScanner(
 
     fun finish(outcome: ScanOutcome, problem: String? = null) {
         val resolution = session.complete(outcome) ?: return
+        latestDiagnostics.onResolved(resolution)
         if (resolution.source != "none" || problem == null) latestResult(resolution.outcome)
         else latestProblem(problem)
     }
     val takePhoto: () -> Unit = takePhoto@{
         val shot = capture ?: return@takePhoto
         if (!owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || !session.beginCapture()) return@takePhoto
+        latestDiagnostics.onEvent("capture", "start")
         busy = true
         liveProblem = null
         val raw = try {
@@ -101,6 +104,7 @@ fun ProductScanner(
                 ?.forEach { it.delete() }
             File.createTempFile("barcode-raw-", ".jpg", dir)
         } catch (e: Exception) {
+            latestDiagnostics.onEvent("capture", "failed", mapOf("exception" to e.javaClass.simpleName))
             busy = false
             finish(ScanOutcome.Unreadable, "Couldn't save the barcode photo. Check free space and try again.")
             return@takePhoto
@@ -117,11 +121,13 @@ fun ProductScanner(
                                 val result = guardScanMemory(latestDiagnostics) { readCapturedBarcode(raw, latestDiagnostics) }
                                 finish(result)
                             } catch (_: TimeoutCancellationException) {
+                                latestDiagnostics.onEvent("image_error", "timeout")
                                 finish(ScanOutcome.Unreadable, "Reading the barcode photo took too long. Try again.")
                             } catch (e: CancellationException) {
                                 session.cancel()
                                 throw e
                             } catch (e: Exception) {
+                                latestDiagnostics.onEvent("image_error", "failed", mapOf("exception" to e.javaClass.simpleName))
                                 finish(ScanOutcome.Unreadable, "Couldn't process the saved barcode photo. Try again.")
                             } finally {
                                 raw.delete()
@@ -130,11 +136,13 @@ fun ProductScanner(
                         }.invokeOnCompletion { raw.delete() }
                     }
                     override fun onError(exception: ImageCaptureException) {
+                        latestDiagnostics.onEvent("capture", "failed", mapOf("exception" to exception.javaClass.simpleName, "message" to (exception.message ?: "")))
                         raw.delete(); busy = false
                         finish(ScanOutcome.Unreadable, "Couldn't take the barcode photo. Try again.")
                     }
                 })
         } catch (e: Exception) {
+            latestDiagnostics.onEvent("capture", "failed", mapOf("exception" to e.javaClass.simpleName))
             raw.delete(); busy = false
             finish(ScanOutcome.Unreadable, "Couldn't take the barcode photo. Try again.")
         }
@@ -149,6 +157,10 @@ fun ProductScanner(
         if (!owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) session.cancel()
         liveProblem = null
         val disposed = AtomicBoolean(false)
+        val frames = AtomicInteger(0)
+        val candidateLogged = AtomicBoolean(false)
+        val failureLogged = AtomicBoolean(false)
+        latestDiagnostics.onEvent("camera_bind", "start")
         val worker = Executors.newSingleThreadExecutor()
         val reader = BarcodeScanning.getClient(BarcodeScannerOptions.Builder()
             .setBarcodeFormats(PRODUCT_FORMATS.first(), *PRODUCT_FORMATS.drop(1).toIntArray()).build())
@@ -162,6 +174,8 @@ fun ProductScanner(
         val analysis = ImageAnalysis.Builder().setResolutionSelector(selector)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
         analysis.setAnalyzer(worker) { proxy ->
+            val frame = if (latestDiagnostics.enabled) frames.incrementAndGet() else 0
+            if (latestDiagnostics.enabled && (frame == 1 || frame % 120 == 0)) latestDiagnostics.onEvent("frames", "summary", mapOf("frames" to frame.toString()))
             val media = proxy.image
             if (media == null || disposed.get() || !session.canAnalyze()) {
                 proxy.close()
@@ -169,14 +183,23 @@ fun ProductScanner(
                 try {
                     reader.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
                         .addOnSuccessListener { codes ->
+                            if (!disposed.get() && latestDiagnostics.enabled && codes.isNotEmpty() && (!candidateLogged.getAndSet(true) || frame % 30 == 0)) {
+                                codes.take(8).forEach { code -> latestDiagnostics.onEvent("live", "candidate", mapOf(
+                                    "format" to code.format.toString(), "checksum" to (code.rawValue?.let {
+                                        ProductCode(it, code.format == Barcode.FORMAT_UPC_E).isValid()
+                                    } == true).toString())) }
+                            }
                             if (!disposed.get() && session.canAnalyze()) {
                                 val rawCodes = codes.mapNotNull { code -> code.rawValue?.let { ProductCode(it, code.format == Barcode.FORMAT_UPC_E) } }
                                 val accepted = rawCodes.filter { it.isValid() }
+                                if (latestDiagnostics.enabled && codes.isNotEmpty() && (accepted.isNotEmpty() || frame == 1 || frame % 120 == 0)) latestDiagnostics.onEvent("live_counts", "summary",
+                                    mapOf("raw_candidates" to codes.size.toString(), "accepted_candidates" to accepted.size.toString()))
                                 if (session.observe(accepted)) takePhoto()
                             }
                         }
                         .addOnFailureListener {
                             if (!disposed.get()) {
+                                if (latestDiagnostics.enabled && (!failureLogged.getAndSet(true) || frame % 120 == 0)) latestDiagnostics.onEvent("live", "failed", mapOf("exception" to it.javaClass.simpleName))
                                 liveProblem = "Live scanning failed. Tap Capture barcode to try a saved photo."
                             }
                         }
@@ -185,6 +208,7 @@ fun ProductScanner(
                     proxy.close()
                     executor.execute {
                         if (!disposed.get()) {
+                            if (latestDiagnostics.enabled && (!failureLogged.getAndSet(true) || frame % 120 == 0)) latestDiagnostics.onEvent("live", "failed", mapOf("exception" to e.javaClass.simpleName))
                             liveProblem = "Live scanning failed. Try Capture barcode."
                         }
                     }
@@ -198,13 +222,16 @@ fun ProductScanner(
                     camera = provider!!.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis, still)
                     capture = still
                     failed = false
+                    latestDiagnostics.onEvent("camera_bind", "ok")
                 } catch (e: Exception) {
+                    latestDiagnostics.onEvent("camera_bind", "failed", mapOf("exception" to e.javaClass.simpleName, "message" to (e.message ?: "")))
                     failed = true
                     capture = null
                 }
             }
         }, executor)
         onDispose {
+            latestDiagnostics.onEvent("frames", "summary", mapOf("frames" to frames.get().toString()))
             disposed.set(true)
             owner.lifecycle.removeObserver(observer)
             session.cancel()
