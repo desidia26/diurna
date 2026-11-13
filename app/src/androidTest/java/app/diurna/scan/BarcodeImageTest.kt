@@ -85,6 +85,28 @@ class BarcodeImageTest {
         assertEquals(listOf(ProductCode("4006381333931")), (result as ScanOutcome.Confirm).codes)
     }
 
+    @Test fun sanitizedRealPhotoCannotEraseValidLiveCandidate() = runBlocking {
+        // Replay exact sanitized RGB pixels, without a second lossy JPEG round-trip.
+        val bitmap = InstrumentationRegistry.getInstrumentation().context.assets.open("blurry-upca.png").use {
+            android.graphics.BitmapFactory.decodeStream(it)
+        }!!
+        val argb = IntArray(bitmap.width * bitmap.height)
+        val pixels = try {
+            bitmap.getPixels(argb,0,bitmap.width,0,0,bitmap.width,bitmap.height)
+            ScanPixels(bitmap.width,bitmap.height,argb)
+        } finally { bitmap.recycle() }
+        val live = ProductCode("4006381333931") // synthetic candidate, not an asserted reading of the photo
+        val session = LiveScanSession(); session.observe(listOf(live)); session.beginCapture()
+        val photo = try { kotlinx.coroutines.withTimeout(20_000) { readBarcodePixels(pixels) } }
+            catch (_: kotlinx.coroutines.TimeoutCancellationException) { ScanOutcome.Unreadable }
+        val result = session.complete(photo)!!.outcome
+        when (result) {
+            is ScanOutcome.Confirm -> { assertTrue(result.codes.contains(live)); assertTrue(result.codes.all { it.isValid() }) }
+            is ScanOutcome.Decoded -> assertEquals(live, result.code)
+            else -> fail("A worse still must not erase the live read: $result")
+        }
+    }
+
     @Test fun corruptOrEmptyCaptureIsRejectedAndDeleted() = runBlocking {
         for (bytes in listOf(byteArrayOf(), "not an image".toByteArray())) {
             val file = File.createTempFile("scanner-corrupt", ".jpg", context.cacheDir).apply { writeBytes(bytes) }

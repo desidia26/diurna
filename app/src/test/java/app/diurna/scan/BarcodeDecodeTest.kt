@@ -112,6 +112,18 @@ class BarcodeDecodeTest {
         assertEquals(listOf("ocr_model_not_ready"), results)
     }
 
+    @Test fun ocrCancellationAndTimeoutPropagateWithoutFalseUnreadable() = runTest {
+        try {
+            kotlinx.coroutines.withTimeout(100) {
+                decodeProductImage(image, { _, _ -> emptyList() }, { kotlinx.coroutines.awaitCancellation() })
+            }
+            fail("timeout must propagate")
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) { }
+        try {
+            decodeProductImage(image, { _, _ -> emptyList() }, { throw kotlinx.coroutines.CancellationException() })
+            fail("OCR cancellation must propagate")
+        } catch (_: kotlinx.coroutines.CancellationException) { }
+    }
     @Test fun retryGeometryIsDeterministicAndOriginalIsNotMutated() {
         val source = ScanPixels(3, 2, intArrayOf(1,2,3,4,5,6))
         val rotated = source.variant(ScanVariant.ROTATE)
