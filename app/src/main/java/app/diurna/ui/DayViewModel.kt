@@ -3,6 +3,7 @@ package app.diurna.ui
 import android.net.Uri
 import app.diurna.debug.operation
 import app.diurna.AppContainer
+import app.diurna.data.LibraryRepository
 import app.diurna.ai.CardioReading
 import app.diurna.domain.CardioPiece
 import app.diurna.data.DayEntity
@@ -23,6 +24,7 @@ import app.diurna.domain.Targets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -173,7 +175,20 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     // Food
     fun addFood(text: String, photo: String? = null) = io("day.add_food") { c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text)); if (text.isNotBlank()) c.food.add(date, text, photo) }
     fun addFood(text: String, photos: List<String>) = io("day.add_food") { c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text)); if (text.isNotBlank()) c.food.add(date, text, photos) }
-    fun deleteFood(id: Long) = io("day.delete_food") { c.food.delete(id) }
+    // Deleting hides the entry for a few seconds first, so the card can offer Undo.
+    private val foodDeletes = PendingDelete<Long>(viewModelScope) { id ->
+        val event = app.diurna.debug.Action.Event(app.diurna.debug.Screen.DAY, "day.delete_food")
+        try {
+            withContext(Dispatchers.IO) { c.food.delete(id) }
+            c.actions.dispatch(event.copy(result = app.diurna.debug.Action.Result.OK))
+        } catch (e: Exception) {
+            c.actions.dispatch(event.copy(result = app.diurna.debug.Action.Result.FAILED)); throw e
+        }
+    }
+    val hiddenFood = foodDeletes.hidden
+    val undoableFood = foodDeletes.undoable
+    fun deleteFood(id: Long) = foodDeletes.start(id)
+    fun undoDeleteFood() = foodDeletes.undo()
     fun editFood(id: Long, text: String, time: String, photo: String?) = io("day.edit_food") { c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text)); c.food.edit(id, text, time, photo) }
     fun editFood(id: Long, text: String, time: String, photos: List<String>) = io("day.edit_food") { c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text)); c.food.edit(id, text, time, photos) }
     fun entryPhotos(entryId: Long) = c.food.observePhotos(entryId).map { rows -> rows.map { it.fileName } }
@@ -204,6 +219,22 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
         c.library.scan(code, upcE)
     }
     suspend fun saveMeal(meal: MealEntity) = c.library.saveMeal(meal)
+    /**
+     * Meal from photo: the ingredients confirmed from one photo become one entry on this day, and
+     * with [saveToLibrary] a Library recipe too. Debug log: counts and the outcome only.
+     */
+    suspend fun logMealFromPhoto(name: String, lines: List<IngredientDraft>, saveToLibrary: Boolean): LibraryRepository.Result {
+        val start = System.nanoTime()
+        val r = c.library.logRecipe(date, name, lines.mapIndexed { i, d -> d.toEntity(0, i) }, saveToLibrary)
+        c.actions.dispatch(app.diurna.debug.Action.Event(
+            app.diurna.debug.Screen.DAY, "day.meal_from_photo",
+            result = if (r == LibraryRepository.Result.Ok) app.diurna.debug.Action.Result.OK else app.diurna.debug.Action.Result.FAILED,
+            latencyMs = (System.nanoTime() - start) / 1_000_000,
+            details = mapOf("ingredients" to lines.size.toString(), "save_to_library" to saveToLibrary.toString(),
+                "outcome" to if (r == LibraryRepository.Result.Ok) "logged" else "problem"),
+        ))
+        return r
+    }
     suspend fun mealByBarcode(code: String) = c.library.mealByBarcode(code)
     fun setServings(entryId: Long, servings: Double) = io("day.set_servings") { c.library.setServings(entryId, servings) }
     suspend fun saveEntryAsMeal(entryId: Long, meal: MealEntity) = c.library.saveEntryAsMeal(entryId, meal)

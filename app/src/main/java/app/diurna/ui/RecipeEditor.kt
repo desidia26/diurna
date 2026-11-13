@@ -191,7 +191,12 @@ fun RecipeDialog(
 
     val yield = yieldStr.toDoubleOrNull()?.takeIf { it > 0 } ?: 1.0
     val totals = remember(lines.toList(), yield) {
-        RecipeMath.perServing(lines.map { it.nutrition }, yield)
+        RecipeMath.perServing(
+            lines.map {
+                it.nutrition.copy(kcal = RecipeMath.explicitKcal(it.kcal, it.nutrition.proteinG, it.nutrition.carbsG, it.nutrition.fatG))
+            },
+            yield,
+        )
     }
 
     AlertDialog(

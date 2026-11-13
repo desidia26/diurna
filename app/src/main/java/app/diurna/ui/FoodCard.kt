@@ -1,5 +1,18 @@
 package app.diurna.ui
 
+import app.diurna.domain.FoodLine
+import app.diurna.data.totals
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.key
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
 import app.diurna.R
 import app.diurna.data.LibraryRepository
 import androidx.compose.material3.Icon
@@ -87,43 +100,63 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
     var savingAsMeal by remember { mutableStateOf<FoodEntryEntity?>(null) }
     // Barcode flow: scanning → (new product: check and save) → how many servings → logged.
     var scanning by remember { mutableStateOf(false) }
+    // Meal from photo: the packages in one photo → confirmed amounts → one entry today.
+    var mealFromPhoto by remember { mutableStateOf(false) }
     var scannedDraft by remember { mutableStateOf<MealEntity?>(null) }
     var servingsOf by remember { mutableStateOf<MealEntity?>(null) }
-    val n = s.food.size
-    val totals = s.totals
-    val summary = DayText.nutrition(totals, s.targets) ?: DayText.food(s.food.map { it.time })
-    val chip = if (s.targets != null && totals.estimated > 0) "%,d / %,d".format(totals.kcal, s.targets.kcal)
-        else "$n ${if (n == 1) "entry" else "entries"}"
+    val hidden by vm.hiddenFood.collectAsStateWithLifecycle()
+    val undoable by vm.undoableFood.collectAsStateWithLifecycle()
+    // An entry waiting out its Undo window is already gone from the card and its totals.
+    val food = remember(s.food, hidden) { s.food.filter { it.id !in hidden } }
+    val totals = remember(food) { food.totals() }
+    val n = food.size
+    val summary = DayText.nutrition(totals, s.targets) ?: DayText.food(food.map { it.time })
     val meals by vm.meals.collectAsStateWithLifecycle()
     val detailed by vm.detailedNutrition.collectAsStateWithLifecycle()
     val matches = remember(text, meals) {
         suggest(text, meals.map { it.name }, limit = 4).mapNotNull { n -> meals.find { it.name == n } }
     }
     var focused by remember { mutableStateOf(false) }
-    SectionCard("Food", chip = { Chip(chip) }, fold = rememberFold(vm, "food", summary)) {
+    var expandedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    SectionCard("Food", chip = { Chip("$n ${if (n == 1) "entry" else "entries"}") }, fold = rememberFold(vm, "food", summary)) {
+        if (s.targets != null) IntakeSummary(totals, s.targets)
+        else if (totals.estimated > 0) Hint(summary)
       Column(Modifier.keepVisibleWhileTyping(focused, matches.size), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                text, { text = it }, Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
-                placeholder = { Text("What did you eat? Free text is fine") },
-                singleLine = true, // so the keyboard's action key logs the entry instead of adding a line
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { log() }),
-            )
-            if (photos.size < 5) PhotoMenuButton(attacher)
-            IconButton(onClick = { scanning = true }) {
-                Icon(painterResource(R.drawable.ic_barcode), contentDescription = "Scan barcode", tint = MaterialTheme.colorScheme.primary)
-            }
-            Button(onClick = { log() }) { Text("Log") }
-        }
-        PhotoGalleryEditor(vm.photos, photos, attacher, onChange = { next ->
+        var attachOpen by remember { mutableStateOf(false) }
+        OutlinedTextField(
+            text, { text = it }, Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+            // The photo hint lives in the placeholder rather than on a line of its own.
+            placeholder = { Text(if (photos.isEmpty()) "What did you eat?" else "Add a few words, e.g. \"burrito bowl\"") },
+            leadingIcon = {
+                Box {
+                    IconButton(onClick = { attachOpen = true }, enabled = !attacher.busy) {
+                        Icon(painterResource(R.drawable.ic_add), contentDescription = "Add photo or scan barcode", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    AttachMenu(attachOpen, attacher, onClose = { attachOpen = false }, onScan = { scanning = true }, allowPhotos = photos.size < 5,
+                        onMealFromPhoto = { mealFromPhoto = true })
+                }
+            },
+            trailingIcon = {
+                IconButton(onClick = { log() }, enabled = text.isNotBlank()) {
+                    Icon(
+                        painterResource(R.drawable.ic_send), contentDescription = "Log",
+                        tint = if (text.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            shape = RoundedCornerShape(28.dp),
+            singleLine = true, // so the keyboard's action key logs the entry instead of adding a line
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { log() }),
+        )
+        PhotoGalleryEditor(vm.photos, photos, attacher, showAdd = false, onChange = { next ->
             photos.filter { it !in next }.forEach(vm::discardPhoto)
             photos = next
         })
-        if (photos.isNotEmpty() && text.isBlank()) Hint("Add a few words too, e.g. \"chicken burrito\"; the photo helps with portions.")
         if (photos.isNotEmpty() && !vm.supportsImages()) Hint("This model can't read photos; the estimate will use the text only.")
         // Saved meals matching what's typed: a tap logs exact numbers, no AI.
         if (matches.isNotEmpty()) {
+            Text("Saved meals · exact numbers", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 matches.forEach { m ->
                     SuggestionChip(
@@ -135,8 +168,6 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
             }
         }
       }
-        if (s.targets != null) MacroBars(totals, s.targets)
-        else if (totals.estimated > 0) Hint(summary)
         if (totals.failed > 0) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -146,16 +177,35 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
                 TextButton(onClick = vm::retryEstimates) { Text("Retry") }
             }
         }
-        if (s.food.isEmpty()) Hint("Nothing logged yet.")
+        if (food.isEmpty()) Hint("Nothing logged yet.")
         val online by vm.online.collectAsStateWithLifecycle()
-        s.food.forEach { f ->
-            val gallery by vm.entryPhotos(f.id).collectAsStateWithLifecycle(emptyList())
-            FoodRow(
-                f, s.date, online, vm.photos, detailed, gallery,
-                onEdit = { editing = f }, onDelete = { vm.deleteFood(f.id) },
-                onServings = { servingsFor = f }, onSaveAsMeal = { savingAsMeal = f },
-            )
+        Column {
+            food.forEachIndexed { i, f ->
+                if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                key(f.id) {
+                    val gallery by vm.entryPhotos(f.id).collectAsStateWithLifecycle(emptyList())
+                    SwipeToDelete(onDelete = { vm.deleteFood(f.id) }) {
+                        FoodRow(
+                            f, s.date, online, vm.photos, detailed, gallery,
+                            expanded = expandedId == f.id,
+                            onToggle = { expandedId = if (expandedId == f.id) null else f.id },
+                            onEdit = { editing = f }, onDelete = { vm.deleteFood(f.id) },
+                            onServings = { servingsFor = f }, onSaveAsMeal = { savingAsMeal = f },
+                        )
+                    }
+                }
+            }
         }
+        undoable?.let { id -> s.food.find { it.id == id } }?.let { gone ->
+            UndoBar("Deleted \u201c${gone.text.lines().first()}\u201d", onUndo = vm::undoDeleteFood)
+        }
+    }
+    if (mealFromPhoto) {
+        MealFromPhotoFlow(
+            scan = vm::scanBarcode,
+            onDismiss = { mealFromPhoto = false },
+            onLog = { name, lines, save -> vm.logMealFromPhoto(name, lines, save).also { if (it == LibraryRepository.Result.Ok) mealFromPhoto = false } },
+        )
     }
     if (scanning) {
         BarcodeScanDialog(
@@ -210,43 +260,94 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
     }
 }
 
-/** Intake against targets: one bar per number, turning orange past the target. */
+/** Intake against targets: calories large with what's left, then protein, carbs and fat side by side. */
 @Composable
-private fun MacroBars(t: NutritionTotals, targets: Targets) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        listOf(
-            Triple("kcal", t.kcal, targets.kcal),
-            Triple("Protein", t.proteinG, targets.proteinG),
-            Triple("Carbs", t.carbsG, targets.carbsG),
-            Triple("Fat", t.fatG, targets.fatG),
-        ).forEach { (label, value, target) ->
-            val over = target > 0 && value > target
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(label, Modifier.width(60.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                LinearProgressIndicator(
-                    progress = { if (target > 0) (value.toFloat() / target).coerceIn(0f, 1f) else 0f },
-                    modifier = Modifier.weight(1f),
-                    color = if (over) LocalStatusColors.current.warn else MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    drawStopIndicator = {},
-                )
-                Text(
-                    if (label == "kcal") "%,d / %,d".format(value, target) else "$value / ${target}g",
-                    style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
-                )
+private fun IntakeSummary(t: NutritionTotals, targets: Targets) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "%,d".format(t.kcal), Modifier.alignByBaseline(),
+                style = MaterialTheme.typography.headlineSmall, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium,
+            )
+            Text(
+                "of %,d kcal · %s".format(targets.kcal, FoodLine.kcalLeft(t.kcal, targets.kcal)), Modifier.alignByBaseline(),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IntakeBar(t.kcal, targets.kcal, 6.dp)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            listOf(
+                Triple("Protein", t.proteinG, targets.proteinG),
+                Triple("Carbs", t.carbsG, targets.carbsG),
+                Triple("Fat", t.fatG, targets.fatG),
+            ).forEach { (label, value, target) ->
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    IntakeBar(value, target, 3.dp)
+                    Text("$value/${target}g", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                }
             }
         }
     }
 }
 
+/** Turns orange past the target. */
 @Composable
-private fun FoodRow(
+private fun IntakeBar(value: Int, target: Int, height: Dp) {
+    val over = target > 0 && value > target
+    LinearProgressIndicator(
+        progress = { if (target > 0) (value.toFloat() / target).coerceIn(0f, 1f) else 0f },
+        modifier = Modifier.fillMaxWidth().height(height),
+        color = if (over) LocalStatusColors.current.warn else MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        gapSize = 0.dp,
+        drawStopIndicator = {},
+    )
+}
+
+/** Swipe an entry left to delete it; the card then offers Undo. */
+@Composable
+private fun SwipeToDelete(onDelete: () -> Unit, content: @Composable () -> Unit) {
+    val state = rememberSwipeToDismissBoxState()
+    SwipeToDismissBox(
+        state,
+        backgroundContent = {
+            Box(
+                Modifier.fillMaxSize().background(LocalStatusColors.current.warnBg).padding(horizontal = 16.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) { Text("Delete", color = LocalStatusColors.current.warn, style = MaterialTheme.typography.labelLarge) }
+        },
+        enableDismissFromStartToEnd = false,
+        onDismiss = { onDelete() },
+    ) {
+        Box(Modifier.background(MaterialTheme.colorScheme.surface)) { content() }
+    }
+}
+
+@Composable
+private fun UndoBar(message: String, onUndo: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .padding(start = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(message, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        TextButton(onClick = onUndo) { Text("Undo") }
+    }
+}
+
+/**
+ * One line per entry: time, name, calories. Tapping opens the rest in place: numbers, the
+ * estimate's assumption, photos and the actions.
+ */
+@Composable
+internal fun FoodRow(
     f: FoodEntryEntity, date: LocalDate, online: Boolean, photos: FoodPhotos, detailed: Boolean,
-    gallery: List<String>,
+    gallery: List<String>, expanded: Boolean, onToggle: () -> Unit,
     onEdit: () -> Unit, onDelete: () -> Unit, onServings: () -> Unit, onSaveAsMeal: () -> Unit,
 ) {
     val loggedOn = Instant.ofEpochMilli(f.loggedAt).atZone(ZoneId.systemDefault()).toLocalDate()
-    var expanded by remember { mutableStateOf(false) }
+    var detail by remember { mutableStateOf(false) }
     val hasDetail = detailed && f.estimatedAt != null && (
         f.fiberG != null || f.sugarsG != null || f.addedSugarsG != null || f.starchG != null ||
             f.satFatG != null || f.monoFatG != null || f.polyFatG != null || f.transFatG != null ||
@@ -257,55 +358,82 @@ private fun FoodRow(
             f.valMg != null || f.cysMg != null || f.tyrMg != null ||
             !f.ingredientsJson.isNullOrBlank()
         )
-    Row(
-        Modifier.fillMaxWidth().clickable(onClickLabel = "Edit", onClick = onEdit),
-        verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    val kcal = FoodLine.kcal(f.isMeal, f.kcalLow, f.kcalHigh, estimated = f.estimatedAt != null, failed = f.estimateError != null)
+    val thumbs = gallery.ifEmpty { listOfNotNull(f.photo) }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+            .then(if (expanded) Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh) else Modifier),
     ) {
-        Text(f.time, Modifier.padding(top = 2.dp), fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(f.text)
-            when {
-                f.isMeal -> {
-                    // Exact numbers from a saved meal: a single value, not a range.
-                    Text(
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .clickable(onClickLabel = if (expanded) "Collapse" else "Expand", onClick = onToggle)
+                .padding(horizontal = if (expanded) 12.dp else 0.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(f.time, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, color = muted)
+            Text(
+                // Open, the whole text shows; closed, the first line fits on one.
+                if (expanded) f.text else f.text.lines().first(), Modifier.weight(1f),
+                maxLines = if (expanded) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis,
+                fontWeight = if (expanded) FontWeight.Medium else null,
+            )
+            if (!expanded && thumbs.isNotEmpty()) PhotoThumb(photos, thumbs.first(), 28.dp, onClick = onToggle)
+            when (kcal) {
+                is FoodLine.Kcal.Exact -> Text(kcal.text, fontFamily = FontFamily.Monospace)
+                is FoodLine.Kcal.Estimate -> Text(kcal.text, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                FoodLine.Kcal.Failed -> Text("couldn't estimate", style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
+                FoodLine.Kcal.Pending -> Text(if (online) "estimating…" else "offline", style = MaterialTheme.typography.bodySmall, color = muted)
+            }
+        }
+        if (expanded) {
+            Column(
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                when {
+                    f.isMeal -> Text(
                         "${f.kcalLow} kcal · P ${f.proteinG} · C ${f.carbsG} · F ${f.fatG}",
                         style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
                     )
-                    val label = f.servings.servingsLabel()
-                    TextButton(onClick = onServings, contentPadding = PaddingValues(0.dp)) {
-                        Text("×$label serving${if (f.servings == 1.0) "" else "s"}")
+                    f.estimatedAt != null -> {
+                        Text(
+                            "${f.kcalLow}–${f.kcalHigh} kcal · P ${f.proteinG} · C ${f.carbsG} · F ${f.fatG}",
+                            style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
+                        )
+                        if (!f.estimateNote.isNullOrBlank()) Hint("Assumed: ${f.estimateNote}")
                     }
+                    f.estimateError != null -> Text(f.estimateError, style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
+                    else -> Hint(if (online) "Estimating…" else "Estimating when you're back online")
                 }
-                f.estimatedAt != null -> {
-                    Text(
-                        "${f.kcalLow}–${f.kcalHigh} kcal · P ${f.proteinG} · C ${f.carbsG} · F ${f.fatG}",
-                        style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
-                    )
-                    if (!f.estimateNote.isNullOrBlank()) Hint("Assumed: ${f.estimateNote}")
-                    TextButton(onClick = onSaveAsMeal, contentPadding = PaddingValues(0.dp)) { Text("Save as meal") }
+                if (loggedOn != date) Chip("Backfilled ${loggedOn.short()}", Tone.Accent)
+                if (thumbs.isNotEmpty()) {
+                    var viewing by remember { mutableStateOf<String?>(null) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        thumbs.forEach { name -> PhotoThumb(photos, name, 48.dp) { viewing = name } }
+                    }
+                    viewing?.let { name -> PhotoViewDialog(photos, name) { viewing = null } }
                 }
-                f.estimateError != null -> Text(f.estimateError, style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
-                else -> Hint(if (online) "Estimating…" else "Estimating when you're back online")
+                if (detail) NutritionDetail(f)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RowAction("Edit", onEdit)
+                    if (f.isMeal) {
+                        RowAction("×${f.servings.servingsLabel()} serving${if (f.servings == 1.0) "" else "s"}", onServings)
+                    } else if (f.estimatedAt != null) {
+                        RowAction("Save as meal", onSaveAsMeal)
+                    }
+                    if (hasDetail) RowAction(if (detail) "Hide detail" else "Detail") { detail = !detail }
+                    RowAction("Delete", onDelete)
+                }
             }
-            if (hasDetail) {
-                TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp)) {
-                    Text(if (expanded) "Hide detail" else "Show detail")
-                }
-                if (expanded) NutritionDetail(f)
-            }
-            if (loggedOn != date) Chip("Backfilled ${loggedOn.short()}", Tone.Accent)
         }
-        val thumbs = gallery.ifEmpty { listOfNotNull(f.photo) }
-        if (thumbs.isNotEmpty()) {
-            var viewing by remember { mutableStateOf<String?>(null) }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                thumbs.take(3).forEach { name ->
-                    PhotoThumb(photos, name, 48.dp) { viewing = name }
-                }
-            }
-            viewing?.let { name -> PhotoViewDialog(photos, name) { viewing = null } }
-        }
-        TextButton(onClick = onDelete, contentPadding = PaddingValues(4.dp)) { Text("×") }
+    }
+}
+
+@Composable
+private fun RowAction(label: String, onClick: () -> Unit) {
+    OutlinedButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 12.dp)) {
+        Text(label, style = MaterialTheme.typography.labelLarge)
     }
 }
 
