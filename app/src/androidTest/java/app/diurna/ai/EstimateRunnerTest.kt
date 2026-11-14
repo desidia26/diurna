@@ -33,6 +33,11 @@ class EstimateRunnerTest {
             beforeReturn()
             return FoodEstimate(text.length * 10, text.length * 20, 1, 2, 3, "note for $text")
         }
+        val galleries = mutableListOf<List<ByteArray>>()
+        override suspend fun estimatePhotos(text: String, photos: List<ByteArray>, detailed: Boolean, ingredients: Boolean): FoodEstimate {
+            galleries += photos
+            return estimate(text, photos.firstOrNull(), detailed, ingredients)
+        }
     }
 
     private val fake = Fake()
@@ -148,6 +153,21 @@ class EstimateRunnerTest {
         assertFalse("the removed photo's file is deleted", java.io.File(t.photoDir, name).exists())
         runner.runPending()
         assertNull(fake.photos.last())
+    }
+
+    // Debug report ea12351c: the label was the second photo and never reached the model.
+    @Test fun everyPhotoOfTheEntryGoesWithTheEstimateInGalleryOrder() = runTest {
+        val barcode = t.food.photos.newName().also { java.io.File(t.photoDir, it).writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1)) }
+        val label = t.food.photos.newName().also { java.io.File(t.photoDir, it).writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 2)) }
+        t.food.add(t.mon, "links", barcode)
+        runner.runPending()
+        val id = entries().single().id
+        t.food.edit(id, "3 links", entries().single().time, listOf(barcode, label))
+        runner.runPending()
+        val sent = fake.galleries.last()
+        assertEquals(2, sent.size)
+        assertArrayEquals(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1), sent[0])
+        assertArrayEquals(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 2), sent[1])
     }
 
     @Test fun missingPhotoFallsBackToTextOnly() = runTest {
