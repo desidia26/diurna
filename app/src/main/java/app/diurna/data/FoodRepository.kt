@@ -50,10 +50,14 @@ class FoodRepository(
      */
     suspend fun edit(id: Long, text: String, time: String) {
         val old = food.get(id) ?: return
-        val gallery = photoStore.forEntry(id).map { it.fileName }
-            .ifEmpty { listOfNotNull(old.photo) }
-        edit(old, text, time, gallery)
+        edit(old, text, time, gallery(old))
     }
+
+    /** An entry's photos in gallery order; entries from before the gallery have only their primary photo. */
+    suspend fun gallery(id: Long): List<String> = food.get(id)?.let { gallery(it) }.orEmpty()
+
+    private suspend fun gallery(entry: FoodEntryEntity): List<String> =
+        photoStore.forEntry(entry.id).map { it.fileName }.ifEmpty { listOfNotNull(entry.photo) }
 
     suspend fun edit(id: Long, text: String, time: String, photo: String?) {
         edit(food.get(id) ?: return, text, time, listOfNotNull(photo))
