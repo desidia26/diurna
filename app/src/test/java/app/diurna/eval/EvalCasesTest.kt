@@ -1,5 +1,6 @@
 package app.diurna.eval
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -21,6 +22,14 @@ class EvalCasesTest {
         assertTrue(set.cases.any { it.input.detailed })
         assertTrue(set.cases.any { it.input.ingredients })
         assertTrue(set.passThreshold in 0.0..1.0)
+    }
+
+    @Test fun multiPhotoCaseLoadsEveryImageInOrder() {
+        val dir = resolveCasesDir()
+        val case = EvalCases.load(dir, "default").cases.single { it.id == "food-photos-barcode-then-label" }
+        assertEquals(listOf("images/links-barcode-real.jpg", "images/links-label-real.jpg"), case.input.images)
+        assertEquals(null, case.input.image)
+        case.input.images.forEach { assertTrue(it, java.io.File(dir.parentFile, it).isFile) }
     }
 
     @Test fun fullIncludesDefaultPlusExtras() {

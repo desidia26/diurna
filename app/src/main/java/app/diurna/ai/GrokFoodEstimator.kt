@@ -40,17 +40,21 @@ class GrokFoodEstimator(
     override val model: String get() = modelProvider()
     override val gaveUpMessage: String get() = GrokErrors.GAVE_UP
 
-    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate {
+    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate =
+        estimatePhotos(text, listOfNotNull(photo), detailed, ingredients)
+
+    override suspend fun estimatePhotos(text: String, photos: List<ByteArray>, detailed: Boolean, ingredients: Boolean): FoodEstimate {
         val key = apiKey() ?: throw NoApiKey(NO_KEY)
-        val sendPhoto = photo.takeIf { supportsImages() }
+        val sendPhotos = photos.take(VisionSupport.MAX_ESTIMATE_PHOTOS).takeIf { supportsImages() }.orEmpty()
         // Detailed / ingredient replies need a bit more room for the nullable fields + list.
         val maxTok = if (detailed || ingredients) XaiChat.MAX_COMPLETION_TOKENS_DETAILED else XaiChat.MAX_COMPLETION_TOKENS
         val estimate = EstimatePrompt.parse(XaiChat.call(transportProvider(), key, model, XaiChat.request(
-            model, EstimatePrompt.system(detailed, ingredients), text, sendPhoto,
+            model, EstimatePrompt.system(detailed, ingredients), text,
+            photosJpeg = sendPhotos,
             schema = EstimatePrompt.schema(detailed, ingredients),
             maxCompletionTokens = maxTok,
         )))
-        return if (photo != null && sendPhoto == null) {
+        return if (photos.isNotEmpty() && sendPhotos.isEmpty()) {
             estimate.copy(note = VisionSupport.noteWithoutPhoto(estimate.note))
         } else {
             estimate
@@ -134,11 +138,22 @@ object XaiChat {
         schemaName: String = "food_estimate",
         schema: Map<String, Any> = EstimatePrompt.SCHEMA,
         maxCompletionTokens: Int = MAX_COMPLETION_TOKENS,
+        photosJpeg: List<ByteArray> = listOfNotNull(photoJpeg),
+    ): String = requestWithPhotos(model, system, userText, photosJpeg, schemaName, schema, maxCompletionTokens)
+
+    private fun requestWithPhotos(
+        model: String,
+        system: String,
+        userText: String,
+        photosJpeg: List<ByteArray>,
+        schemaName: String,
+        schema: Map<String, Any> = EstimatePrompt.SCHEMA,
+        maxCompletionTokens: Int = MAX_COMPLETION_TOKENS,
     ): String = JSONObject()
         .put("model", model)
         .put("messages", JSONArray()
             .put(JSONObject().put("role", "system").put("content", system))
-            .put(JSONObject().put("role", "user").put("content", userContent(userText, photoJpeg))))
+            .put(JSONObject().put("role", "user").put("content", userContent(userText, photosJpeg))))
         .put("response_format", JSONObject()
             .put("type", "json_schema")
             .put("json_schema", JSONObject()
@@ -149,14 +164,16 @@ object XaiChat {
         .put("stream", false)
         .toString()
 
-    /** Plain text alone; with a photo, an image part then a text part, as the vision docs show. */
-    private fun userContent(text: String, photoJpeg: ByteArray?): Any {
-        if (photoJpeg == null) return text
-        val url = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(photoJpeg)
-        return JSONArray()
+    /** Plain text alone; with photos, one image part per photo in order, then a text part, as the vision docs show. */
+    private fun userContent(text: String, photosJpeg: List<ByteArray>): Any {
+        if (photosJpeg.isEmpty()) return text
+        val parts = JSONArray()
+        photosJpeg.forEach { jpeg ->
+            val url = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(jpeg)
             // "high" detail: portion size is judged from small cues in the picture.
-            .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", url).put("detail", "high")))
-            .put(JSONObject().put("type", "text").put("text", text))
+            parts.put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", url).put("detail", "high")))
+        }
+        return parts.put(JSONObject().put("type", "text").put("text", text))
     }
 
     /** The structured JSON text from a 200 reply. A refusal or an empty or cut-off reply fails. */

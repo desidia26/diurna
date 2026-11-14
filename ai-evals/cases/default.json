@@ -562,6 +562,22 @@
         "minIngredients": 1,
         "nameContainsAny": ["protein", "milk", "whey", "cocoa", "chocolate"]
       }
+    },
+    {
+      "id": "food-photos-barcode-then-label",
+      "prompt": "food",
+      "tags": ["vision", "real", "multi-photo"],
+      "input": {
+        "text": "3 links",
+        "images": ["images/links-barcode-real.jpg", "images/links-label-real.jpg"]
+      },
+      "expect": {
+        "outcome": "estimate",
+        "kcalMid": 180,
+        "kcalTolPct": 15,
+        "proteinG": { "min": 18, "max": 30 },
+        "macrosConsistentWithKcal": true
+      }
     }
   ]
 }

@@ -1,6 +1,6 @@
 # Eval image sources
 
-All images in this folder were **generated for this repo** (Python/Pillow drawing code in the PR that added them). None are photographs of real people, meals, or commercial device screenshots.
+Images in this folder were **generated for this repo**, except the `*-real.jpg` files listed under *Real photos* below (Python/Pillow drawing code in the PR that added them). None are photographs of real people, meals, or commercial device screenshots.
 
 | File | Purpose |
 |------|---------|
@@ -11,4 +11,13 @@ All images in this folder were **generated for this repo** (Python/Pillow drawin
 | `label-cereal-synthetic.jpg` | Fake FDA Nutrition Facts panel (140 kcal cereal) for LabelPrompt |
 | `menu-chipotle-synthetic.jpg` | Short synthetic restaurant menu for menu-photo food estimate |
 
-License: CC0-equivalent — generated for Diurna evals; free to reuse in this project.
+## Real photos
+
+Cropped from photos in a debug report the app's owner sent (report ea12351c, Nov 2026), with all metadata (EXIF, GPS, timestamps) stripped. They show retail packaging only: no people, places or other personal details.
+
+| File | Purpose |
+|------|---------|
+| `links-barcode-real.jpg` | Barcode side of a plant-based link package; no nutrition text. Sent first, as in the report |
+| `links-label-real.jpg` | The same package's Nutrition Facts panel: 1 link (43 g), 60 kcal. `food-photos-barcode-then-label` expects 3 links ≈ 180 kcal |
+
+License (generated images): CC0-equivalent — generated for Diurna evals; free to reuse in this project.

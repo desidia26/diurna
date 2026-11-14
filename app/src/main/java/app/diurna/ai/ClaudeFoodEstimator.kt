@@ -34,14 +34,18 @@ class ClaudeFoodEstimator(
     private val supportsImages: () -> Boolean = { true },
 ) : FoodEstimator {
 
-    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate = withContext(Dispatchers.IO) {
-        val sendPhoto = photo.takeIf { supportsImages() }
+    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate =
+        estimatePhotos(text, listOfNotNull(photo), detailed, ingredients)
+
+    override suspend fun estimatePhotos(text: String, photos: List<ByteArray>, detailed: Boolean, ingredients: Boolean): FoodEstimate = withContext(Dispatchers.IO) {
+        val sendPhotos = photos.take(VisionSupport.MAX_ESTIMATE_PHOTOS).takeIf { supportsImages() }.orEmpty()
         val estimate = EstimatePrompt.parse(ClaudeCall.json(apiKey, model, ClaudeRequest.params(
-            model, text, sendPhoto,
+            model, text,
+            photos = sendPhotos,
             system = EstimatePrompt.system(detailed, ingredients),
             schema = EstimatePrompt.schema(detailed, ingredients),
         ), baseUrl = baseUrl))
-        if (photo != null && sendPhoto == null) {
+        if (photos.isNotEmpty() && sendPhotos.isEmpty()) {
             estimate.copy(note = VisionSupport.noteWithoutPhoto(estimate.note))
         } else {
             estimate
@@ -127,30 +131,30 @@ internal object ClaudeRequest {
         photo: ByteArray? = null,
         system: String = EstimatePrompt.SYSTEM,
         schema: Map<String, Any> = EstimatePrompt.SCHEMA,
+        photos: List<ByteArray> = listOfNotNull(photo),
     ): MessageCreateParams =
         MessageCreateParams.builder()
             .model(model)
             .maxTokens(16000L)
             .system(system)
             .apply {
-                if (photo == null) {
+                if (photos.isEmpty()) {
                     addUserMessage(text)
                 } else {
-                    // Image before text, as Anthropic recommends; the text stays the main description.
+                    // Images before text, as Anthropic recommends; the text stays the main description.
                     addUserMessageOfContentBlockParams(
-                        listOf(
+                        photos.map { jpeg ->
                             ContentBlockParam.ofImage(
                                 ImageBlockParam.builder()
                                     .source(
                                         Base64ImageSource.builder()
                                             .mediaType(Base64ImageSource.MediaType.IMAGE_JPEG)
-                                            .data(Base64.getEncoder().encodeToString(photo))
+                                            .data(Base64.getEncoder().encodeToString(jpeg))
                                             .build()
                                     )
                                     .build()
-                            ),
-                            ContentBlockParam.ofText(TextBlockParam.builder().text(text).build()),
-                        )
+                            )
+                        } + ContentBlockParam.ofText(TextBlockParam.builder().text(text).build())
                     )
                 }
             }

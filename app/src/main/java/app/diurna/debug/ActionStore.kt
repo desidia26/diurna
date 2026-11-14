@@ -68,7 +68,7 @@ class ActionRecorder(private val dir: File, private val maxBytes: Long = 20L * 1
                 .put("result", a.result.name).put("latencyMs", a.latencyMs).also { json ->
                     // Details are allowlisted keys with short, redacted values; callers pass fixed tokens or numbers.
                     val details = JSONObject()
-                    a.details.filterKeys { it in setOf("host", "outcome", "bytes", "truncated", "ingredients", "http_status") }
+                    a.details.filterKeys { it in setOf("host", "outcome", "bytes", "truncated", "ingredients", "http_status", "photos") }
                         .forEach { (key, value) -> details.put(key, Redaction.text(value.take(256), knownSecrets())) }
                     if (details.length() > 0) json.put("details", details)
                 }

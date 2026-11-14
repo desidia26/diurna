@@ -62,6 +62,13 @@ interface EvalFoodClient {
         detailed: Boolean = false,
         ingredients: Boolean = false,
     ): FoodEstimate
+    /** Several photos of one entry, as the app sends them; only the first unless the client overrides. */
+    suspend fun estimatePhotos(
+        text: String,
+        photos: List<ByteArray>,
+        detailed: Boolean = false,
+        ingredients: Boolean = false,
+    ): FoodEstimate = estimate(text, photos.firstOrNull(), detailed, ingredients)
     suspend fun guessBarcodeIngredients(ctx: app.diurna.ai.BarcodeIngredientsContext): List<app.diurna.domain.FoodIngredient>
 }
 
@@ -121,6 +128,12 @@ object EvalProviders {
                     detailed: Boolean,
                     ingredients: Boolean,
                 ) = est.estimate(text, photo, detailed, ingredients)
+                override suspend fun estimatePhotos(
+                    text: String,
+                    photos: List<ByteArray>,
+                    detailed: Boolean,
+                    ingredients: Boolean,
+                ) = est.estimatePhotos(text, photos, detailed, ingredients)
                 override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext) =
                     est.guessBarcodeIngredients(ctx)
             }
@@ -165,6 +178,12 @@ object EvalProviders {
                     detailed: Boolean,
                     ingredients: Boolean,
                 ) = est.estimate(text, photo, detailed, ingredients)
+                override suspend fun estimatePhotos(
+                    text: String,
+                    photos: List<ByteArray>,
+                    detailed: Boolean,
+                    ingredients: Boolean,
+                ) = est.estimatePhotos(text, photos, detailed, ingredients)
                 override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext) =
                     est.guessBarcodeIngredients(ctx)
             }
