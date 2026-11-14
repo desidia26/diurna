@@ -115,15 +115,16 @@ private data class RawRecipe(
 )
 
 private fun finalize(raw: RawRecipe, sourceUrl: String): ImportedRecipe? {
-    val name = cleanText(raw.name ?: "", MAX_NAME).ifBlank { return null }
+    // Page text arrives HTML-escaped (JSON-LD often double-encodes "&" as "&amp;"); decode once here.
+    val name = cleanText(decodeHtmlEntities(raw.name ?: ""), MAX_NAME).ifBlank { return null }
     val ingredients = raw.ingredients
-        .map { cleanText(it, MAX_INGREDIENT) }
+        .map { cleanText(decodeHtmlEntities(it), MAX_INGREDIENT) }
         .filter { it.isNotBlank() }
         .take(MAX_INGREDIENT_LINES)
         .map { parseIngredientLine(it) }
     if (ingredients.isEmpty()) return null
-    val yield = parseYield(raw.yieldRaw) ?: 1.0
-    val description = raw.description?.let { cleanText(it, MAX_DESCRIPTION) }?.ifBlank { null }
+    val yield = parseYield((raw.yieldRaw as? String)?.let(::decodeHtmlEntities) ?: raw.yieldRaw) ?: 1.0
+    val description = raw.description?.let { cleanText(decodeHtmlEntities(it), MAX_DESCRIPTION) }?.ifBlank { null }
     return ImportedRecipe(
         name = name,
         yield = yield,
