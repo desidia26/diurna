@@ -62,29 +62,54 @@ fun ImportedRecipe.toIngredientEntities(): List<RecipeIngredientEntity> =
     ingredients.mapIndexed { i, line -> line.toEntity(position = i) }
 
 
+/** What the fetch saw, for the debug log only: never the page body or the URL. */
+data class RecipeFetchInfo(val bytes: Int? = null, val truncated: Boolean = false, val httpStatus: Int? = null)
+
 sealed interface RecipeImportResult {
-    data class Ok(val recipe: ImportedRecipe) : RecipeImportResult
-    data class Problem(val message: String) : RecipeImportResult
+    val info: RecipeFetchInfo
+    data class Ok(val recipe: ImportedRecipe, override val info: RecipeFetchInfo = RecipeFetchInfo()) : RecipeImportResult
+    /** [reason] is a fixed token (see [RecipeImporter]) for the debug log; [message] is shown to the user. */
+    data class Problem(
+        val message: String,
+        val reason: String = REASON_NETWORK,
+        override val info: RecipeFetchInfo = RecipeFetchInfo(),
+    ) : RecipeImportResult
+
+    companion object {
+        const val REASON_NO_RECIPE = "no_recipe"
+        const val REASON_NETWORK = "network"
+    }
+}
+
+/** Imports a recipe from a link; [RecipeImporter] does the work, a logging wrapper may sit in front. */
+fun interface RecipeImportSource {
+    suspend fun importFromUrl(url: String): RecipeImportResult
 }
 
 /**
  * Fetches a recipe page over [SafeHttp] and extracts a schema.org Recipe from JSON-LD
  * (preferred) or microdata. Untrusted parsing only — no WebView, no JavaScript.
+ * Problem reasons: the [SafeHttpException.Reason] tokens, or [RecipeImportResult.REASON_NO_RECIPE].
  */
 class RecipeImporter(
-    private val fetch: suspend (String) -> String = { SafeHttp.get(it) },
-) {
-    suspend fun importFromUrl(url: String): RecipeImportResult = withContext(Dispatchers.IO) {
-        val body = try {
+    private val fetch: suspend (String) -> FetchedPage = { SafeHttp.fetchPage(it) },
+) : RecipeImportSource {
+    override suspend fun importFromUrl(url: String): RecipeImportResult = withContext(Dispatchers.IO) {
+        val page = try {
             fetch(url)
         } catch (e: SafeHttpException) {
-            return@withContext RecipeImportResult.Problem(e.message ?: "Couldn't fetch that page")
+            return@withContext RecipeImportResult.Problem(
+                e.message ?: "Couldn't fetch that page", e.reason.token, RecipeFetchInfo(httpStatus = e.httpStatus),
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (_: Exception) {
-            return@withContext RecipeImportResult.Problem("Couldn't fetch that page")
+            return@withContext RecipeImportResult.Problem("Couldn't fetch that page", RecipeImportResult.REASON_NETWORK)
         }
-        val parsed = parseRecipeHtml(body, sourceUrl = url.trim())
-            ?: return@withContext RecipeImportResult.Problem("No recipe found on that page")
-        RecipeImportResult.Ok(parsed)
+        val info = RecipeFetchInfo(bytes = page.bytes, truncated = page.truncated)
+        val parsed = parseRecipeHtml(page.body, sourceUrl = url.trim())
+            ?: return@withContext RecipeImportResult.Problem("No recipe found on that page", RecipeImportResult.REASON_NO_RECIPE, info)
+        RecipeImportResult.Ok(parsed, info)
     }
 }
 

@@ -5,14 +5,15 @@ import java.io.File
 import java.util.UUID
 
 enum class Screen { DAY, WEEK, METRICS, ROUTINE, SETUP, LIBRARY, ALARM, BACKGROUND }
-enum class TextField { FOOD, EXERCISE, RECIPE, SEARCH }
+/** URL: a pasted recipe link's host and path (never its query or fragment), typed-text logging only. */
+enum class TextField { FOOD, EXERCISE, RECIPE, SEARCH, URL }
 enum class AttachmentKind { IMAGE, BARCODE }
 
 /** Version 1 records intent/results, never application state. No request/response payloads. */
 sealed interface Action {
     val screen: Screen
     data class Event(override val screen: Screen, val name: String, val correlationId: String = UUID.randomUUID().toString(),
-                     val result: Result = Result.STARTED, val latencyMs: Long? = null) : Action {
+                     val result: Result = Result.STARTED, val latencyMs: Long? = null, val details: Map<String, String> = emptyMap()) : Action {
         init { require(name.matches(Regex("[a-z][a-z0-9_.]{0,79}"))) }
     }
     data class Text(override val screen: Screen, val field: TextField, val value: String) : Action
@@ -64,7 +65,13 @@ class ActionRecorder(private val dir: File, private val maxBytes: Long = 20L * 1
         val j = JSONObject().put("version", 1).put("timestamp", clock()).put("screen", a.screen.name)
         when (a) {
             is Action.Event -> j.put("action", a.name).put("correlationId", safeId(a.correlationId))
-                .put("result", a.result.name).put("latencyMs", a.latencyMs)
+                .put("result", a.result.name).put("latencyMs", a.latencyMs).also { json ->
+                    // Details are allowlisted keys with short, redacted values; callers pass fixed tokens or numbers.
+                    val details = JSONObject()
+                    a.details.filterKeys { it in setOf("host", "outcome", "bytes", "truncated", "ingredients", "http_status") }
+                        .forEach { (key, value) -> details.put(key, Redaction.text(value.take(256), knownSecrets())) }
+                    if (details.length() > 0) json.put("details", details)
+                }
             is Action.Text -> j.put("action", "field.text").put("field", a.field.name)
                 .put("text", Redaction.text(a.value, knownSecrets()))
         }

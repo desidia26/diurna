@@ -51,8 +51,10 @@ class RecipeImportLargePageTest {
 
     @Test fun readCappedStopsAtCapInsteadOfFailing() {
         val huge = ByteArray(SafeHttp.MAX_BYTES * 3) { 'a'.code.toByte() }
-        val text = SafeHttp.readCapped(ByteArrayInputStream(huge))
-        assertEquals(SafeHttp.MAX_BYTES, text.length)
+        val page = SafeHttp.readCapped(ByteArrayInputStream(huge))
+        assertEquals(SafeHttp.MAX_BYTES, page.body.length)
+        assertEquals(SafeHttp.MAX_BYTES, page.bytes)
+        assertTrue(page.truncated)
     }
 
     @Test fun recipePastTheCapIsNotFound() {

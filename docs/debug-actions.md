@@ -5,7 +5,9 @@ ViewModels and Room continue to own data. A future bundled Svelte Week client ma
 through this same boundary; this is not yet a WebView bridge or replay engine.
 
 - `container.actions.dispatch(Action.Event(Screen.DAY, "feature.operation", correlationId, result, latencyMs))`
-- `Action.Text(screen, TextField.FOOD|EXERCISE|RECIPE|SEARCH, value)` is restricted to explicitly non-secret fields; disabled by default.
+- `Action.Text(screen, TextField.FOOD|EXERCISE|RECIPE|SEARCH|URL, value)` is restricted to explicitly non-secret fields; disabled by default.
+- `Action.Event(..., details = mapOf(...))` carries short values under allowlisted keys only (`host`, `outcome`,
+  `bytes`, `truncated`, `ingredients`, `http_status`); values are fixed tokens or numbers, redacted and capped at 256 chars.
 - `container.debug.registerAttachment(bytes: ByteArray, kind: AttachmentKind, meta: Map<String,String> = emptyMap(), correlationId: String = UUID...) : String?`
 - Same overload with `file: File`; call on IO dispatcher. Copies immediately, before a temporary file is deleted. Null means disabled, invalid, oversized, evicted or unreadable. IDs are opaque UUIDs; never filenames supplied by callers.
 - Kinds: `IMAGE` (opaque image bytes) and `BARCODE` (UTF-8, 6–14 digits only). Metadata accepts only `format` (`[A-Z0-9_]{1,32}`). Pass one UUID correlation id to related events/attachments.
@@ -29,7 +31,13 @@ notifications (coalesced, not each SQL statement); food/cardio/label AI calls an
 photo picker/camera/import; barcode lookup and numeric result; alarm open/code-attempt/stop.
 Saved food text is the initial opt-in text hook. Other text fields and individual focus/keystroke
 changes are intentionally not instrumented yet. Table notifications contain no row ids or values.
-Density AI, URL imports, most local dialog switches and service lifecycle events are coverage gaps.
+Recipe link imports log `recipe_import` (STARTED with the site's host; then OK/FAILED with outcome
+`ok` or a fixed reason such as `no_recipe`, `http_status`, `network`, `timeout`, `dns`, `blocked_host`,
+`invalid_url` or `redirects`, plus bytes read, `truncated` when the page passed the 2 MiB cap, ingredient
+count, HTTP status and latency). The host alone is logged whenever debug logging is on; the path goes
+out as `TextField.URL` typed text, so it is kept only with typed-text logging on. The query, fragment,
+user info, page body and error messages are never logged.
+Density AI, most local dialog switches and service lifecycle events are coverage gaps.
 No payload replay, screenshots, HTTP bodies or deterministic state reconstruction is claimed.
 
 ## Security review
