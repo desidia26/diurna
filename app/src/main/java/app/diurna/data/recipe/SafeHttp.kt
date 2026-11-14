@@ -28,12 +28,14 @@ import java.net.UnknownHostException
  *   for every redirect hop**.
  * - Redirects are followed manually with a hard cap; each Location is re-validated.
  * - No cookies are sent or stored (no Cookie / Cookie2 header; CookieHandler unused).
- * - Response body capped; total wall-clock deadline; connect/read timeouts.
+ * - Response body capped at [MAX_BYTES]: reading stops there and the prefix is returned
+ *   (recipe JSON-LD sits in the head, and big recipe sites serve 0.5-1.1 MB of HTML);
+ *   total wall-clock deadline; connect/read timeouts.
  * - Does not attach Authorization or any app secrets — this path never sees API keys.
  */
 object SafeHttp {
     const val MAX_REDIRECTS = 5
-    const val MAX_BYTES = 512 * 1024
+    const val MAX_BYTES = 2 * 1024 * 1024
     const val DEADLINE_MS = 20_000L
     const val CONNECT_TIMEOUT_MS = 10_000
     const val READ_TIMEOUT_MS = 10_000
@@ -232,14 +234,18 @@ object SafeHttp {
         }
     }
 
-    private fun readCapped(input: InputStream): String {
+    /**
+     * Reads at most [MAX_BYTES] from [input] and returns them as UTF-8 text. A longer page is
+     * cut at the cap rather than refused, so memory stays bounded and the parser still sees
+     * the head of the page, where recipe JSON-LD lives.
+     */
+    internal fun readCapped(input: InputStream): String {
         val out = ByteArrayOutputStream()
         val buf = ByteArray(8192)
-        while (true) {
-            val n = input.read(buf)
+        while (out.size() < MAX_BYTES) {
+            val n = input.read(buf, 0, minOf(buf.size, MAX_BYTES - out.size()))
             if (n < 0) break
             out.write(buf, 0, n)
-            if (out.size() > MAX_BYTES) throw SafeHttpException("Page is too large")
         }
         return out.toString(Charsets.UTF_8.name())
     }

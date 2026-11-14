@@ -135,13 +135,29 @@ private fun finalize(raw: RawRecipe, sourceUrl: String): ImportedRecipe? {
 
 // ---- JSON-LD ----------------------------------------------------------------
 
-private val JSON_LD_SCRIPT = Regex(
-    """<script[^>]*\btype\s*=\s*["']application/ld\+json["'][^>]*>(.*?)</script>""",
-    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+// Quotes are optional: minified pages write `<script type=application/ld+json ...>`.
+private val JSON_LD_OPEN = Regex(
+    """<script[^>]{0,512}?\btype\s*=\s*["']?application/ld\+json(?:["']|(?=[\s>]))[^>]{0,512}>""",
+    RegexOption.IGNORE_CASE,
 )
 
-fun extractJsonLdBlocks(html: String): List<String> =
-    JSON_LD_SCRIPT.findAll(html).map { it.groupValues[1].trim() }.filter { it.isNotEmpty() }.toList()
+/**
+ * JSON-LD script bodies, scanned in one linear pass: each opening tag is matched, then its
+ * `</script>` found with indexOf, so a page full of unclosed tags can't make this quadratic.
+ */
+fun extractJsonLdBlocks(html: String): List<String> {
+    val blocks = mutableListOf<String>()
+    var from = 0
+    while (from < html.length) {
+        val open = JSON_LD_OPEN.find(html, from) ?: break
+        val bodyStart = open.range.last + 1
+        val close = html.indexOf("</script", bodyStart, ignoreCase = true)
+        if (close < 0) break
+        html.substring(bodyStart, close).trim().takeIf { it.isNotEmpty() }?.let(blocks::add)
+        from = close + "</script".length
+    }
+    return blocks
+}
 
 private fun findRecipeInJsonLd(json: String): RawRecipe? {
     val root = try {
