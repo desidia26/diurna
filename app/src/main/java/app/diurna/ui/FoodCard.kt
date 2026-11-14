@@ -242,12 +242,19 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         MealDialog("Save as meal", seed, detailed = detailed, labelHost = vm, onDismiss = { savingAsMeal = null }, onSave = { vm.saveEntryAsMeal(f.id, it) })
     }
     editing?.let { f ->
-        val gallery by vm.entryPhotos(f.id).collectAsStateWithLifecycle(emptyList())
-        FoodEditDialog(f, vm, initialPhotos = gallery.ifEmpty { listOfNotNull(f.photo) }, onDismiss = { editing = null }) { newText, newTime, newPhotos ->
+        val initial = rememberSavedGallery(f.id, f.photo, vm.entryPhotos(f.id))
+        if (initial != null) FoodEditDialog(f, vm, initialPhotos = initial, onDismiss = { editing = null }) { newText, newTime, newPhotos ->
             vm.editFood(f.id, newText, newTime, newPhotos)
             editing = null
         }
     }
+}
+
+/** The photos the edit dialog starts with for an entry: its saved gallery, or just the primary photo for old entries. */
+@Composable
+internal fun rememberSavedGallery(entryId: Long, primary: String?, gallery: kotlinx.coroutines.flow.Flow<List<String>>): List<String>? {
+    val loaded by gallery.collectAsStateWithLifecycle(emptyList())
+    return loaded.ifEmpty { listOfNotNull(primary) }
 }
 
 /** Intake against targets: calories large with what's left, then protein, carbs and fat side by side. */
