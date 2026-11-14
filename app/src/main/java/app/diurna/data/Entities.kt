@@ -331,7 +331,7 @@ data class FoodEntryEntity(
     val text: String,
     /** Epoch millis of when it was entered; differs from [date] when backfilled. */
     @ColumnInfo(name = "logged_at") val loggedAt: Long,
-    // AI estimate, derived from [text] (and [photo]). Changing either clears these and re-estimates.
+    // AI estimate, derived from [text] and the entry's photos. Changing either clears these and re-estimates (see EditReestimate).
     @ColumnInfo(name = "kcal_low") val kcalLow: Int? = null,
     @ColumnInfo(name = "kcal_high") val kcalHigh: Int? = null,
     @ColumnInfo(name = "protein_g") val proteinG: Int? = null,
