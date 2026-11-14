@@ -13,7 +13,7 @@ Images in this folder were **generated for this repo**, except the `*-real.jpg` 
 
 ## Real photos
 
-Cropped from photos in a debug report the app's owner sent (report ea12351c, Nov 2026), with all metadata (EXIF, GPS, timestamps) stripped. They show retail packaging only: no people, places or other personal details.
+Cropped from photos in debug report ea12351c (Nov 2026), which Larry sent from his own phone and which reproduces the bug,, with all metadata (EXIF, GPS, timestamps) stripped. They show retail packaging only: no people, places or other personal details.
 
 | File | Purpose |
 |------|---------|

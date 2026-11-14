@@ -490,7 +490,7 @@ data class CatalogExercise(
 
 /**
  * One JPEG attached to a food entry or saved meal/recipe. Files live in [FoodPhotos]; this row
- * stores only the name. [food_entry.photo] remains the primary (position 0) for AI estimates.
+ * stores only the name. [food_entry.photo] remains the primary (position 0); AI estimates get every photo (see EntryPhotos).
  */
 @Entity(
     tableName = "food_photo",
