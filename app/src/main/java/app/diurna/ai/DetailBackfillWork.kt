@@ -228,9 +228,9 @@ class DetailBackfillRunner(
         while (true) {
             if (isCancelled()) return false
             try {
-                val jpeg = entry.photo?.let { name -> withContext(Dispatchers.IO) { photo(name) } }
-                val e = estimator.estimate(
-                    entry.text, jpeg, detailed = true, ingredients = wantAminos,
+                val jpegs = EntryPhotos.read(db, entry, photo)
+                val e = estimator.estimatePhotos(
+                    entry.text, jpegs, detailed = true, ingredients = wantAminos,
                 )
                 var aminos = null as app.diurna.domain.AminoAcids?
                 var ingredientsJson: String? = null

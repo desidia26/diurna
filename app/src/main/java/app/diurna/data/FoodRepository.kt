@@ -17,6 +17,9 @@ class FoodRepository(
     /** Called when entries are waiting for an estimate; the container hooks the background worker here. */
     var onPendingEstimates: () -> Unit = {}
 
+    /** Called when an edit re-estimates an entry, with a count-only reason for the debug log. */
+    var onReestimate: (details: Map<String, String>) -> Unit = {}
+
     fun observe(date: LocalDate): Flow<List<FoodEntryEntity>> = food.observe(date.key())
 
     fun observePhotos(entryId: Long): Flow<List<FoodPhotoEntity>> = photoStore.observeEntry(entryId)
@@ -45,15 +48,20 @@ class FoodRepository(
     }
 
     /**
-     * Changing the text or the primary photo re-estimates it; that's how a wrong estimate gets corrected.
-     * Secondary gallery photos can change without re-estimating. Orphaned files are deleted.
+     * Changing the text re-estimates an entry; so does adding, removing or reordering any of an AI
+     * entry's photos, since the estimate reads them all (see [EditReestimate]). Saved-meal entries keep
+     * their exact numbers when only photos change. Orphaned files are deleted.
      */
     suspend fun edit(id: Long, text: String, time: String) {
         val old = food.get(id) ?: return
-        val gallery = photoStore.forEntry(id).map { it.fileName }
-            .ifEmpty { listOfNotNull(old.photo) }
-        edit(old, text, time, gallery)
+        edit(old, text, time, gallery(old))
     }
+
+    /** An entry's photos in gallery order; entries from before the gallery have only their primary photo. */
+    suspend fun gallery(id: Long): List<String> = food.get(id)?.let { gallery(it) }.orEmpty()
+
+    private suspend fun gallery(entry: FoodEntryEntity): List<String> =
+        photoStore.forEntry(entry.id).map { it.fileName }.ifEmpty { listOfNotNull(entry.photo) }
 
     suspend fun edit(id: Long, text: String, time: String, photo: String?) {
         edit(food.get(id) ?: return, text, time, listOfNotNull(photo))
@@ -68,21 +76,18 @@ class FoodRepository(
         val newText = text.trim()
         if (newText.isEmpty()) return
         val capped = photoNames.distinct().take(FoodPhotoEntity.MAX_PER_OWNER)
-        val primary = capped.firstOrNull()
-        val primaryChanged = primary != old.photo
-        when {
-            newText != old.text -> food.edit(id, newText, time, primary)
-            primaryChanged && old.isMeal -> {
-                // A saved meal's numbers are exact; photos are just for the record.
-                if (time != old.time) food.setTime(id, time)
-            }
-            primaryChanged -> food.edit(id, newText, time, primary)
-            else -> {
-                if (time != old.time) food.setTime(id, time)
-            }
+        val reestimate = EditReestimate.decide(old, newText, before = gallery(old), after = capped)
+        if (reestimate != null) {
+            food.edit(id, newText, time, capped.firstOrNull())
+        } else if (time != old.time) {
+            food.setTime(id, time)
         }
+        // Also keeps food_entry.photo in step with the gallery's first photo (saved meals included).
         photoStore.replaceAll(FoodPhotoEntity.OWNER_ENTRY, id, capped)
-        if (newText != old.text || (primaryChanged && !old.isMeal)) onPendingEstimates()
+        if (reestimate != null) {
+            onReestimate(reestimate.details())
+            onPendingEstimates()
+        }
     }
 
     /** Clears recorded failures (e.g. after adding a key) so those entries are tried again. */

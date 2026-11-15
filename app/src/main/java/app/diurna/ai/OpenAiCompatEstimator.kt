@@ -16,23 +16,27 @@ class OpenAiCompatFoodEstimator(
     override val model: String get() = modelProvider().ifBlank { "openai-compat" }
     override val gaveUpMessage: String get() = OpenAiCompatErrors.GAVE_UP
 
-    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate {
+    override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate =
+        estimatePhotos(text, listOfNotNull(photo), detailed, ingredients)
+
+    override suspend fun estimatePhotos(text: String, photos: List<ByteArray>, detailed: Boolean, ingredients: Boolean): FoodEstimate {
         if (!configured()) throw NoApiKey(NO_CONFIG)
         val key = apiKey().orEmpty() // local servers often need none
-        val sendPhoto = photo.takeIf { supportsImages() }
+        val sendPhotos = photos.take(VisionSupport.MAX_ESTIMATE_PHOTOS).takeIf { supportsImages() }.orEmpty()
         val maxTok = if (detailed || ingredients) XaiChat.MAX_COMPLETION_TOKENS_DETAILED else XaiChat.MAX_COMPLETION_TOKENS
         val estimate = EstimatePrompt.parse(
             XaiChat.call(
                 transportProvider(), key, model,
                 XaiChat.request(
-                    model, EstimatePrompt.system(detailed, ingredients), text, sendPhoto,
+                    model, EstimatePrompt.system(detailed, ingredients), text,
+                    photosJpeg = sendPhotos,
                     schema = EstimatePrompt.schema(detailed, ingredients),
                     maxCompletionTokens = maxTok,
                 ),
                 classify = OpenAiCompatErrors::classify,
             )
         )
-        return if (photo != null && sendPhoto == null) {
+        return if (photos.isNotEmpty() && sendPhotos.isEmpty()) {
             estimate.copy(note = VisionSupport.noteWithoutPhoto(estimate.note))
         } else {
             estimate

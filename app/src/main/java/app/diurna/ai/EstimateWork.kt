@@ -61,11 +61,12 @@ class EstimateRunner(
                 try {
                     // Prefer OFF over AI when the entry carries a barcode (fill / explicit re-estimate).
                     if (!entry.barcode.isNullOrBlank() && tryEstimateFromOff(entry)) continue
-                    val jpeg = entry.photo?.let { name -> withContext(Dispatchers.IO) { photo(name) } }
+                    // Every photo of the entry: a label or package shot is often not the first one.
+                    val jpegs = EntryPhotos.read(db, entry, photo)
                     val wantDetail = detailed()
                     val wantIngredients = wantDetail && fdcKeyPresent() && aminoResolver != null
-                    val e = estimator.estimate(
-                        entry.text, jpeg, detailed = wantDetail, ingredients = wantIngredients,
+                    val e = estimator.estimatePhotos(
+                        entry.text, jpegs, detailed = wantDetail, ingredients = wantIngredients,
                     )
                     var aminos: AminoAcids? = null
                     var ingredientsJson: String? = null

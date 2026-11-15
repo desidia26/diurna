@@ -67,6 +67,12 @@ class SelectedFoodEstimator(
             .let { it.copy(model = it.model ?: estimator.model) }
     }
 
+    override suspend fun estimatePhotos(text: String, photos: List<ByteArray>, detailed: Boolean, ingredients: Boolean): FoodEstimate {
+        val estimator = current()
+        return estimator.estimatePhotos(text, photos, detailed, ingredients)
+            .let { it.copy(model = it.model ?: estimator.model) }
+    }
+
     override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext) =
         current().guessBarcodeIngredients(ctx)
 }

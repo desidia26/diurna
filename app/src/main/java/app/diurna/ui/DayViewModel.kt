@@ -190,7 +190,12 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     fun deleteFood(id: Long) = foodDeletes.start(id)
     fun undoDeleteFood() = foodDeletes.undo()
     fun editFood(id: Long, text: String, time: String, photo: String?) = io("day.edit_food") { c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text)); c.food.edit(id, text, time, photo) }
-    fun editFood(id: Long, text: String, time: String, photos: List<String>) = io("day.edit_food") { c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text)); c.food.edit(id, text, time, photos) }
+    fun editFood(id: Long, text: String, time: String, photos: List<String>) = io("day.edit_food") {
+        c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text))
+        app.diurna.debug.FoodEditLogging.logSave(c.actions, before = c.food.gallery(id), after = photos)
+        c.food.edit(id, text, time, photos)
+    }
+    fun logEditOpened(photos: Int) = app.diurna.debug.FoodEditLogging.logOpen(c.actions, photos)
     fun entryPhotos(entryId: Long) = c.food.observePhotos(entryId).map { rows -> rows.map { it.fileName } }
 
     val photos get() = c.foodPhotos

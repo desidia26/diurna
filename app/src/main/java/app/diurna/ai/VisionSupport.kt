@@ -6,6 +6,9 @@ package app.diurna.ai
  * the model can't take images, [isUnsupportedImageError] maps it to a clear message.
  */
 object VisionSupport {
+    /** Every photo an entry can hold (FoodPhotoEntity.MAX_PER_OWNER) goes with its estimate. */
+    const val MAX_ESTIMATE_PHOTOS = 5
+
     const val PHOTO_FEATURES_DISABLED =
         "This model can't read photos. Turn on \"Model supports images\" in Setup for a vision model, or enter the numbers by hand."
 

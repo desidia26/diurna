@@ -174,7 +174,8 @@ class AppContainer(context: Context) {
         ),
     )).let { app.diurna.debug.LoggedCardioReader(it, debug) }
     /** HTTPS schema.org Recipe import; never sees API keys. */
-    val recipeImporter = RecipeImporter()
+    val recipeImporter: app.diurna.data.recipe.RecipeImportSource =
+        app.diurna.debug.LoggedRecipeImporter(RecipeImporter(), actions)
     /** Reads Nutrition Facts labels into the meal editor; person confirms before saving. */
     val labelReader: LabelReader = SelectedLabelReader({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeLabelReader(
@@ -273,6 +274,9 @@ class AppContainer(context: Context) {
         days.onAlarmInputsChanged = { scheduler.reschedule() }
         dailyMetrics.onValueChanged = { if (dailyMetrics.isComplete(it)) CheckInReminder.dismiss(context) }
         food.onPendingEstimates = { EstimateWorker.enqueue(context) }
+        food.onReestimate = { details ->
+            actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.BACKGROUND, "food.reestimate", result = app.diurna.debug.Action.Result.OK, details = details))
+        }
         lockWallpaper.start(appScope)
     }
     init {

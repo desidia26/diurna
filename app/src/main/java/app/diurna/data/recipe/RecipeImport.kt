@@ -62,29 +62,54 @@ fun ImportedRecipe.toIngredientEntities(): List<RecipeIngredientEntity> =
     ingredients.mapIndexed { i, line -> line.toEntity(position = i) }
 
 
+/** What the fetch saw, for the debug log only: never the page body or the URL. */
+data class RecipeFetchInfo(val bytes: Int? = null, val truncated: Boolean = false, val httpStatus: Int? = null)
+
 sealed interface RecipeImportResult {
-    data class Ok(val recipe: ImportedRecipe) : RecipeImportResult
-    data class Problem(val message: String) : RecipeImportResult
+    val info: RecipeFetchInfo
+    data class Ok(val recipe: ImportedRecipe, override val info: RecipeFetchInfo = RecipeFetchInfo()) : RecipeImportResult
+    /** [reason] is a fixed token (see [RecipeImporter]) for the debug log; [message] is shown to the user. */
+    data class Problem(
+        val message: String,
+        val reason: String = REASON_NETWORK,
+        override val info: RecipeFetchInfo = RecipeFetchInfo(),
+    ) : RecipeImportResult
+
+    companion object {
+        const val REASON_NO_RECIPE = "no_recipe"
+        const val REASON_NETWORK = "network"
+    }
+}
+
+/** Imports a recipe from a link; [RecipeImporter] does the work, a logging wrapper may sit in front. */
+fun interface RecipeImportSource {
+    suspend fun importFromUrl(url: String): RecipeImportResult
 }
 
 /**
  * Fetches a recipe page over [SafeHttp] and extracts a schema.org Recipe from JSON-LD
  * (preferred) or microdata. Untrusted parsing only — no WebView, no JavaScript.
+ * Problem reasons: the [SafeHttpException.Reason] tokens, or [RecipeImportResult.REASON_NO_RECIPE].
  */
 class RecipeImporter(
-    private val fetch: suspend (String) -> String = { SafeHttp.get(it) },
-) {
-    suspend fun importFromUrl(url: String): RecipeImportResult = withContext(Dispatchers.IO) {
-        val body = try {
+    private val fetch: suspend (String) -> FetchedPage = { SafeHttp.fetchPage(it) },
+) : RecipeImportSource {
+    override suspend fun importFromUrl(url: String): RecipeImportResult = withContext(Dispatchers.IO) {
+        val page = try {
             fetch(url)
         } catch (e: SafeHttpException) {
-            return@withContext RecipeImportResult.Problem(e.message ?: "Couldn't fetch that page")
+            return@withContext RecipeImportResult.Problem(
+                e.message ?: "Couldn't fetch that page", e.reason.token, RecipeFetchInfo(httpStatus = e.httpStatus),
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (_: Exception) {
-            return@withContext RecipeImportResult.Problem("Couldn't fetch that page")
+            return@withContext RecipeImportResult.Problem("Couldn't fetch that page", RecipeImportResult.REASON_NETWORK)
         }
-        val parsed = parseRecipeHtml(body, sourceUrl = url.trim())
-            ?: return@withContext RecipeImportResult.Problem("No recipe found on that page")
-        RecipeImportResult.Ok(parsed)
+        val info = RecipeFetchInfo(bytes = page.bytes, truncated = page.truncated)
+        val parsed = parseRecipeHtml(page.body, sourceUrl = url.trim())
+            ?: return@withContext RecipeImportResult.Problem("No recipe found on that page", RecipeImportResult.REASON_NO_RECIPE, info)
+        RecipeImportResult.Ok(parsed, info)
     }
 }
 
@@ -115,15 +140,16 @@ private data class RawRecipe(
 )
 
 private fun finalize(raw: RawRecipe, sourceUrl: String): ImportedRecipe? {
-    val name = cleanText(raw.name ?: "", MAX_NAME).ifBlank { return null }
+    // Page text arrives HTML-escaped (JSON-LD often double-encodes "&" as "&amp;"); decode once here.
+    val name = cleanText(decodeHtmlEntities(raw.name ?: ""), MAX_NAME).ifBlank { return null }
     val ingredients = raw.ingredients
-        .map { cleanText(it, MAX_INGREDIENT) }
+        .map { cleanText(decodeHtmlEntities(it), MAX_INGREDIENT) }
         .filter { it.isNotBlank() }
         .take(MAX_INGREDIENT_LINES)
         .map { parseIngredientLine(it) }
     if (ingredients.isEmpty()) return null
-    val yield = parseYield(raw.yieldRaw) ?: 1.0
-    val description = raw.description?.let { cleanText(it, MAX_DESCRIPTION) }?.ifBlank { null }
+    val yield = parseYield((raw.yieldRaw as? String)?.let(::decodeHtmlEntities) ?: raw.yieldRaw) ?: 1.0
+    val description = raw.description?.let { cleanText(decodeHtmlEntities(it), MAX_DESCRIPTION) }?.ifBlank { null }
     return ImportedRecipe(
         name = name,
         yield = yield,
@@ -135,13 +161,29 @@ private fun finalize(raw: RawRecipe, sourceUrl: String): ImportedRecipe? {
 
 // ---- JSON-LD ----------------------------------------------------------------
 
-private val JSON_LD_SCRIPT = Regex(
-    """<script[^>]*\btype\s*=\s*["']application/ld\+json["'][^>]*>(.*?)</script>""",
-    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+// Quotes are optional: minified pages write `<script type=application/ld+json ...>`.
+private val JSON_LD_OPEN = Regex(
+    """<script[^>]{0,512}?\btype\s*=\s*["']?application/ld\+json(?:["']|(?=[\s>]))[^>]{0,512}>""",
+    RegexOption.IGNORE_CASE,
 )
 
-fun extractJsonLdBlocks(html: String): List<String> =
-    JSON_LD_SCRIPT.findAll(html).map { it.groupValues[1].trim() }.filter { it.isNotEmpty() }.toList()
+/**
+ * JSON-LD script bodies, scanned in one linear pass: each opening tag is matched, then its
+ * `</script>` found with indexOf, so a page full of unclosed tags can't make this quadratic.
+ */
+fun extractJsonLdBlocks(html: String): List<String> {
+    val blocks = mutableListOf<String>()
+    var from = 0
+    while (from < html.length) {
+        val open = JSON_LD_OPEN.find(html, from) ?: break
+        val bodyStart = open.range.last + 1
+        val close = html.indexOf("</script", bodyStart, ignoreCase = true)
+        if (close < 0) break
+        html.substring(bodyStart, close).trim().takeIf { it.isNotEmpty() }?.let(blocks::add)
+        from = close + "</script".length
+    }
+    return blocks
+}
 
 private fun findRecipeInJsonLd(json: String): RawRecipe? {
     val root = try {

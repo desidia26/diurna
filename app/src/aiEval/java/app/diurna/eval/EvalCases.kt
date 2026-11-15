@@ -91,6 +91,8 @@ data class ProductExpect(
 data class CaseInput(
     val text: String? = null,
     val image: String? = null,
+    /** Several photos of one entry, in gallery order (food prompt). Use instead of [image]. */
+    val images: List<String> = emptyList(),
     val productName: String? = null,
     val brand: String? = null,
     val servingGrams: Double? = null,
@@ -174,6 +176,7 @@ object EvalCases {
                 input = CaseInput(
                     text = input.path("text").takeIf { !it.isMissingNode && !it.isNull }?.asText(),
                     image = input.path("image").takeIf { it.isTextual }?.asText(),
+                    images = input.path("images").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
                     productName = input.path("productName").takeIf { it.isTextual }?.asText(),
                     brand = input.path("brand").takeIf { it.isTextual }?.asText(),
                     servingGrams = input.path("servingGrams").takeIf { it.isNumber }?.asDouble(),

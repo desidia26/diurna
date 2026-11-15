@@ -1,6 +1,6 @@
 # Eval image sources
 
-Most images in this folder were **generated for this repo** (Python/Pillow drawing code in the PR that added them). The food-plate photo is a public-domain (CC0) photograph, cropped and re-encoded as described below.
+Most images in this folder were **generated for this repo** (Python/Pillow drawing code in the PR that added them). The exceptions are the public-domain (CC0) food-plate photo and the real package photos (`*-real.jpg` and `real/`), each described below.
 
 | File | Purpose |
 |------|---------|
@@ -27,6 +27,15 @@ A CC0 photograph of a plated lunch: roast chicken with pan sauce, grilled aspara
 | Used by | `food-photo-plate-real` |
 
 Calorie bands for that case are a wide estimate of this plate (skin-on roast chicken, gravy, a skillet of mashed potatoes, asparagus), not an exact restaurant menu value.
+
+## Real photos
+
+Cropped from photos in debug report ea12351c (Nov 2026), which Larry sent and which reproduces the bug, with all metadata (EXIF, GPS, timestamps) stripped. They show retail packaging only: no people, places or other personal details.
+
+| File | Purpose |
+|------|---------|
+| `links-barcode-real.jpg` | Barcode side of a plant-based link package; no nutrition text. Sent first, as in the report |
+| `links-label-real.jpg` | The same package's Nutrition Facts panel: 1 link (43 g), 60 kcal. `food-photos-barcode-then-label` expects 3 links ≈ 180 kcal |
 
 ## Real package photos (`real/`)
 
