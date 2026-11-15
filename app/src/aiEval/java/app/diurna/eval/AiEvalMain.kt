@@ -14,12 +14,13 @@ import java.io.File
  * - grokModel= / claudeModel= / ollamaModel= / ollamaBaseUrl=
  * - ollamaTextOnly=true|false (default true)
  * - outDir=ai-evals/out
+ * - pipeline=twopass|closeup (package photos; default twopass)
  */
 fun main(args: Array<String>) = runBlocking {
     val props = args.toList().plus(
         listOf(
             "provider", "set", "tag", "grokModel", "claudeModel",
-            "ollamaModel", "ollamaBaseUrl", "ollamaTextOnly", "outDir", "root",
+            "ollamaModel", "ollamaBaseUrl", "ollamaTextOnly", "outDir", "root", "pipeline",
         ).mapNotNull { k -> System.getProperty(k)?.let { "$k=$it" } },
     ).mapNotNull { s ->
         val i = s.indexOf('=')
@@ -48,6 +49,7 @@ fun main(args: Array<String>) = runBlocking {
             setName = setName,
             tag = tag,
             grokModel = props["grokModel"],
+            pipeline = props["pipeline"] ?: "twopass",
             claudeModel = props["claudeModel"],
             ollamaModel = props["ollamaModel"],
             ollamaBaseUrl = props["ollamaBaseUrl"],

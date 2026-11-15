@@ -11,7 +11,13 @@ data class IntRangeExpect(val min: Int, val max: Int) {
 }
 
 /** Inclusive double band for density / grams-per-each. */
-data class DoubleRangeExpect(val min: Double, val max: Double) {
+/** [required]=false (package product bands) records a miss without failing. */
+data class DoubleRangeExpect(val min: Double, val max: Double, val required: Boolean = true) {
+    fun contains(v: Double): Boolean = v in min..max
+}
+
+/** Band for one package-reading nutrient; [required]=false records a miss without failing. */
+data class NutrientExpect(val min: Double, val max: Double, val required: Boolean = true) {
     fun contains(v: Double): Boolean = v in min..max
 }
 
@@ -22,6 +28,7 @@ data class DoubleRangeExpect(val min: Double, val max: Double) {
  * - not_food_or_zeros: not_food, or all-zero macros/kcal
  * - reject: parser or model fails (cardio non-screen, label non-panel, etc.)
  * - ingredients: barcode_ingredients prompt returned a usable list
+ * - no_panel: package prompt rejected the photo or returned no panel numbers (never invented ones)
  */
 data class CaseExpect(
     val outcome: String,
@@ -48,6 +55,37 @@ data class CaseExpect(
     val gPerMl: DoubleRangeExpect? = null,
     /** Density prompt: expected grams-per-each band. */
     val gramsPerEach: DoubleRangeExpect? = null,
+    /** package: grams per serving as printed. */
+    val servingGrams: DoubleRangeExpect? = null,
+    /** package: per-serving bands keyed by PackagePrompt.NUTRIENT_KEYS. */
+    val nutrients: Map<String, NutrientExpect> = emptyMap(),
+    /** package: ingredients text must contain one of these (case-insensitive). */
+    val ingredientsContainsAny: List<String> = emptyList(),
+    /** package: a Nutrition Facts panel must have been read. */
+    val requirePanel: Boolean = false,
+    /** package: at least this many products in the photo. */
+    val minProducts: Int? = null,
+    /** package: at most this many products (catches one package split in two, or clutter read as packages). */
+    val maxProducts: Int? = null,
+    /** package: a product whose brand + name contains one of these (a background box, fresh fruit) must not come back with panel numbers. */
+    val noPanelForAny: List<String> = emptyList(),
+    /** package: each listed product must be found (by name/brand) and meet its own bands. */
+    val products: List<ProductExpect> = emptyList(),
+    /** package: some product's brand + name contains one of these (front-of-package identification). */
+    val identityContainsAny: List<String> = emptyList(),
+    /** package: "none" (a clear label asks nothing) or "required" (ambiguity must be asked about); null = not checked. */
+    val questions: String? = null,
+    /** package with questions=required: some question has one of these topics. */
+    val questionTopicsAny: List<String> = emptyList(),
+)
+
+/** One product in a multi-product package photo. */
+data class ProductExpect(
+    val nameContainsAny: List<String>,
+    val nutrients: Map<String, NutrientExpect> = emptyMap(),
+    val servingGrams: DoubleRangeExpect? = null,
+    /** true: its Nutrition Facts panel must be read; false: no panel is visible, so no numbers; null: not checked. */
+    val panel: Boolean? = null,
 )
 
 data class CaseInput(
@@ -70,6 +108,10 @@ data class CaseInput(
     val ingredients: Boolean = false,
     /** Density prompt: "volume" or "each". */
     val unitKind: String? = null,
+    /** package_refine: the previous interpretation (stored JSON, path under ai-evals/). */
+    val previous: String? = null,
+    /** package_refine: the person's answer. */
+    val answer: String? = null,
 )
 
 data class EvalCase(
@@ -147,6 +189,8 @@ object EvalCases {
                     detailed = input.path("detailed").asBoolean(false),
                     ingredients = input.path("ingredients").asBoolean(false),
                     unitKind = input.path("unitKind").takeIf { it.isTextual }?.asText(),
+                    previous = input.path("previous").takeIf { it.isTextual }?.asText(),
+                    answer = input.path("answer").takeIf { it.isTextual }?.asText(),
                 ),
                 expect = CaseExpect(
                     outcome = expect.path("outcome").asText("estimate"),
@@ -167,6 +211,25 @@ object EvalCases {
                     requireIngredients = expect.path("requireIngredients").asBoolean(false),
                     gPerMl = doubleRange(expect.path("gPerMl")),
                     gramsPerEach = doubleRange(expect.path("gramsPerEach")),
+                    servingGrams = doubleRange(expect.path("servingGrams")),
+                    nutrients = nutrientBands(expect.path("nutrients")),
+                    ingredientsContainsAny = expect.path("ingredientsContainsAny").takeIf { it.isArray }
+                        ?.map { it.asText() }.orEmpty(),
+                    requirePanel = expect.path("requirePanel").asBoolean(false),
+                    minProducts = expect.path("minProducts").takeIf { it.isNumber }?.asInt(),
+                    maxProducts = expect.path("maxProducts").takeIf { it.isNumber }?.asInt(),
+                    noPanelForAny = expect.path("noPanelForAny").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
+                    products = expect.path("products").takeIf { it.isArray }?.map { p ->
+                        ProductExpect(
+                            p.path("nameContainsAny").map { it.asText() },
+                            nutrientBands(p.path("nutrients")),
+                            doubleRange(p.path("servingGrams")),
+                            p.path("panel").takeIf { it.isBoolean }?.asBoolean(),
+                        )
+                    }.orEmpty(),
+                    identityContainsAny = expect.path("identityContainsAny").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
+                    questions = expect.path("questions").takeIf { it.isTextual }?.asText(),
+                    questionTopicsAny = expect.path("questionTopicsAny").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
                 ),
             )
         }
@@ -177,8 +240,17 @@ object EvalCases {
         return IntRangeExpect(node.path("min").asInt(), node.path("max").asInt())
     }
 
+    private fun nutrientBands(node: JsonNode): Map<String, NutrientExpect> {
+        if (!node.isObject) return emptyMap()
+        val out = linkedMapOf<String, NutrientExpect>()
+        node.fields().forEach { (key, v) ->
+            out[key] = NutrientExpect(v.path("min").asDouble(), v.path("max").asDouble(), v.path("required").asBoolean(true))
+        }
+        return out
+    }
+
     private fun doubleRange(node: JsonNode): DoubleRangeExpect? {
         if (!node.isObject) return null
-        return DoubleRangeExpect(node.path("min").asDouble(), node.path("max").asDouble())
+        return DoubleRangeExpect(node.path("min").asDouble(), node.path("max").asDouble(), node.path("required").asBoolean(true))
     }
 }

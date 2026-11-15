@@ -1,0 +1,43 @@
+{
+ "products": [
+  {
+   "has_nutrition_panel": true,
+   "product_name": "Flax Seeds",
+   "brand": "Roots Circle",
+   "size_text": "",
+   "printed_barcode": "",
+   "center_x": -1,
+   "serving_text": "1 Tbsp",
+   "serving_grams": -1,
+   "servings_per_container": -1,
+   "kcal": 45,
+   "protein_g": 2,
+   "carbs_g": 2,
+   "fat_g": 3,
+   "fiber_g": 2,
+   "sugars_g": -1,
+   "added_sugars_g": -1,
+   "sat_fat_g": -1,
+   "trans_fat_g": -1,
+   "mono_fat_g": -1,
+   "poly_fat_g": -1,
+   "cholesterol_mg": -1,
+   "sodium_mg": 0,
+   "potassium_mg": -1,
+   "calcium_mg": -1,
+   "iron_mg": -1,
+   "vitamin_d_ug": -1,
+   "ingredients_text": "FLAXSEEDS.",
+   "note": ""
+  }
+ ],
+ "questions": [
+  {
+   "product_index": 0,
+   "topic": "serving_basis",
+   "text": "The serving is 1 Tbsp with no gram weight printed. How many grams is it?",
+   "suggested_answers": []
+  }
+ ],
+ "note": ""
+}

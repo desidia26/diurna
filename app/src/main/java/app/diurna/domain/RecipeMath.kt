@@ -5,6 +5,8 @@ import kotlin.math.roundToInt
 /**
  * Sums recipe ingredient snapshots into per-serving meal totals.
  * Required P/C/F treat missing as 0; optional fields stay null when every ingredient left them unknown.
+ * Kcal is the sum of each line's labeled kcal when every line has one (scaled by yield);
+ * otherwise it is derived from the per-serving macros via [MacroEnergy].
  * Amino coverage reuses matched/total: an ingredient "matches" when it has any amino value.
  */
 object RecipeMath {
@@ -27,6 +29,8 @@ object RecipeMath {
         val omega6G: Int? = null,
         val omega9G: Int? = null,
         val aminos: AminoAcids = AminoAcids(),
+        /** Labeled kcal for this line, when known. Missing lines make per-serving kcal fall back to [MacroEnergy]. */
+        val kcal: Int? = null,
     )
 
     data class Totals(
@@ -99,7 +103,11 @@ object RecipeMath {
         val fi = o(fiber)
         val so = o(sol)
         val inn = o(insol)
-        val kcal = MacroEnergy.kcal(p, c, f, fi, so, inn).total.roundToInt().coerceAtLeast(0)
+        val kcal = if (batch.all { it.kcal != null }) {
+            s(batch.sumOf { it.kcal!! })
+        } else {
+            MacroEnergy.kcal(p, c, f, fi, so, inn).total.roundToInt().coerceAtLeast(0)
+        }
         return Totals(
             kcal = kcal,
             proteinG = p,
@@ -149,6 +157,18 @@ object RecipeMath {
             omega6G = o(per100.omega6G),
             omega9G = o(per100.omega9G),
             aminos = per100.aminos.scale(k),
+            kcal = o(per100.kcal),
         )
+    }
+
+    /**
+     * Labeled kcal on an ingredient line. A non-zero value is used as written. Zero is a real
+     * zero when there are no macros; otherwise it is treated as unknown (the editor leaves kcal
+     * blank and fills it from macros only when the user adds the line).
+     */
+    fun explicitKcal(kcal: Int, proteinG: Int = 0, carbsG: Int = 0, fatG: Int = 0): Int? = when {
+        kcal != 0 -> kcal
+        proteinG == 0 && carbsG == 0 && fatG == 0 -> 0
+        else -> null
     }
 }

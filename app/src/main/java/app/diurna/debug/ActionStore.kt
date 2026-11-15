@@ -7,7 +7,8 @@ import java.util.UUID
 enum class Screen { DAY, WEEK, METRICS, ROUTINE, SETUP, LIBRARY, ALARM, BACKGROUND }
 /** URL: a pasted recipe link's host and path (never its query or fragment), typed-text logging only. */
 enum class TextField { FOOD, EXERCISE, RECIPE, SEARCH, URL }
-enum class AttachmentKind { IMAGE, BARCODE }
+/** DECISION_LOG: a one-photo capture's decision log (JSON), only while debug recording is on. */
+enum class AttachmentKind { IMAGE, BARCODE, DECISION_LOG }
 
 /** Version 1 records intent/results, never application state. No request/response payloads. */
 sealed interface Action {
@@ -68,7 +69,9 @@ class ActionRecorder(private val dir: File, private val maxBytes: Long = 20L * 1
                 .put("result", a.result.name).put("latencyMs", a.latencyMs).also { json ->
                     // Details are allowlisted keys with short, redacted values; callers pass fixed tokens or numbers.
                     val details = JSONObject()
-                    a.details.filterKeys { it in setOf("host", "outcome", "bytes", "truncated", "ingredients", "http_status", "photos",
+                    a.details.filterKeys { it in setOf("exception", "message", "frames", "format", "checksum", "candidates", "source", "variant",
+                        "raw_candidates", "accepted_candidates", "lines", "numeric_runs", "rejected_runs",
+                        "host", "outcome", "bytes", "truncated", "ingredients", "http_status", "photos",
                         "reason", "photos_added", "photos_removed", "photos_moved") }
                         .forEach { (key, value) -> details.put(key, Redaction.text(value.take(256), knownSecrets())) }
                     if (details.length() > 0) json.put("details", details)
@@ -81,16 +84,27 @@ class ActionRecorder(private val dir: File, private val maxBytes: Long = 20L * 1
         trim()
     }
 
+    private fun redactJson(v: Any?): Any? = when (v) {
+        is JSONObject -> JSONObject().also { o -> v.keys().forEach { k -> o.put(k, redactJson(v.get(k))) } }
+        is org.json.JSONArray -> org.json.JSONArray().also { a -> for (i in 0 until v.length()) a.put(redactJson(v.get(i))) }
+        is String -> Redaction.text(v, knownSecrets())
+        else -> v
+    }
+
     /** Returns an opaque id, or null when disabled/oversize/unreadable. meta is deliberately allowlisted. */
     @Synchronized fun registerAttachment(bytes: ByteArray, kind: AttachmentKind,
         meta: Map<String, String> = emptyMap(), correlationId: String = UUID.randomUUID().toString()): String? {
         if (!enabled || bytes.isEmpty() || bytes.size > maxBytes / 2) return null
         return runCatching {
             dir.mkdirs(); val id = UUID.randomUUID().toString()
-            val f = File(dir, "${clock()}-$id.${if (kind == AttachmentKind.IMAGE) "image" else "barcode"}")
+            val f = File(dir, "${clock()}-$id.${when (kind) { AttachmentKind.IMAGE -> "image"; AttachmentKind.BARCODE -> "barcode"; AttachmentKind.DECISION_LOG -> "json" }}")
             // Barcode attachments are digits only. Images are private, unredacted, and require report review.
             if (kind == AttachmentKind.BARCODE && !bytes.toString(Charsets.UTF_8).matches(Regex("[0-9]{6,14}"))) return null
-            f.writeBytes(bytes)
+            // Decision logs are JSON objects only, so nothing else can ride along under that kind.
+            // Every string inside is redacted like typed text (a refinement answer is free text).
+            val body = if (kind != AttachmentKind.DECISION_LOG) bytes else
+                (runCatching { redactJson(JSONObject(bytes.toString(Charsets.UTF_8))) }.getOrNull() ?: return null).toString().toByteArray()
+            f.writeBytes(body)
             val j = JSONObject().put("id", id).put("kind", kind.name).put("correlationId", safeId(correlationId))
             meta["format"]?.takeIf { it.matches(Regex("[A-Z0-9_]{1,32}")) }?.let { j.put("format", it) }
             File(dir, f.name + ".meta").writeText(j.toString()); trim()

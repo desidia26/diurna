@@ -55,6 +55,27 @@ class RecipeRepositoryTest {
         assertEquals(1.0, food.servings, 0.0)
     }
 
+    @Test fun capturedFactsSurviveSavingAndResavingTheRecipe() = runBlocking {
+        val captured = CapturedFacts(
+            ingredientsText = "PECANS.", ingredientsSource = "label", servingGrams = 28.0,
+            servingText = "1 oz (28g)", factsJson = """{"basis":"per_100g","fields":{"kcal":{"v":714.3,"s":"label"}}}""",
+        )
+        val line = RecipeIngredientEntity(
+            mealId = 0, position = 0, name = "Pecans", amount = 56.0, unit = "g", grams = 56.0,
+            proteinG = 6, carbsG = 8, fatG = 40, kcal = 400, source = "photo", barcode = "0078742202334",
+            captured = captured,
+        )
+        val meal = MealEntity(name = "Pecan pie bits", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_RECIPE)
+        assertEquals(LibraryRepository.Result.Ok, lib.saveRecipe(meal, listOf(line)))
+        val saved = lib.observeMeals(MealEntity.KIND_RECIPE).first().single()
+        val first = lib.ingredientsFor(saved.id).single()
+        assertEquals(captured, first.captured)
+        // Editing the recipe re-inserts lines; the capture travels with the line.
+        assertEquals(LibraryRepository.Result.Ok, lib.saveRecipe(saved.copy(name = "Pecan bits"), listOf(first.copy(id = 0))))
+        assertEquals(captured, lib.ingredientsFor(saved.id).single().captured)
+        assertEquals(714.3, lib.ingredientsFor(saved.id).single().captured!!.facts().getValue("kcal").value, 1e-9)
+    }
+
     @Test fun logByGramsUsesCookedWeight() = runBlocking {
         val line = RecipeIngredientEntity(
             mealId = 0, position = 0, name = "Chicken", amount = 200.0, unit = "g", grams = 200.0,
@@ -110,5 +131,53 @@ class RecipeRepositoryTest {
         assertEquals(before.proteinG, after.proteinG)
         assertEquals(before.kcalLow, after.kcalLow)
         assertEquals(8, after.proteinG)
+    }
+
+    private val photoLines = listOf(
+        RecipeIngredientEntity(mealId = 0, position = 0, name = "Rolled oats", amount = 40.0, unit = "g", grams = 40.0,
+            proteinG = 5, carbsG = 27, fatG = 3, kcal = 150, fiberG = 4, source = "photo", barcode = "0011110766557"),
+        RecipeIngredientEntity(mealId = 0, position = 1, name = "Sliced almonds", amount = 15.0, unit = "g", grams = 15.0,
+            proteinG = 3, carbsG = 3, fatG = 8, kcal = 85, fiberG = 2, source = "photo"),
+    )
+
+    @Test fun mealFromPhotoLogsOneEntryWithoutTouchingTheLibrary() = runBlocking {
+        assertEquals(LibraryRepository.Result.Ok, lib.logRecipe(t.mon, "Oats and almonds", photoLines, saveToLibrary = false))
+        val food = t.food.observe(t.mon).first().single()
+        assertEquals("Oats and almonds", food.text)
+        // Labeled 150+85; not MacroEnergy 239 from the macros and fiber.
+        assertEquals(235, food.kcalLow)
+        assertEquals(8, food.proteinG)
+        assertEquals(30, food.carbsG)
+        assertEquals(11, food.fatG)
+        assertEquals(6, food.fiberG)
+        assertTrue(food.isMeal)
+        assertEquals(null, food.mealId)
+        assertTrue(lib.observeMeals(MealEntity.KIND_RECIPE).first().isEmpty())
+        // Servings scale the entry's own numbers.
+        lib.setServings(food.id, 2.0)
+        assertEquals(470, t.food.observe(t.mon).first().single().kcalLow)
+    }
+
+    @Test fun mealFromPhotoCanAlsoSaveTheRecipe() = runBlocking {
+        assertEquals(LibraryRepository.Result.Ok, lib.logRecipe(t.mon, "Oats and almonds", photoLines, saveToLibrary = true))
+        val saved = lib.observeMeals(MealEntity.KIND_RECIPE).first().single()
+        assertEquals(235, saved.kcal)
+        assertEquals(listOf("Rolled oats", "Sliced almonds"), lib.ingredientsFor(saved.id).map { it.name })
+        val food = t.food.observe(t.mon).first().single()
+        assertEquals(saved.id, food.mealId)
+        assertEquals(235, food.kcalLow)
+        // A taken name is a problem to show; nothing more is logged.
+        val again = lib.logRecipe(t.mon, "Oats and almonds", photoLines, saveToLibrary = true)
+        assertTrue(again is LibraryRepository.Result.Problem)
+        assertEquals(1, t.food.observe(t.mon).first().size)
+        // Logging the same name without saving is fine.
+        assertEquals(LibraryRepository.Result.Ok, lib.logRecipe(t.mon, "Oats and almonds", photoLines, saveToLibrary = false))
+        assertEquals(2, t.food.observe(t.mon).first().size)
+    }
+
+    @Test fun mealFromPhotoNeedsANameAndIngredients() = runBlocking {
+        assertTrue(lib.logRecipe(t.mon, "  ", photoLines, saveToLibrary = false) is LibraryRepository.Result.Problem)
+        assertTrue(lib.logRecipe(t.mon, "Empty", emptyList(), saveToLibrary = false) is LibraryRepository.Result.Problem)
+        assertTrue(t.food.observe(t.mon).first().isEmpty())
     }
 }

@@ -1,0 +1,1361 @@
+{
+ "description": "Recorded product-database responses for the eval harness, so two-pass package reads are deterministic and need no network: the harness's lookups answer from here, never live. Recorded 2026-11-11 with the app's own requests: Open Food Facts product API v2 (same fields= list as BarcodeLookup), USDA FoodData Central Branded search (public DEMO_KEY; the phone uses the person's key) trimmed to the fields FdcClient.parseBranded reads. byCode: 13-digit GTIN -> OFF product JSON and the USDA branded record whose gtinUpc matches (null: none). byName: a query containing 'match' (case-insensitive) gets these results; Open Food Facts search answered 503 for every query when recorded, so off is null (a lookup miss), as it often is on the phone.",
+ "byCode": {
+  "0011110766557": {
+   "off": "{\"code\":\"0011110766557\",\"product\":{\"brands\":\"Kroger\",\"ingredients\":[{\"ciqual_food_code\":\"9311\",\"id\":\"en:oat-flakes\",\"is_in_taxonomy\":1,\"labels\":\"en:whole-grain\",\"percent_estimate\":100,\"percent_max\":100,\"percent_min\":100,\"text\":\"rolled oats\",\"vegan\":\"yes\",\"vegetarian\":\"yes\"}],\"ingredients_text\":\"whole grain rolled oats,\",\"ingredients_text_en\":\"whole grain rolled oats,\",\"nutriments\":{\"added-sugars\":0,\"added-sugars_100g\":0,\"added-sugars_serving\":0,\"added-sugars_unit\":\"g\",\"added-sugars_value\":0,\"calcium\":0.05,\"calcium_100g\":0.05,\"calcium_serving\":0.02,\"calcium_unit\":\"g\",\"calcium_value\":0.05,\"carbohydrates\":67.5,\"carbohydrates_100g\":67.5,\"carbohydrates_serving\":27,\"carbohydrates_unit\":\"g\",\"carbohydrates_value\":67.5,\"cholesterol\":0,\"cholesterol_100g\":0,\"cholesterol_serving\":0,\"cholesterol_unit\":\"g\",\"cholesterol_value\":0,\"choline\":0,\"choline_100g\":0,\"choline_serving\":0,\"choline_unit\":\"g\",\"choline_value\":0,\"energy\":1671.25,\"energy-kcal\":375,\"energy-kcal_100g\":375,\"energy-kcal_serving\":150,\"energy-kcal_unit\":\"kcal\",\"energy-kcal_value\":375,\"energy-kj\":1671.25,\"energy-kj_100g\":1671.25,\"energy-kj_modifier\":\"~\",\"energy-kj_serving\":668,\"energy-kj_unit\":\"kJ\",\"energy-kj_value\":1671.25,\"energy_100g\":1671.25,\"energy_modifier\":\"~\",\"energy_serving\":668,\"energy_unit\":\"kJ\",\"energy_value\":1671.25,\"fat\":6.25,\"fat_100g\":6.25,\"fat_serving\":2.5,\"fat_unit\":\"g\",\"fat_value\":6.25,\"fiber\":10,\"fiber_100g\":10,\"fiber_serving\":4,\"fiber_unit\":\"g\",\"fiber_value\":10,\"fruits-vegetables-legumes-estimate-from-ingredients_100g\":0,\"fruits-vegetables-nuts-estimate-from-ingredients_100g\":0,\"insoluble-fiber\":12.5,\"insoluble-fiber_100g\":12.5,\"insoluble-fiber_serving\":5,\"insoluble-fiber_unit\":\"g\",\"insoluble-fiber_value\":12.5,\"iron\":0.005,\"iron_100g\":0.005,\"iron_serving\":0.002,\"iron_unit\":\"g\",\"iron_value\":0.005,\"monounsaturated-fat\":2.5,\"monounsaturated-fat_100g\":2.5,\"monounsaturated-fat_serving\":1,\"monounsaturated-fat_unit\":\"g\",\"monounsaturated-fat_value\":2.5,\"nova-group\":2.5,\"nova-group_100g\":2.5,\"nova-group_serving\":2.5,\"nova-group_unit\":\"\",\"nova-group_value\":2.5,\"polyunsaturated-fat\":2.5,\"polyunsaturated-fat_100g\":2.5,\"polyunsaturated-fat_serving\":1,\"polyunsaturated-fat_unit\":\"g\",\"polyunsaturated-fat_value\":2.5,\"potassium\":0.25,\"potassium_100g\":0.25,\"potassium_serving\":0.1,\"potassium_unit\":\"g\",\"potassium_value\":0.25,\"proteins\":12.5,\"proteins_100g\":12.5,\"proteins_serving\":5,\"proteins_unit\":\"g\",\"proteins_value\":12.5,\"salt\":0,\"salt_100g\":0,\"salt_serving\":0,\"salt_unit\":\"g\",\"salt_value\":0,\"saturated-fat\":0,\"saturated-fat_100g\":0,\"saturated-fat_serving\":0,\"saturated-fat_unit\":\"g\",\"saturated-fat_value\":0,\"sodium\":0,\"sodium_100g\":0,\"sodium_serving\":0,\"sodium_unit\":\"g\",\"sodium_value\":0,\"soluble-fiber\":12.5,\"soluble-fiber_100g\":12.5,\"soluble-fiber_serving\":5,\"soluble-fiber_unit\":\"g\",\"soluble-fiber_value\":12.5,\"starch\":0,\"starch_100g\":0,\"starch_serving\":0,\"starch_unit\":\"g\",\"starch_value\":0,\"sugars\":2.5,\"sugars_100g\":2.5,\"sugars_serving\":1,\"sugars_unit\":\"g\",\"sugars_value\":2.5,\"trans-fat\":0,\"trans-fat_100g\":0,\"trans-fat_serving\":0,\"trans-fat_unit\":\"g\",\"trans-fat_value\":0,\"vitamin-d\":0,\"vitamin-d_100g\":0,\"vitamin-d_serving\":0,\"vitamin-d_unit\":\"g\",\"vitamin-d_value\":0},\"nutriments_estimated\":{\"alcohol_100g\":0,\"beta-carotene_100g\":0,\"copper_100g\":0.0003,\"fructose_100g\":0,\"galactose_100g\":0,\"glucose_100g\":0,\"iodine_100g\":5e-07,\"lactose_100g\":0,\"magnesium_100g\":0.148,\"maltose_100g\":0,\"manganese_100g\":0.00472,\"pantothenic-acid_100g\":0.00131,\"phosphorus_100g\":0.422,\"phylloquinone_100g\":2e-06,\"polyols_100g\":0,\"selenium_100g\":3.05e-06,\"sucrose_100g\":0.97,\"vitamin-a_100g\":0,\"vitamin-b12_100g\":0,\"vitamin-b1_100g\":0.00043,\"vitamin-b2_100g\":0.00014,\"vitamin-b6_100g\":0.00012,\"vitamin-b9_100g\":3.96e-05,\"vitamin-c_100g\":0,\"vitamin-e_100g\":0.00059,\"vitamin-pp_100g\":0.00096,\"water_100g\":10.1,\"zinc_100g\":0.00333},\"nutrition_data\":\"on\",\"nutrition_data_prepared_per\":\"100g\",\"product_name\":\"Old Fashioned Oats\",\"serving_quantity\":40,\"serving_size\":\"0.5 cup uncooked (40 g)\"},\"status\":1,\"status_verbose\":\"product found\"}",
+   "fdc": {
+    "fdcId": 2017671,
+    "description": "OLD FASHIONED 100% WHOLE GRAIN OATS",
+    "brandOwner": "The Kroger Co.",
+    "brandName": "KROGER",
+    "gtinUpc": "011110766557",
+    "servingSize": 40.0,
+    "servingSizeUnit": "g",
+    "householdServingFullText": "0.5 cup",
+    "ingredients": "WHOLE GRAIN ROLLED OATS.",
+    "foodNutrients": [
+     {
+      "nutrientId": 1003,
+      "value": 15.0
+     },
+     {
+      "nutrientId": 1004,
+      "value": 6.25
+     },
+     {
+      "nutrientId": 1005,
+      "value": 67.5
+     },
+     {
+      "nutrientId": 1008,
+      "value": 375
+     },
+     {
+      "nutrientId": 2000,
+      "value": 2.5
+     },
+     {
+      "nutrientId": 1079,
+      "value": 10.0
+     },
+     {
+      "nutrientId": 1082,
+      "value": 5.0
+     },
+     {
+      "nutrientId": 1084,
+      "value": 5.0
+     },
+     {
+      "nutrientId": 1087,
+      "value": 50.0
+     },
+     {
+      "nutrientId": 1089,
+      "value": 4.5
+     },
+     {
+      "nutrientId": 1093,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1104,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1162,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1253,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1257,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1258,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1292,
+      "value": 2.5
+     },
+     {
+      "nutrientId": 1293,
+      "value": 2.5
+     }
+    ]
+   }
+  },
+  "0076991000411": {
+   "off": "{\"code\":\"0076991000411\",\"product\":{\"brands\":\"Mariani Nut Co.Inc.\",\"ecoscore_tags\":[\"unknown\"],\"ingredients\":[{\"ciqual_food_code\":\"15041\",\"id\":\"en:almond\",\"is_in_taxonomy\":1,\"percent_estimate\":100,\"percent_max\":100,\"percent_min\":100,\"text\":\"Almonds\",\"vegan\":\"yes\",\"vegetarian\":\"yes\"}],\"ingredients_text\":\"Almonds\",\"ingredients_text_en\":\"Almonds\",\"nutriments\":{\"calcium\":0.267,\"calcium_100g\":0.267,\"calcium_serving\":0.0801,\"calcium_unit\":\"g\",\"calcium_value\":0.267,\"carbohydrates\":20,\"carbohydrates_100g\":20,\"carbohydrates_serving\":6,\"carbohydrates_unit\":\"g\",\"carbohydrates_value\":20,\"cholesterol\":0,\"cholesterol_100g\":0,\"cholesterol_serving\":0,\"cholesterol_unit\":\"g\",\"cholesterol_value\":0,\"copper\":0.001,\"copper_100g\":0.001,\"copper_serving\":0.0003,\"copper_unit\":\"g\",\"copper_value\":0.001,\"energy\":2370,\"energy-kcal\":566.66666666667,\"energy-kcal_100g\":566.66666666667,\"energy-kcal_serving\":170,\"energy-kcal_unit\":\"kcal\",\"energy-kcal_value\":566.66666666667,\"energy_100g\":2370,\"energy_serving\":711,\"energy_unit\":\"kJ\",\"energy_value\":2370,\"fat\":50,\"fat_100g\":50,\"fat_serving\":15,\"fat_unit\":\"g\",\"fat_value\":50,\"fiber\":13.333333333333,\"fiber_100g\":13.333333333333,\"fiber_serving\":4,\"fiber_unit\":\"g\",\"fiber_value\":13.333333333333,\"iron\":0.0048,\"iron_100g\":0.0048,\"iron_serving\":0.00144,\"iron_unit\":\"g\",\"iron_value\":0.0048,\"monounsaturated-fat\":33.33,\"monounsaturated-fat_100g\":33.33,\"monounsaturated-fat_serving\":10,\"monounsaturated-fat_unit\":\"g\",\"monounsaturated-fat_value\":33.33,\"nova-group\":1,\"nova-group_100g\":1,\"nova-group_serving\":1,\"nova-group_unit\":\"\",\"nova-group_value\":1,\"polyunsaturated-fat\":11.67,\"polyunsaturated-fat_100g\":11.67,\"polyunsaturated-fat_serving\":3.5,\"polyunsaturated-fat_unit\":\"g\",\"polyunsaturated-fat_value\":11.67,\"potassium\":0.733,\"potassium_100g\":0.733,\"potassium_serving\":0.22,\"potassium_unit\":\"g\",\"potassium_value\":0.733,\"proteins\":20,\"proteins_100g\":20,\"proteins_serving\":6,\"proteins_unit\":\"g\",\"proteins_value\":20,\"salt\":0,\"salt_100g\":0,\"salt_serving\":0,\"salt_unit\":\"g\",\"salt_value\":0,\"saturated-fat\":3.3333333333333,\"saturated-fat_100g\":3.3333333333333,\"saturated-fat_serving\":1,\"saturated-fat_unit\":\"g\",\"saturated-fat_value\":3.3333333333333,\"sodium\":0,\"sodium_100g\":0,\"sodium_serving\":0,\"sodium_unit\":\"g\",\"sodium_value\":0,\"sugars\":3.3333333333333,\"sugars_100g\":3.3333333333333,\"sugars_serving\":1,\"sugars_unit\":\"g\",\"sugars_value\":3.3333333333333,\"trans-fat\":0,\"trans-fat_100g\":0,\"trans-fat_serving\":0,\"trans-fat_unit\":\"g\",\"trans-fat_value\":0,\"vitamin-a\":0,\"vitamin-a_100g\":0,\"vitamin-a_serving\":0,\"vitamin-a_unit\":\"g\",\"vitamin-a_value\":0,\"vitamin-c\":0,\"vitamin-c_100g\":0,\"vitamin-c_serving\":0,\"vitamin-c_unit\":\"g\",\"vitamin-c_value\":0},\"nutrition_data\":\"on\",\"nutrition_data_per\":\"100g\",\"nutrition_data_prepared_per\":\"100g\",\"product_name\":\"Almonds\",\"serving_quantity\":30,\"serving_size\":\"0.25 cup (30 g)\"},\"status\":1,\"status_verbose\":\"product found\"}",
+   "fdc": {
+    "fdcId": 2042133,
+    "description": "ALMONDS",
+    "brandOwner": "Mariani Nut Co.Inc.",
+    "brandName": "MARIANI",
+    "gtinUpc": "076991000411",
+    "servingSize": 30.0,
+    "servingSizeUnit": "g",
+    "householdServingFullText": "0.25 cup",
+    "ingredients": "ALMONDS",
+    "foodNutrients": [
+     {
+      "nutrientId": 1003,
+      "value": 20.0
+     },
+     {
+      "nutrientId": 1004,
+      "value": 50.0
+     },
+     {
+      "nutrientId": 1005,
+      "value": 20.0
+     },
+     {
+      "nutrientId": 1008,
+      "value": 567
+     },
+     {
+      "nutrientId": 2000,
+      "value": 3.33
+     },
+     {
+      "nutrientId": 1079,
+      "value": 13.3
+     },
+     {
+      "nutrientId": 1087,
+      "value": 267
+     },
+     {
+      "nutrientId": 1089,
+      "value": 4.8
+     },
+     {
+      "nutrientId": 1092,
+      "value": 733
+     },
+     {
+      "nutrientId": 1093,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1098,
+      "value": 1.0
+     },
+     {
+      "nutrientId": 1104,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1162,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1253,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1257,
+      "value": 0.0
+     },
+     {
+      "nutrientId": 1258,
+      "value": 3.33
+     },
+     {
+      "nutrientId": 1292,
+      "value": 33.3
+     },
+     {
+      "nutrientId": 1293,
+      "value": 11.7
+     }
+    ]
+   }
+  },
+  "0078742202334": {
+   "off": "{\"code\":\"0078742202334\",\"product\":{\"brands\":\"Member's Mark\",\"ingredients\":[{\"id\":\"fr:pecans\",\"is_in_taxonomy\":0,\"percent_estimate\":100,\"percent_max\":100,\"percent_min\":100,\"text\":\"Pecans\"}],\"ingredients_text\":\"Pecans\",\"nutriments\":{\"added-sugars\":0,\"added-sugars_100g\":0,\"added-sugars_serving\":0,\"added-sugars_unit\":\"g\",\"added-sugars_value\":0,\"caffeine\":0,\"caffeine_100g\":0,\"caffeine_serving\":0,\"caffeine_unit\":\"g\",\"caffeine_value\":0,\"calcium\":0.0714285714285714,\"calcium_100g\":0.0714285714285714,\"calcium_serving\":0.02,\"calcium_unit\":\"g\",\"calcium_value\":0.0714285714285714,\"carbohydrates\":14.2857142857143,\"carbohydrates_100g\":14.2857142857143,\"carbohydrates_serving\":4,\"carbohydrates_unit\":\"g\",\"carbohydrates_value\":14.2857142857143,\"cholesterol\":0,\"cholesterol_100g\":0,\"cholesterol_serving\":0,\"cholesterol_unit\":\"g\",\"cholesterol_value\":0,\"choline\":0,\"choline_100g\":0,\"choline_serving\":0,\"choline_unit\":\"g\",\"choline_value\":0,\"copper\":0,\"copper_100g\":0,\"copper_serving\":0,\"copper_unit\":\"g\",\"copper_value\":0,\"energy\":2988,\"energy-kcal\":714.285714285714,\"energy-kcal_100g\":714.285714285714,\"energy-kcal_serving\":200,\"energy-kcal_unit\":\"kcal\",\"energy-kcal_value\":714.285714285714,\"energy_100g\":2988,\"energy_serving\":837,\"energy_unit\":\"kJ\",\"energy_value\":2988,\"fat\":71.4285714285714,\"fat_100g\":71.4285714285714,\"fat_serving\":20,\"fat_unit\":\"g\",\"fat_value\":71.4285714285714,\"fiber\":10.7142857142857,\"fiber_100g\":10.7142857142857,\"fiber_serving\":3,\"fiber_unit\":\"g\",\"fiber_value\":10.7142857142857,\"iron\":0.00892857142857143,\"iron_100g\":0.00892857142857143,\"iron_serving\":0.0025,\"iron_unit\":\"g\",\"iron_value\":0.00892857142857143,\"magnesium\":0,\"magnesium_100g\":0,\"magnesium_serving\":0,\"magnesium_unit\":\"g\",\"magnesium_value\":0,\"manganese\":0,\"manganese_100g\":0,\"manganese_serving\":0,\"manganese_unit\":\"g\",\"manganese_value\":0,\"phosphorus\":0,\"phosphorus_100g\":0,\"phosphorus_serving\":0,\"phosphorus_unit\":\"g\",\"phosphorus_value\":0,\"potassium\":0.410714285714286,\"potassium_100g\":0.410714285714286,\"potassium_serving\":0.115,\"potassium_unit\":\"g\",\"potassium_value\":0.410714285714286,\"proteins\":10.7142857142857,\"proteins_100g\":10.7142857142857,\"proteins_serving\":3,\"proteins_unit\":\"g\",\"proteins_value\":10.7142857142857,\"salt\":0,\"salt_100g\":0,\"salt_serving\":0,\"salt_unit\":\"g\",\"salt_value\":0,\"saturated-fat\":7.14285714285714,\"saturated-fat_100g\":7.14285714285714,\"saturated-fat_serving\":2,\"saturated-fat_unit\":\"g\",\"saturated-fat_value\":7.14285714285714,\"selenium\":0,\"selenium_100g\":0,\"selenium_serving\":0,\"selenium_unit\":\"g\",\"selenium_value\":0,\"sodium\":0,\"sodium_100g\":0,\"sodium_serving\":0,\"sodium_unit\":\"g\",\"sodium_value\":0,\"starch\":0,\"starch_100g\":0,\"starch_serving\":0,\"starch_unit\":\"g\",\"starch_value\":0,\"sugars\":3.57142857142857,\"sugars_100g\":3.57142857142857,\"sugars_serving\":1,\"sugars_unit\":\"g\",\"sugars_value\":3.57142857142857,\"trans-fat\":0,\"trans-fat_100g\":0,\"trans-fat_serving\":0,\"trans-fat_unit\":\"g\",\"trans-fat_value\":0,\"vitamin-a\":0,\"vitamin-a_100g\":0,\"vitamin-a_serving\":0,\"vitamin-a_unit\":\"g\",\"vitamin-a_value\":0,\"vitamin-c\":0,\"vitamin-c_100g\":0,\"vitamin-c_serving\":0,\"vitamin-c_unit\":\"g\",\"vitamin-c_value\":0,\"vitamin-d\":0,\"vitamin-d_100g\":0,\"vitamin-d_serving\":0,\"vitamin-d_unit\":\"g\",\"vitamin-d_value\":0,\"vitamin-e\":0,\"vitamin-e_100g\":0,\"vitamin-e_serving\":0,\"vitamin-e_unit\":\"g\",\"vitamin-e_value\":0,\"vitamin-k\":0,\"vitamin-k_100g\":0,\"vitamin-k_serving\":0,\"vitamin-k_unit\":\"g\",\"vitamin-k_value\":0,\"zinc\":0,\"zinc_100g\":0,\"zinc_serving\":0,\"zinc_unit\":\"g\",\"zinc_value\":0},\"nutrition_data\":\"on\",\"nutrition_data_per\":\"100g\",\"nutrition_data_prepared_per\":\"100g\",\"product_name\":\"Natural Pecan Halves\",\"serving_quantity\":28,\"serving_size\":\"1 serving (28 g)\"},\"status\":1,\"status_verbose\":\"product found\"}",
+   "fdc": null
+  },
+  "0860009719569": {
+   "off": "{\"code\":\"0860009719569\",\"product\":{\"brands\":\"Roots circle\",\"ingredients\":[{\"ciqual_food_code\":\"15034\",\"id\":\"en:flax-seed\",\"is_in_taxonomy\":1,\"percent_estimate\":100,\"percent_max\":100,\"percent_min\":100,\"text\":\"Flax Seeds\",\"vegan\":\"yes\",\"vegetarian\":\"yes\"}],\"ingredients_text\":\"Flax Seeds\",\"ingredients_text_en\":\"Flax Seeds\",\"nutriments\":{\"added-sugars\":0,\"added-sugars_100g\":0,\"added-sugars_modifier\":\"~\",\"added-sugars_serving\":0,\"added-sugars_unit\":\"g\",\"added-sugars_value\":0,\"fruits-vegetables-legumes-estimate-from-ingredients_100g\":0,\"fruits-vegetables-nuts-estimate-from-ingredients_100g\":0},\"nutriments_estimated\":{\"alcohol_100g\":0,\"beta-carotene_100g\":0,\"calcium_100g\":0.228,\"carbohydrates_100g\":6.6,\"cholesterol_100g\":0,\"copper_100g\":0.00122,\"energy-kcal_100g\":491,\"energy-kj_100g\":2030,\"energy_100g\":2030,\"fat_100g\":36.6,\"fiber_100g\":27.3,\"fructose_100g\":0,\"galactose_100g\":0,\"glucose_100g\":0.4,\"iodine_100g\":5e-07,\"iron_100g\":0.0102,\"lactose_100g\":0,\"magnesium_100g\":0.372,\"maltose_100g\":0,\"manganese_100g\":0.00248,\"pantothenic-acid_100g\":0.00099,\"phosphorus_100g\":0.595,\"phylloquinone_100g\":4.3e-06,\"polyols_100g\":0,\"potassium_100g\":0.641,\"proteins_100g\":20.2,\"salt_100g\":0.051,\"saturated-fat_100g\":3.17,\"selenium_100g\":2.8e-05,\"sodium_100g\":0.0205,\"starch_100g\":0,\"sucrose_100g\":1.15,\"sugars_100g\":1.55,\"vitamin-a_100g\":0,\"vitamin-b12_100g\":0,\"vitamin-b1_100g\":0.00122,\"vitamin-b2_100g\":0.0002,\"vitamin-b6_100g\":0.00063,\"vitamin-b9_100g\":9.37e-05,\"vitamin-c_100g\":0.0006,\"vitamin-d_100g\":0,\"vitamin-e_100g\":0.00031,\"vitamin-pp_100g\":0.00308,\"water_100g\":5.93,\"zinc_100g\":0.00605},\"nutrition_data\":\"on\",\"nutrition_data_prepared_per\":\"100g\",\"product_name\":\"Flax seeds\",\"serving_quantity\":15,\"serving_size\":\"1 tbsp (1 tbsp)\"},\"status\":1,\"status_verbose\":\"product found\"}",
+   "fdc": null
+  }
+ },
+ "byName": [
+  {
+   "match": "craisin",
+   "recordedQuery": "Ocean Spray Craisins",
+   "fdc": [
+    {
+     "fdcId": 2441323,
+     "description": "OCEAN SPRAY, CRAISINS, DRIED CRANBERRIES",
+     "brandOwner": "Ocean Spray Cranberries, Inc.",
+     "brandName": "OCEAN SPRAY",
+     "gtinUpc": "031200294517",
+     "servingSize": 28.399999618530273,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "1 ONZ",
+     "ingredients": "CRANBERRIES, SUGAR.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1004,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1005,
+       "value": 81.0
+      },
+      {
+       "nutrientId": 1008,
+       "value": 352
+      },
+      {
+       "nutrientId": 2000,
+       "value": 63.4
+      },
+      {
+       "nutrientId": 1079,
+       "value": 7.0
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 0.0
+      }
+     ]
+    },
+    {
+     "fdcId": 2439318,
+     "description": "OCEAN SPRAY, CRAISINS, DRIED CRANBERRIES",
+     "brandOwner": "Ocean Spray Cranberries, Inc.",
+     "brandName": "OCEAN SPRAY",
+     "gtinUpc": "031200025890",
+     "servingSize": 40.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "0.25 cup",
+     "ingredients": "CRANBERRIES, SOLUBLE CORN FIBER, SUGAR, GLYCERIN, SUCRALOSE.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1004,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1005,
+       "value": 77.5
+      },
+      {
+       "nutrientId": 1008,
+       "value": 250
+      },
+      {
+       "nutrientId": 2000,
+       "value": 35.0
+      },
+      {
+       "nutrientId": 1079,
+       "value": 25.0
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 0.0
+      }
+     ]
+    },
+    {
+     "fdcId": 2440866,
+     "description": "OCEAN SPRAY, CRAISINS, ORIGINAL DRIED CRANBERRIES",
+     "brandOwner": "Ocean Spray Cranberries, Inc.",
+     "brandName": "OCEAN SPRAY",
+     "gtinUpc": "031200294647",
+     "servingSize": 40.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "0.25 cup",
+     "ingredients": "CRANBERRIES, SUGAR.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1004,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1005,
+       "value": 82.5
+      },
+      {
+       "nutrientId": 1008,
+       "value": 325
+      },
+      {
+       "nutrientId": 2000,
+       "value": 72.5
+      },
+      {
+       "nutrientId": 1079,
+       "value": 7.5
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 0.0
+      }
+     ]
+    }
+   ],
+   "off": null
+  },
+  {
+   "match": "flax",
+   "recordedQuery": "Roots Circle Flax Seeds",
+   "fdc": [
+    {
+     "fdcId": 2667489,
+     "description": "FLAX SEEDS, FLAX",
+     "brandOwner": "Safeway, Inc.",
+     "brandName": "SIGNATURE SELECT",
+     "gtinUpc": "021130196371",
+     "servingSize": 28.0,
+     "servingSizeUnit": "GRM",
+     "householdServingFullText": "1 oz",
+     "ingredients": "FLAX SEEDS.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 17.9
+      },
+      {
+       "nutrientId": 1004,
+       "value": 42.9
+      },
+      {
+       "nutrientId": 1005,
+       "value": 28.6
+      },
+      {
+       "nutrientId": 1008,
+       "value": 536
+      },
+      {
+       "nutrientId": 2000,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1079,
+       "value": 28.6
+      },
+      {
+       "nutrientId": 1087,
+       "value": 214
+      },
+      {
+       "nutrientId": 1089,
+       "value": 5.14
+      },
+      {
+       "nutrientId": 1092,
+       "value": 500
+      },
+      {
+       "nutrientId": 1093,
+       "value": 36.0
+      },
+      {
+       "nutrientId": 1114,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1235,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 3.57
+      }
+     ]
+    },
+    {
+     "fdcId": 2299083,
+     "description": "FLAX SEED BREAD, FLAX SEED",
+     "brandOwner": "Izzio Artisan Bakery LLC",
+     "brandName": "IZZIO ARTISAN BAKERY",
+     "gtinUpc": "657082001731",
+     "servingSize": 56.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "2 ONZ",
+     "ingredients": "ENRICHED FLOUR (WHEAT FLOUR, MALTED BARLEY FLOUR, NIACIN, REDUCED IRON, THIAMIN MONONITRATE, RIBOFLAVIN, FOLIC ACID), WATER, WHOLE SPELT FLOUR, WHOLE BROWN FLAX SEED, SALT, WHOLE WHEAT FLOUR.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 7.14
+      },
+      {
+       "nutrientId": 1004,
+       "value": 2.68
+      },
+      {
+       "nutrientId": 1005,
+       "value": 50.0
+      },
+      {
+       "nutrientId": 1008,
+       "value": 250
+      },
+      {
+       "nutrientId": 2000,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1079,
+       "value": 3.6
+      },
+      {
+       "nutrientId": 1087,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1089,
+       "value": 3.21
+      },
+      {
+       "nutrientId": 1093,
+       "value": 571
+      },
+      {
+       "nutrientId": 1104,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1162,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 0.0
+      }
+     ]
+    },
+    {
+     "fdcId": 2600539,
+     "description": "FLAX SEED",
+     "brandOwner": "Giant Eagle, Inc.",
+     "brandName": "GIANT EAGLE",
+     "gtinUpc": "030034946906",
+     "servingSize": 31.0,
+     "servingSizeUnit": "GRM",
+     "householdServingFullText": "3 Tbsp",
+     "ingredients": "FLAX SEEDS.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 19.4
+      },
+      {
+       "nutrientId": 1004,
+       "value": 35.5
+      },
+      {
+       "nutrientId": 1005,
+       "value": 32.3
+      },
+      {
+       "nutrientId": 1008,
+       "value": 548
+      },
+      {
+       "nutrientId": 2000,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1079,
+       "value": 25.8
+      },
+      {
+       "nutrientId": 1087,
+       "value": 194
+      },
+      {
+       "nutrientId": 1089,
+       "value": 6.45
+      },
+      {
+       "nutrientId": 1092,
+       "value": 871
+      },
+      {
+       "nutrientId": 1093,
+       "value": 32.0
+      },
+      {
+       "nutrientId": 1114,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1235,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 3.23
+      }
+     ]
+    }
+   ],
+   "off": null
+  },
+  {
+   "match": "oat",
+   "recordedQuery": "Kroger Old Fashioned Oats",
+   "fdc": [
+    {
+     "fdcId": 2428716,
+     "description": "OLD FASHIONED OATS, OLD FASHIONED",
+     "brandOwner": "Wegmans Food Markets, Inc. ",
+     "brandName": "WEGMANS",
+     "gtinUpc": "07789046412",
+     "servingSize": 40.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "1/2 cup",
+     "ingredients": "WHOLE GRAIN ROLLED OATS.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 12.5
+      },
+      {
+       "nutrientId": 1004,
+       "value": 6.25
+      },
+      {
+       "nutrientId": 1005,
+       "value": 67.5
+      },
+      {
+       "nutrientId": 1008,
+       "value": 375
+      },
+      {
+       "nutrientId": 2000,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1079,
+       "value": 10.0
+      },
+      {
+       "nutrientId": 1082,
+       "value": 2.0
+      },
+      {
+       "nutrientId": 1084,
+       "value": 5.0
+      },
+      {
+       "nutrientId": 1087,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1089,
+       "value": 4.0
+      },
+      {
+       "nutrientId": 1092,
+       "value": 375
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1110,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 1.25
+      },
+      {
+       "nutrientId": 1292,
+       "value": 2.5
+      },
+      {
+       "nutrientId": 1293,
+       "value": 2.5
+      }
+     ]
+    },
+    {
+     "fdcId": 2250984,
+     "description": "OLD FASHIONED OATS, OLD FASHIONED",
+     "brandOwner": "Nash Finch Company",
+     "brandName": "OUR FAMILY",
+     "gtinUpc": "070253298738",
+     "servingSize": 40.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "1/2 cup",
+     "ingredients": "100% WHOLE GRAIN ROLLED OATS.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 12.5
+      },
+      {
+       "nutrientId": 1004,
+       "value": 6.25
+      },
+      {
+       "nutrientId": 1005,
+       "value": 70.0
+      },
+      {
+       "nutrientId": 1008,
+       "value": 375
+      },
+      {
+       "nutrientId": 2000,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1079,
+       "value": 10.0
+      },
+      {
+       "nutrientId": 1082,
+       "value": 5.0
+      },
+      {
+       "nutrientId": 1084,
+       "value": 5.0
+      },
+      {
+       "nutrientId": 1087,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1089,
+       "value": 4.5
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1104,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1162,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 1.25
+      },
+      {
+       "nutrientId": 1292,
+       "value": 2.5
+      },
+      {
+       "nutrientId": 1293,
+       "value": 2.5
+      }
+     ]
+    },
+    {
+     "fdcId": 2626927,
+     "description": "OLD FASHIONED OATS, OLD FASHIONED",
+     "brandOwner": "Meijer, Inc.",
+     "brandName": "MEIJER",
+     "gtinUpc": "708820515901",
+     "servingSize": 40.0,
+     "servingSizeUnit": "GRM",
+     "householdServingFullText": "1/2 cup",
+     "ingredients": "WHOLE GRAIN ROLLED OATS.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 12.5
+      },
+      {
+       "nutrientId": 1004,
+       "value": 7.5
+      },
+      {
+       "nutrientId": 1005,
+       "value": 65.0
+      },
+      {
+       "nutrientId": 1008,
+       "value": 375
+      },
+      {
+       "nutrientId": 2000,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1079,
+       "value": 10.0
+      },
+      {
+       "nutrientId": 1087,
+       "value": 50.0
+      },
+      {
+       "nutrientId": 1089,
+       "value": 4.5
+      },
+      {
+       "nutrientId": 1092,
+       "value": 350
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1114,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1235,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 1.25
+      },
+      {
+       "nutrientId": 1292,
+       "value": 2.5
+      },
+      {
+       "nutrientId": 1293,
+       "value": 2.5
+      }
+     ]
+    }
+   ],
+   "off": null
+  },
+  {
+   "match": "almond",
+   "recordedQuery": "Mariani Sliced Almonds",
+   "fdc": [
+    {
+     "fdcId": 1864682,
+     "description": "MARIANI NUT COMPANY, ALMONDS, ALMONDS, ALMONDS",
+     "brandOwner": "Mariani Nut Co.Inc.",
+     "brandName": "MARIANI NUT COMPANY",
+     "gtinUpc": "076991003924",
+     "servingSize": 30.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "0.25 cup",
+     "ingredients": "ALMONDS",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 20.0
+      },
+      {
+       "nutrientId": 1004,
+       "value": 50.0
+      },
+      {
+       "nutrientId": 1005,
+       "value": 20.0
+      },
+      {
+       "nutrientId": 1008,
+       "value": 567
+      },
+      {
+       "nutrientId": 2000,
+       "value": 3.33
+      },
+      {
+       "nutrientId": 1079,
+       "value": 13.3
+      },
+      {
+       "nutrientId": 1087,
+       "value": 267
+      },
+      {
+       "nutrientId": 1089,
+       "value": 4.8
+      },
+      {
+       "nutrientId": 1092,
+       "value": 733
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1098,
+       "value": 1.0
+      },
+      {
+       "nutrientId": 1104,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1162,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 3.33
+      },
+      {
+       "nutrientId": 1292,
+       "value": 33.3
+      },
+      {
+       "nutrientId": 1293,
+       "value": 11.7
+      }
+     ]
+    },
+    {
+     "fdcId": 1662835,
+     "description": "MARIANI NUT COMPANY, WHOLE ALMONDS",
+     "brandOwner": "Mariani Nut Co.Inc.",
+     "brandName": "MARIANI NUT COMPANY",
+     "gtinUpc": "076991000404",
+     "servingSize": 30.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "0.25 cup",
+     "ingredients": "",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 20.0
+      },
+      {
+       "nutrientId": 1004,
+       "value": 50.0
+      },
+      {
+       "nutrientId": 1005,
+       "value": 20.0
+      },
+      {
+       "nutrientId": 1008,
+       "value": 567
+      },
+      {
+       "nutrientId": 2000,
+       "value": 3.33
+      },
+      {
+       "nutrientId": 1079,
+       "value": 13.3
+      },
+      {
+       "nutrientId": 1087,
+       "value": 133
+      },
+      {
+       "nutrientId": 1089,
+       "value": 2.4
+      },
+      {
+       "nutrientId": 1090,
+       "value": 267
+      },
+      {
+       "nutrientId": 1091,
+       "value": 500
+      },
+      {
+       "nutrientId": 1092,
+       "value": 733
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1098,
+       "value": 1.0
+      },
+      {
+       "nutrientId": 1101,
+       "value": 3.0
+      },
+      {
+       "nutrientId": 1104,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1162,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1166,
+       "value": 0.85
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 3.33
+      },
+      {
+       "nutrientId": 1292,
+       "value": 33.3
+      },
+      {
+       "nutrientId": 1293,
+       "value": 11.7
+      }
+     ]
+    },
+    {
+     "fdcId": 1523730,
+     "description": "MARIANI NUT COMPANY, BLANCHED SLIVERED ALMONDS",
+     "brandOwner": "Mariani Nut Co.Inc.",
+     "brandName": "MARIANI NUT COMPANY",
+     "gtinUpc": "076991000428",
+     "servingSize": 30.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "0.25 cup",
+     "ingredients": "",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 20.0
+      },
+      {
+       "nutrientId": 1004,
+       "value": 50.0
+      },
+      {
+       "nutrientId": 1005,
+       "value": 20.0
+      },
+      {
+       "nutrientId": 1008,
+       "value": 567
+      },
+      {
+       "nutrientId": 2000,
+       "value": 3.33
+      },
+      {
+       "nutrientId": 1079,
+       "value": 13.3
+      },
+      {
+       "nutrientId": 1087,
+       "value": 133
+      },
+      {
+       "nutrientId": 1089,
+       "value": 2.4
+      },
+      {
+       "nutrientId": 1090,
+       "value": 267
+      },
+      {
+       "nutrientId": 1091,
+       "value": 500
+      },
+      {
+       "nutrientId": 1092,
+       "value": 733
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1098,
+       "value": 1.0
+      },
+      {
+       "nutrientId": 1101,
+       "value": 3.0
+      },
+      {
+       "nutrientId": 1104,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1162,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1166,
+       "value": 0.85
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 3.33
+      },
+      {
+       "nutrientId": 1292,
+       "value": 33.3
+      },
+      {
+       "nutrientId": 1293,
+       "value": 11.7
+      }
+     ]
+    }
+   ],
+   "off": null
+  },
+  {
+   "match": "pecan",
+   "recordedQuery": "Member's Mark Natural Pecan Halves",
+   "fdc": [
+    {
+     "fdcId": 2048210,
+     "description": "MEMBER'S MARK, SHELLED WALNUTS",
+     "brandOwner": "Wal-Mart Stores, Inc.",
+     "brandName": "MEMBER'S MARK",
+     "gtinUpc": "078742142647",
+     "servingSize": 30.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "0.25 cup",
+     "ingredients": "WALNUTS.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 13.3
+      },
+      {
+       "nutrientId": 1004,
+       "value": 66.7
+      },
+      {
+       "nutrientId": 1005,
+       "value": 13.3
+      },
+      {
+       "nutrientId": 1008,
+       "value": 667
+      },
+      {
+       "nutrientId": 2000,
+       "value": 3.33
+      },
+      {
+       "nutrientId": 1079,
+       "value": 6.7
+      },
+      {
+       "nutrientId": 1087,
+       "value": 67.0
+      },
+      {
+       "nutrientId": 1089,
+       "value": 2.4
+      },
+      {
+       "nutrientId": 1092,
+       "value": 417
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1104,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1162,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 6.67
+      },
+      {
+       "nutrientId": 1292,
+       "value": 8.33
+      },
+      {
+       "nutrientId": 1293,
+       "value": 46.7
+      }
+     ]
+    },
+    {
+     "fdcId": 2048214,
+     "description": "MEMBER'S MARK, SHELLED WALNUTS",
+     "brandOwner": "Wal-Mart Stores, Inc.",
+     "brandName": "MEMBER'S MARK",
+     "gtinUpc": "078742142616",
+     "servingSize": 28.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "1 ONZ",
+     "ingredients": "WALNUTS.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 14.3
+      },
+      {
+       "nutrientId": 1004,
+       "value": 64.3
+      },
+      {
+       "nutrientId": 1005,
+       "value": 14.3
+      },
+      {
+       "nutrientId": 1008,
+       "value": 679
+      },
+      {
+       "nutrientId": 2000,
+       "value": 3.57
+      },
+      {
+       "nutrientId": 1079,
+       "value": 7.1
+      },
+      {
+       "nutrientId": 1087,
+       "value": 71.0
+      },
+      {
+       "nutrientId": 1089,
+       "value": 2.57
+      },
+      {
+       "nutrientId": 1090,
+       "value": 143
+      },
+      {
+       "nutrientId": 1091,
+       "value": 357
+      },
+      {
+       "nutrientId": 1092,
+       "value": 446
+      },
+      {
+       "nutrientId": 1093,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1098,
+       "value": 1.43
+      },
+      {
+       "nutrientId": 1101,
+       "value": 4.0
+      },
+      {
+       "nutrientId": 1104,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1162,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1253,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 5.36
+      },
+      {
+       "nutrientId": 1292,
+       "value": 8.93
+      },
+      {
+       "nutrientId": 1293,
+       "value": 46.4
+      }
+     ]
+    },
+    {
+     "fdcId": 2056507,
+     "description": "MEMBER'S MARK, ASSORTED DONUT HOLES",
+     "brandOwner": "Wal-Mart Stores, Inc.",
+     "brandName": "MEMBER'S MARK",
+     "gtinUpc": "078742124506",
+     "servingSize": 45.0,
+     "servingSizeUnit": "g",
+     "householdServingFullText": "2 DONUT HOLES",
+     "ingredients": "ENRICHED WHEAT FLOUR (FLOUR, MALTED BARLEY FLOUR, NIACIN, REDUCED IRON, THIAMINE MONONITRATE, RIBOFLAVIN, FOLIC ACID), WATER, PALM OIL, SUGAR, CONTAINS 2% OR LESS OF: SOYBEAN OIL, SOY FLOUR, BLUE 1, CANOLA OIL, CELLULOSE GUM, CITRIC ACID, DRIED BLUEBERRIES, EGGS, ENZYMES, GLUCONO DELTA-LACTONE, GUAR GUM, LEAVENING (BAKING SODA, SODIUM ACID PYROPHOSPHATE, SODIUM ALUMINUM PHOSPHATE), CORN SYRUP SOLIDS, DEXTROSE, SALT, MONO- AND DIGLYCERIDES, NATURAL AND ARTIFICIAL FLAVOR, CORN OIL, BETA CAROTENE COLOR, NONFAT MILK, PROPYLENE GLYCOL MONO- AND DIESTERS OF FATTY ACIDS, RED 40, SODIUM STEAROYL LACTYLATE, SOY LECITHIN, POTASSIUM SORBATE PRESERVATIVE, SODIUM PROPIONATE PRESERVATIVE, SORBIC ACID PRESERVATIVE, ALPHA-TOCOPHEROL PRESERVATIVE, CALCIUM PROPIONATE PRESERVATIVE, WHEAT GLUTEN, SODIUM ALGINATE, WHEAT STARCH, WHEY, CORNSTARCH, STABILIZER (CALCIUM CARBONATE, SUGAR, CALCIUM SULFATE, VEGETABLE GUM BLEND [AGAR-AGAR, LOCUST BEAN GUM], DEXTROSE, SODIUM PHOSPHATE), PALM OIL WITH LECITHIN, PALM OIL WITH CITRIC ACID ADDED AS A PRESERVATIVE, MALTODEXTRIN, MONOGLYCERIDES, XANTHAN GUM, RICE STARCH, TITANIUM DIOXIDE COLOR, NATURAL FLAVOR.",
+     "foodNutrients": [
+      {
+       "nutrientId": 1003,
+       "value": 4.44
+      },
+      {
+       "nutrientId": 1004,
+       "value": 22.2
+      },
+      {
+       "nutrientId": 1005,
+       "value": 44.4
+      },
+      {
+       "nutrientId": 1008,
+       "value": 400
+      },
+      {
+       "nutrientId": 2000,
+       "value": 20.0
+      },
+      {
+       "nutrientId": 1079,
+       "value": 2.2
+      },
+      {
+       "nutrientId": 1087,
+       "value": 44.0
+      },
+      {
+       "nutrientId": 1089,
+       "value": 1.6
+      },
+      {
+       "nutrientId": 1093,
+       "value": 489
+      },
+      {
+       "nutrientId": 1104,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1162,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1253,
+       "value": 22.0
+      },
+      {
+       "nutrientId": 1257,
+       "value": 0.0
+      },
+      {
+       "nutrientId": 1258,
+       "value": 10.0
+      }
+     ]
+    }
+   ],
+   "off": null
+  }
+ ]
+}

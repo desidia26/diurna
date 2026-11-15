@@ -8,6 +8,14 @@ class ActionStoreTest {
     private fun recorder(cap: Long = 20000, now: () -> Long = { 1000L }) =
         ActionRecorder(Files.createTempDirectory("actions").toFile(), maxBytes = cap, clock = now)
 
+    @Test fun scannerDetailsAreAllowlistedBoundedAndRedacted() {
+        val r = recorder(); r.enabled = true; r.knownSecrets = { listOf("private-test-secret") }
+        r.store.dispatch(Action.Event(Screen.DAY, "scan.camera_bind.failed", details = mapOf(
+            "exception" to "IllegalStateException", "message" to "private-test-secret", "arbitrary" to "discard-me")))
+        val log = r.snapshot().joinToString()
+        assertTrue(log.contains("IllegalStateException")); assertTrue(log.contains("REDACTED"))
+        assertFalse(log.contains("private-test-secret")); assertFalse(log.contains("discard-me"))
+    }
     @Test fun disabledIsNoOp() {
         val r = recorder(); r.store.dispatch(Action.Event(Screen.DAY, "food.add"))
         assertTrue(r.snapshot().isEmpty()); assertNull(r.registerAttachment(byteArrayOf(1), AttachmentKind.IMAGE))
@@ -45,6 +53,18 @@ class ActionStoreTest {
         val id = r.registerAttachment(byteArrayOf(1,2), AttachmentKind.IMAGE)!!
         assertEquals(1, r.attachments().size); assertEquals(id, r.attachments().single().id)
         assertNull(r.registerAttachment(ByteArray(30000), AttachmentKind.IMAGE))
+    }
+    @Test fun decisionLogAttachmentIsJsonOnlyAndRedacted() {
+        val r = recorder(); r.enabled = true; r.knownSecrets = { listOf("private-test-secret") }
+        assertNull(r.registerAttachment("not json".toByteArray(), AttachmentKind.DECISION_LOG))
+        val log = org.json.JSONObject().put("entries", org.json.JSONArray().put(org.json.JSONObject()
+            .put("text", "Answer: private-test-secret and xai-abcdefghijkl12 api_key=hunter2")))
+        val id = r.registerAttachment(log.toString().toByteArray(), AttachmentKind.DECISION_LOG)!!
+        val f = r.attachments().single { it.id == id }.file
+        assertTrue(f.name.endsWith(".json"))
+        val text = org.json.JSONObject(f.readText()).getJSONArray("entries").getJSONObject(0).getString("text")
+        assertFalse(text, text.contains("private-test-secret") || text.contains("xai-abcdefghijkl12") || text.contains("hunter2"))
+        assertTrue(text.startsWith("Answer: "))
     }
     @Test fun rejectsNonNumericBarcodeAndUntrustedMetadata() {
         val r = recorder(); r.enabled = true
