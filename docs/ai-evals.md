@@ -62,11 +62,22 @@ cd /path/to/diurna
 ./gradlew aiEval -Pprovider=claude -Pset=default
 ./gradlew aiEval -Pprovider=ollama -Pset=smoke
 ./gradlew aiEval -Pprovider=all -Pset=full
+# Package photos only, single-pass close-ups for comparison
+./gradlew aiEval -Pprovider=grok -Pset=default -Ptag=multi -Ppipeline=closeup
 ```
 
 For Ollama locally: install from https://ollama.com/download/linux (or the same checksum-verified tarball the workflow uses), `ollama serve`, `ollama pull qwen2.5:1.5b-instruct`, then run the gradle task above.
 
 Reports: `ai-evals/out/summary.md` and `ai-evals/out/results.json` (gitignored). In Actions, each provider job uploads its own artifact; a combined summary job merges them into `$GITHUB_STEP_SUMMARY` and `ai-eval-results`.
+
+### Package photos: crops, two passes and recorded lookups
+
+Package cases run the same pipeline as the phone (`PackageCrops` + `PackageTwoPass`): find each package, cut it out, ask pass 1 who each one is, look up its barcode or name, then read each crop with those records (pass 2). `-Ppipeline=twopass` (default) runs all of that; `-Ppipeline=closeup` skips pass 1 and the lookups and reads each crop once, for comparison. A non-required `crops` check in the report carries the boxes, AI calls, time per pass, lookups, guesses and conflicts.
+
+Both inputs that would otherwise vary are recorded, so runs are repeatable and CI makes **no network calls besides the AI provider**:
+
+- `ai-evals/detections.json`: the boxes ML Kit's bundled object detector finds in each package photo (score ≥ 0.5, top 5, as fractions of the upright photo). The harness crops from these instead of running ML Kit (it can't run on the JVM); `PackageDetectorTest` (androidTest) checks the on-device detector still finds the same packages (IoU ≥ 0.5) and plans the same crops. Add an entry for every new package image; a package case without one fails.
+- `ai-evals/lookups.json`: Open Food Facts and USDA FoodData Central answers, recorded once. `byCode` holds, per 13-digit GTIN, the OFF product JSON (as a string) and the USDA branded record (or `null`); `byName` holds, per lowercase `match` term, the USDA search results a name containing it gets. They go through the app's own parsers. A code or name not in the file is a miss, exactly like a product the databases don't know. To record a new product, save the public OFF product response and the USDA `foods/search` response (a `DEMO_KEY` is enough; never commit a personal key) into the same shape.
 
 ## Case sets
 
@@ -81,7 +92,7 @@ Expectations are **bands and tolerances**, not exact values (kcal ±%, macro ran
 ### Adding a case
 
 1. Edit the JSON under `ai-evals/cases/` (or add an image under `ai-evals/images/` — see `images/SOURCE.md`; only generate or use public-domain/CC0).
-2. Set `prompt` to `food`, `cardio`, `label`, `package`, `package_refine`, `density`, or `barcode_ingredients`. A `package_refine` case sets `input.previous` (a stored interpretation JSON under `ai-evals/refine/`) and `input.answer`; `input.image` is optional (omit it to test the text-only refinement used after the photo is deleted). Package cases can also set `expect.minProducts`, `expect.products` (each with `nameContainsAny`, `nutrients`, `servingGrams`), `expect.identityContainsAny`, `expect.questions` (`none` or `required`) and `expect.questionTopicsAny`. For detailed/ingredients food paths set `input.detailed` / `input.ingredients`.
+2. Set `prompt` to `food`, `cardio`, `label`, `package`, `package_refine`, `density`, or `barcode_ingredients`. A `package_refine` case sets `input.previous` (a stored interpretation JSON under `ai-evals/refine/`) and `input.answer`; `input.image` is optional (omit it to test the text-only refinement used after the photo is deleted). Package cases can also set `expect.minProducts`, `expect.maxProducts`, `expect.noPanelForAny` (products whose name/brand contains one of these, e.g. a background fruit box, must come back without panel numbers), `expect.products` (each with `nameContainsAny`, `nutrients`, `servingGrams` and `panel`: `true` = its panel must be read, `false` = no numbers; each expectation claims a different product, matched by name/brand first, then by its ingredients text for a package whose front isn't in view), `expect.identityContainsAny`, `expect.questions` (`none` or `required`) and `expect.questionTopicsAny`. For detailed/ingredients food paths set `input.detailed` / `input.ingredients`.
 3. Set `expect.outcome` to `estimate`, `not_food`, `not_food_or_zeros`, `reading`, `no_panel` (package: rejected or no panel numbers, never invented ones), or `reject`.
    Package cases use `expect.nutrients` (`{"kcal": {"min": 190, "max": 210}}`, keys from `PackagePrompt.NUTRIENT_KEYS`; add `"required": false` for values that are hard to read, so a miss is recorded but doesn't fail), `servingGrams`, `ingredientsContainsAny` and `requirePanel`. Bands come from what the photo actually shows; leave out anything you can't read confidently.
 4. Run `./gradlew aiEval -Pprovider=… -Pset=…` and adjust bands if a healthy model is consistently outside them.

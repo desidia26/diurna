@@ -81,6 +81,10 @@ interface EvalPackageClient {
     val providerId: String
     val model: String
     suspend fun read(photo: ByteArray): app.diurna.ai.PackagePhotoReading
+    /** One package's close-up crop, as [app.diurna.ai.PackageReader.readCloseUp]. */
+    suspend fun readCloseUp(photo: ByteArray): app.diurna.ai.PackagePhotoReading = read(photo)
+    /** The app's reader behind this client, for the two-pass pipeline; null when there isn't one. */
+    val reader: app.diurna.ai.PackageReader? get() = null
     suspend fun refine(photo: ByteArray?, previous: app.diurna.ai.PackagePhotoReading, answer: String): app.diurna.ai.PackagePhotoReading
 }
 
@@ -160,8 +164,9 @@ object EvalProviders {
             val pkg = object : EvalPackageClient {
                 override val providerId = id.id
                 override val model = model
-                private val reader = app.diurna.ai.GrokPackageReader({ key }, model)
+                override val reader = app.diurna.ai.GrokPackageReader({ key }, model)
                 override suspend fun read(photo: ByteArray) = reader.read(photo)
+                override suspend fun readCloseUp(photo: ByteArray) = reader.readCloseUp(photo)
                 override suspend fun refine(photo: ByteArray?, previous: app.diurna.ai.PackagePhotoReading, answer: String) = reader.refine(photo, previous, answer)
             }
             EvalClients(food, cardio, label, density, ingredientNutrition, ScoringMode.ACCURACY, pkg = pkg)
@@ -211,8 +216,9 @@ object EvalProviders {
             val pkg = object : EvalPackageClient {
                 override val providerId = id.id
                 override val model = model
-                private val reader = app.diurna.ai.ClaudePackageReader({ key }, model)
+                override val reader = app.diurna.ai.ClaudePackageReader({ key }, model)
                 override suspend fun read(photo: ByteArray) = reader.read(photo)
+                override suspend fun readCloseUp(photo: ByteArray) = reader.readCloseUp(photo)
                 override suspend fun refine(photo: ByteArray?, previous: app.diurna.ai.PackagePhotoReading, answer: String) = reader.refine(photo, previous, answer)
             }
             EvalClients(food, cardio, label, density, ingredientNutrition, ScoringMode.ACCURACY, pkg = pkg)

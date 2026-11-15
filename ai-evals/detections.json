@@ -1,0 +1,168 @@
+{
+ "description": "Package boxes for the eval fixtures, as the phone's package finder sees them: ML Kit object-detection 17.0.2's bundled localizer (object-detection-common 18.0.0, assets/mlkit_odt_localizer/localizer_with_validation.tflite + mobile_object_localizer_3_1_anchors.pb), run offline at 192x192 on the fixture as committed, SSD boxes decoded with the model's anchors, sigmoid score >= 0.5, NMS IoU 0.5, best five kept (ML Kit's multiple-object limit). box is [left, top, right, bottom] as fractions of the image. The harness reads crops from these boxes through the app's own PackageCrops; DetectorFixturesTest (androidTest) checks ML Kit on a device finds the same packages.",
+ "images": {
+  "images/real/pecans.jpg": [
+   {
+    "score": 0.68,
+    "box": [
+     0.026,
+     0.028,
+     0.941,
+     0.982
+    ]
+   }
+  ],
+  "images/real/craisins-rotated.jpg": [
+   {
+    "score": 0.7,
+    "box": [
+     0.023,
+     0.037,
+     0.977,
+     0.98
+    ]
+   },
+   {
+    "score": 0.52,
+    "box": [
+     0.625,
+     0.779,
+     0.944,
+     0.976
+    ]
+   }
+  ],
+  "images/real/flax-label.jpg": [
+   {
+    "score": 0.73,
+    "box": [
+     0.022,
+     0,
+     0.994,
+     0.988
+    ]
+   }
+  ],
+  "images/real/flax-barcode.jpg": [
+   {
+    "score": 0.75,
+    "box": [
+     0.581,
+     0.485,
+     0.809,
+     0.63
+    ]
+   }
+  ],
+  "images/real/almonds.jpg": [
+   {
+    "score": 0.75,
+    "box": [
+     0.468,
+     0.157,
+     0.671,
+     0.391
+    ]
+   }
+  ],
+  "images/label-cereal-synthetic.jpg": [
+   {
+    "score": 0.58,
+    "box": [
+     0.003,
+     0.031,
+     0.98,
+     0.935
+    ]
+   }
+  ],
+  "images/edge-abstract-shapes.jpg": [
+   {
+    "score": 0.78,
+    "box": [
+     0.185,
+     0.148,
+     0.814,
+     0.831
+    ]
+   }
+  ],
+  "images/real/montage-pecans-almonds-flax.jpg": [
+   {
+    "score": 0.71,
+    "box": [
+     0.006,
+     0.501,
+     0.487,
+     0.994
+    ]
+   },
+   {
+    "score": 0.66,
+    "box": [
+     0.526,
+     0.013,
+     0.979,
+     0.473
+    ]
+   },
+   {
+    "score": 0.66,
+    "box": [
+     0.064,
+     0.006,
+     0.429,
+     0.492
+    ]
+   }
+  ],
+  "images/real/oatmeal-six.jpg": [
+   {
+    "score": 0.7,
+    "box": [
+     0.532,
+     0,
+     0.803,
+     0.83
+    ]
+   },
+   {
+    "score": 0.63,
+    "box": [
+     0.064,
+     0,
+     0.385,
+     0.857
+    ]
+   },
+   {
+    "score": 0.63,
+    "box": [
+     0.713,
+     0.06,
+     0.996,
+     0.856
+    ]
+   },
+   {
+    "score": 0.62,
+    "box": [
+     0.323,
+     0.328,
+     0.568,
+     0.888
+    ]
+   },
+   {
+    "score": 0.53,
+    "box": [
+     0,
+     0.442,
+     0.218,
+     0.995
+    ]
+   }
+  ],
+  "images/label-oats-dual-column-synthetic.jpg": []
+ }
+}

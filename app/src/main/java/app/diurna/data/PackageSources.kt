@@ -60,3 +60,24 @@ fun offMergeInput(s: OffSnapshot): PackageMerge.Input? {
 private fun gramsInText(text: String): Double? =
     Regex("""(\d+(?:\.\d+)?)\s*g\b""", RegexOption.IGNORE_CASE).find(text)?.groupValues?.get(1)
         ?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 && it <= 1_000 }
+
+/** A USDA branded record as pass-2 context ([app.diurna.ai.PackageTwoPass]); null without per-100 g values. */
+fun knownFromFdc(f: FdcBrandedFood, byName: Boolean): app.diurna.ai.KnownFacts? {
+    val input = fdcMergeInput(f)
+    if (input.per100g.isEmpty()) return null
+    return app.diurna.ai.KnownFacts("usda_branded", listOfNotNull(f.brand, f.description).joinToString(" ").take(80), byName,
+        input.per100g, input.servingGrams, input.servingText)
+}
+
+/** An Open Food Facts product as pass-2 context; null without per-100 g values. */
+fun knownFromOff(snap: OffSnapshot, title: String, byName: Boolean): app.diurna.ai.KnownFacts? {
+    val input = offMergeInput(snap) ?: return null
+    if (input.per100g.isEmpty()) return null
+    return app.diurna.ai.KnownFacts("open_food_facts", title.ifBlank { "Open Food Facts product" }.take(80), byName, input.per100g, input.servingGrams, input.servingText)
+}
+
+/** An Open Food Facts product JSON (API or search result) as pass-2 context. */
+fun knownFromOffJson(json: String, byName: Boolean): app.diurna.ai.KnownFacts? {
+    val snap = parseOffSnapshot(json) ?: return null
+    return knownFromOff(snap, listOfNotNull(OnePhotoCapture.offBrand(json), offProductName(json)).joinToString(" "), byName)
+}
