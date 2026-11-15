@@ -13,7 +13,14 @@ import kotlin.math.max
  * that disagree are kept on the field for the confirm screen, never averaged in.
  */
 object PackageMerge {
-    enum class Source(val wire: String) { LABEL("label"), FDC_BRANDED("fdc_branded"), OFF("off") }
+    /** In precedence order. [MANUAL] is a value typed on the confirm screen; it's never a merge input. */
+    enum class Source(val wire: String) {
+        MANUAL("manual"), LABEL("label"), FDC_BRANDED("fdc_branded"), OFF("off");
+
+        companion object {
+            fun ofWire(w: String?): Source? = entries.firstOrNull { it.wire == w }
+        }
+    }
 
     enum class Flag {
         /** Label numbers are per serving but no source knows the serving's grams. */

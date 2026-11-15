@@ -61,6 +61,8 @@ data class IngredientDraft(
     val fdcId: Int? = null,
     val barcode: String? = null,
     val sourceMealId: Long? = null,
+    /** One-photo capture details, kept with the line through edits. */
+    val captured: app.diurna.data.CapturedFacts? = null,
 ) {
     fun toEntity(mealId: Long, position: Int) = RecipeIngredientEntity(
         mealId = mealId,
@@ -105,6 +107,7 @@ data class IngredientDraft(
         fdcId = fdcId,
         barcode = barcode,
         sourceMealId = sourceMealId,
+        captured = captured,
     )
 }
 
@@ -127,6 +130,7 @@ fun RecipeIngredientEntity.toDraft() = IngredientDraft(
     fdcId = fdcId,
     barcode = barcode,
     sourceMealId = sourceMealId,
+    captured = captured,
 )
 
 /**
