@@ -401,3 +401,92 @@ fun OffSnapshot.servingGrams(): Double {
     }
     return basisGrams
 }
+
+/**
+ * Codes to ask Open Food Facts for, best first. A UPC-A is stored as EAN-13 with a leading 0, but
+ * some OFF records only exist under the 12-digit spelling, so that is tried second.
+ */
+fun barcodeSpellings(code: String): List<String> =
+    if (code.length == 13 && code[0] == '0') listOf(code, code.substring(1)) else listOf(code)
+
+/** Why a product Open Food Facts does have can't fill a meal form. [wire] goes in debug logs. */
+enum class OffProblem(val wire: String, val message: String) {
+    NO_NUTRITION("no_nutrition", "Open Food Facts has this product but no nutrition facts for it."),
+    NO_CALORIES("no_calories", "Open Food Facts has this product but no calories for it."),
+    IMPLAUSIBLE("implausible", "Open Food Facts' numbers for this product look wrong."),
+}
+
+/** What an Open Food Facts lookup found, keeping "no such product" apart from "no usable numbers". */
+sealed interface OffLookup {
+    /** [code] is the spelling that answered. */
+    data class Found(val code: String, val json: String) : OffLookup
+    data class Incomplete(val code: String, val json: String, val problem: OffProblem) : OffLookup
+    data class NoProduct(val tried: List<String>) : OffLookup
+    /** OFF answered with something that isn't a product response. */
+    data class Unreadable(val code: String) : OffLookup
+}
+
+/**
+ * Asks [source] for each of [barcodeSpellings] until one has usable numbers. Network failures
+ * propagate so the caller can say it couldn't connect.
+ */
+suspend fun lookupOff(code: String, source: ProductSource): OffLookup {
+    val tried = mutableListOf<String>()
+    var incomplete: OffLookup.Incomplete? = null
+    var unreadable: OffLookup.Unreadable? = null
+    for (spelling in barcodeSpellings(code)) {
+        tried += spelling
+        val json = source.fetch(spelling) ?: continue
+        val root = try { JSONObject(json) } catch (_: JSONException) {
+            if (unreadable == null) unreadable = OffLookup.Unreadable(spelling)
+            continue
+        }
+        if (root.optInt("status", 1) == 0) continue
+        val p = root.optJSONObject("product") ?: continue
+        if (parseOffProduct(json) != null) return OffLookup.Found(spelling, json)
+        if (incomplete == null) incomplete = OffLookup.Incomplete(spelling, json, offProblem(p))
+    }
+    return incomplete ?: unreadable ?: OffLookup.NoProduct(tried)
+}
+
+private fun offProblem(p: JSONObject): OffProblem {
+    val n = p.optJSONObject("nutriments")
+    if (n == null || n.length() == 0) return OffProblem.NO_NUTRITION
+    val hasEnergy = n.keys().asSequence().any {
+        (it.startsWith("energy-kcal_") || it == "energy_100g" || it == "energy_serving") &&
+            n.opt(it)?.toString()?.toDoubleOrNull()?.let { v -> v.isFinite() && v >= 0 } == true
+    }
+    return if (hasEnergy) OffProblem.IMPLAUSIBLE else OffProblem.NO_CALORIES
+}
+
+/** "Name (Brand)" from an OFF product response, for prefilling a manual form; null when absent. */
+fun offProductName(json: String): String? = try {
+    val p = JSONObject(json).optJSONObject("product")
+    val name = cleanText(p?.optString("product_name").orEmpty(), MAX_NAME)
+    val brand = cleanText(p?.optString("brands").orEmpty().split(",").first(), MAX_NAME)
+    when {
+        name.isEmpty() && brand.isEmpty() -> null
+        brand.isEmpty() || name.contains(brand, ignoreCase = true) -> name.ifEmpty { brand }
+        else -> "$name ($brand)".take(MAX_NAME)
+    }
+} catch (_: JSONException) {
+    null
+}
+
+/**
+ * A snapshot for a product OFF knows but can't fill numbers for: name, serving and ingredients
+ * are kept for the manual form; [OffSnapshot.lookupOk] stays false so nothing reads it as macros.
+ */
+fun offIdentitySnapshot(json: String, at: Long): OffSnapshot = try {
+    val p = JSONObject(json).optJSONObject("product")
+    OffSnapshot(
+        productName = p?.let { cleanText(it.optString("product_name"), MAX_NAME).ifEmpty { null } },
+        servingSize = p?.let { cleanText(it.optString("serving_size"), MAX_NOTE).ifEmpty { null } },
+        lookedUpAt = at,
+        lookupOk = false,
+        ingredientsText = p?.let { cleanText(it.optString("ingredients_text"), MAX_INGREDIENTS_TEXT).ifEmpty { null } },
+        ingredientsTextEn = p?.let { cleanText(it.optString("ingredients_text_en"), MAX_INGREDIENTS_TEXT).ifEmpty { null } },
+    )
+} catch (_: JSONException) {
+    OffSnapshot.failed(at)
+}
