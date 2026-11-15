@@ -1,5 +1,8 @@
 package app.diurna.ui
 
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
 import app.diurna.domain.FoodLine
 import app.diurna.data.totals
 import androidx.compose.ui.unit.Dp
@@ -252,12 +255,26 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         MealDialog("Save as meal", seed, detailed = detailed, labelHost = vm, onDismiss = { savingAsMeal = null }, onSave = { vm.saveEntryAsMeal(f.id, it) })
     }
     editing?.let { f ->
-        val gallery by vm.entryPhotos(f.id).collectAsStateWithLifecycle(emptyList())
-        FoodEditDialog(f, vm, initialPhotos = gallery.ifEmpty { listOfNotNull(f.photo) }, onDismiss = { editing = null }) { newText, newTime, newPhotos ->
-            vm.editFood(f.id, newText, newTime, newPhotos)
-            editing = null
+        val initial = rememberSavedGallery(f.id, f.photo, vm.entryPhotos(f.id))
+        if (initial != null) {
+            LaunchedEffect(f.id) { vm.logEditOpened(initial.size) }
+            FoodEditDialog(f, vm, initialPhotos = initial, onDismiss = { editing = null }) { newText, newTime, newPhotos ->
+                vm.editFood(f.id, newText, newTime, newPhotos)
+                editing = null
+            }
         }
     }
+}
+
+/**
+ * The photos the edit dialog starts with for an entry: its saved gallery, or just the primary photo
+ * for old entries. Null until the gallery has loaded, so the dialog (which keeps its first value)
+ * never starts with only the primary photo and then saves the others away.
+ */
+@Composable
+internal fun rememberSavedGallery(entryId: Long, primary: String?, gallery: kotlinx.coroutines.flow.Flow<List<String>>): List<String>? {
+    val loaded by produceState<List<String>?>(null, entryId) { value = gallery.first() }
+    return loaded?.ifEmpty { listOfNotNull(primary) }
 }
 
 /** Intake against targets: calories large with what's left, then protein, carbs and fat side by side. */

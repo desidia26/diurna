@@ -57,6 +57,9 @@ class FoodRepository(
         edit(old, text, time, gallery(old))
     }
 
+    /** An entry's photos in gallery order; entries from before the gallery have only their primary photo. */
+    suspend fun gallery(id: Long): List<String> = food.get(id)?.let { gallery(it) }.orEmpty()
+
     private suspend fun gallery(entry: FoodEntryEntity): List<String> =
         photoStore.forEntry(entry.id).map { it.fileName }.ifEmpty { listOfNotNull(entry.photo) }
 

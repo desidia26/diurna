@@ -7,7 +7,7 @@ through this same boundary; this is not yet a WebView bridge or replay engine.
 - `container.actions.dispatch(Action.Event(Screen.DAY, "feature.operation", correlationId, result, latencyMs))`
 - `Action.Text(screen, TextField.FOOD|EXERCISE|RECIPE|SEARCH|URL, value)` is restricted to explicitly non-secret fields; disabled by default.
 - `Action.Event(..., details = mapOf(...))` carries short values under allowlisted keys only (`host`, `outcome`,
-  `bytes`, `truncated`, `ingredients`, `http_status`, `photos`, `reason`,
+  `bytes`, `truncated`, `ingredients`, `http_status`, `photos`, `photos_before`, `photos_after`, `reason`,
   `photos_added`, `photos_removed`, `photos_moved`); values are fixed tokens or numbers, redacted and capped at 256 chars.
 - `container.debug.registerAttachment(bytes: ByteArray, kind: AttachmentKind, meta: Map<String,String> = emptyMap(), correlationId: String = UUID...) : String?`
 - Same overload with `file: File`; call on IO dispatcher. Copies immediately, before a temporary file is deleted. Null means disabled, invalid, oversized, evicted or unreadable. IDs are opaque UUIDs; never filenames supplied by callers.
@@ -42,6 +42,8 @@ Food estimates (`ai.food`) carry `photos` on STARTED: how many of the entry's ph
 model (all of them, in gallery order, up to 5). Only the count is logged, never the photos.
 An edit that re-estimates an entry logs `food.reestimate` with `reason` (`text`, `photos` or
 `text_and_photos`) and `photos_added`, `photos_removed`, `photos_moved` counts. Text and photo names are never logged.
+Editing a food logs `food.edit_open` (`photos`: how many the dialog shows) and, on save, `food.edit_photos`
+(`photos_before`, `photos_after`, `photos_added`, `photos_removed`). Counts only; photo names and contents are never logged.
 Density AI, most local dialog switches and service lifecycle events are coverage gaps.
 No payload replay, screenshots, HTTP bodies or deterministic state reconstruction is claimed.
 

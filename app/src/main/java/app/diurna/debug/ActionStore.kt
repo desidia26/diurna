@@ -72,7 +72,7 @@ class ActionRecorder(private val dir: File, private val maxBytes: Long = 20L * 1
                     a.details.filterKeys { it in setOf("exception", "message", "frames", "format", "checksum", "candidates", "source", "variant",
                         "raw_candidates", "accepted_candidates", "lines", "numeric_runs", "rejected_runs",
                         "host", "outcome", "bytes", "truncated", "ingredients", "http_status", "photos",
-                        "reason", "photos_added", "photos_removed", "photos_moved") }
+                        "reason", "photos_added", "photos_removed", "photos_moved", "photos_before", "photos_after") }
                         .forEach { (key, value) -> details.put(key, Redaction.text(value.take(256), knownSecrets())) }
                     if (details.length() > 0) json.put("details", details)
                 }
