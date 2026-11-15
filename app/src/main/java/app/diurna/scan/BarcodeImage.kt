@@ -36,7 +36,12 @@ val LocalScanDiagnostics = staticCompositionLocalOf { ScanDiagnostics.NONE }
 const val MAX_SCAN_BYTES = 2L * 1024 * 1024
 
 /** Private, metadata-free JPEG is available to diagnostics only until this call returns. */
-suspend fun readCapturedBarcode(raw: File, diagnostics: ScanDiagnostics = ScanDiagnostics.NONE): ScanOutcome =
+suspend fun readCapturedBarcode(
+    raw: File,
+    diagnostics: ScanDiagnostics = ScanDiagnostics.NONE,
+    /** When set, receives each code the detector found in the unmodified photo: key → horizontal centre (0–1). */
+    positions: MutableMap<String, Double>? = null,
+): ScanOutcome =
     withContext(Dispatchers.IO) {
         var saved: File? = null
         try {
@@ -67,14 +72,18 @@ suspend fun readCapturedBarcode(raw: File, diagnostics: ScanDiagnostics = ScanDi
             } finally { normalized.recycle() }
             // Do not retain the larger raw capture while trying the variants.
             raw.delete()
-            withTimeout(20_000) { readBarcodePixels(pixels, diagnostics) }
+            withTimeout(20_000) { readBarcodePixels(pixels, diagnostics, positions) }
         } finally {
             raw.delete()
             saved?.delete()
         }
     }
 
-suspend fun readBarcodePixels(pixels: ScanPixels, diagnostics: ScanDiagnostics = ScanDiagnostics.NONE): ScanOutcome =
+suspend fun readBarcodePixels(
+    pixels: ScanPixels,
+    diagnostics: ScanDiagnostics = ScanDiagnostics.NONE,
+    positions: MutableMap<String, Double>? = null,
+): ScanOutcome =
     withContext(Dispatchers.Default) {
         val scanner = BarcodeScanning.getClient(BarcodeScannerOptions.Builder()
             .setBarcodeFormats(PRODUCT_FORMATS.first(), *PRODUCT_FORMATS.drop(1).toIntArray()).build())
@@ -87,7 +96,13 @@ suspend fun readBarcodePixels(pixels: ScanPixels, diagnostics: ScanDiagnostics =
                         code.rawValue?.let { ProductCode(it, code.format == Barcode.FORMAT_UPC_E).isValid() } == true
                     }.toString()))
                 detected.mapNotNull { barcode ->
-                    barcode.rawValue?.let { ProductCode(it, barcode.format == Barcode.FORMAT_UPC_E) }
+                    barcode.rawValue?.let { ProductCode(it, barcode.format == Barcode.FORMAT_UPC_E) }?.also { code ->
+                        // Only the unmodified photo's coordinates say where a package is; crops and rotations don't.
+                        val box = barcode.boundingBox
+                        if (positions != null && variant == app.diurna.domain.ScanVariant.ORIGINAL && box != null && code.isValid()) {
+                            code.key?.let { positions[it] = (box.exactCenterX() / image.width).toDouble().coerceIn(0.0, 1.0) }
+                        }
+                    }
                 }
             }, { emptyList() }, diagnostics, recognizeLayout = { image ->
                 try {

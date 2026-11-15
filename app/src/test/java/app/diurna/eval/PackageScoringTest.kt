@@ -89,4 +89,56 @@ class PackageScoringTest {
             assertTrue(c.id, c.expect.nutrients.keys.all { it in app.diurna.ai.PackagePrompt.NUTRIENT_KEYS })
         }
     }
+
+    private fun photo(vararg p: PackageReading, questions: List<app.diurna.ai.PackageQuestion> = emptyList()) =
+        app.diurna.ai.PackagePhotoReading(p.toList(), questions)
+
+    @Test fun multiProductCaseMatchesEachProductByName() {
+        val case = EvalCase("m", "package", input = CaseInput(image = "x.jpg"), expect = CaseExpect(outcome = "reading", minProducts = 2,
+            products = listOf(ProductExpect(listOf("pecan"), mapOf("kcal" to NutrientExpect(190.0, 210.0))),
+                ProductExpect(listOf("almond"), mapOf("kcal" to NutrientExpect(160.0, 180.0))))))
+        val pecan = reading(mapOf("kcal" to 200.0))
+        val almond = reading(mapOf("kcal" to 170.0)).copy(productName = "Sliced Almonds", brand = "Mariani")
+        assertTrue(EvalScoring.scorePackagePhoto(case, photo(pecan, almond)).passed)
+        assertFalse(EvalScoring.scorePackagePhoto(case, photo(pecan)).passed)
+        assertFalse(EvalScoring.scorePackagePhoto(case, photo(pecan, almond.copy(perServing = mapOf("kcal" to 300.0)))).passed)
+    }
+
+    @Test fun questionsAreRequiredOrForbiddenAsTheCaseSays() {
+        val q = app.diurna.ai.PackageQuestion(0, "serving_basis", "Dry or prepared?", listOf("Dry"))
+        val ask = EvalCase("q", "package", input = CaseInput(image = "x.jpg"), expect = CaseExpect(outcome = "reading", questions = "required", questionTopicsAny = listOf("serving_basis")))
+        val none = EvalCase("n", "package", input = CaseInput(image = "x.jpg"), expect = CaseExpect(outcome = "reading", questions = "none"))
+        val r = reading(mapOf("kcal" to 200.0))
+        assertTrue(EvalScoring.scorePackagePhoto(ask, photo(r, questions = listOf(q))).passed)
+        assertFalse(EvalScoring.scorePackagePhoto(ask, photo(r)).passed)
+        assertFalse(EvalScoring.scorePackagePhoto(ask, photo(r, questions = listOf(q.copy(topic = "other")))).passed)
+        assertTrue(EvalScoring.scorePackagePhoto(none, photo(r)).passed)
+        assertFalse(EvalScoring.scorePackagePhoto(none, photo(r, questions = listOf(q))).passed)
+    }
+
+    @Test fun identityCaseNeedsTheNameAndNoNumbers() {
+        val case = EvalCase("i", "package", input = CaseInput(image = "x.jpg"), expect = CaseExpect(outcome = "no_panel", identityContainsAny = listOf("flax")))
+        val front = PackageReading(false, "Flax Seeds", "Roots Circle", "", null, null, emptyMap(), null)
+        assertTrue(EvalScoring.scorePackagePhoto(case, photo(front)).passed)
+        assertFalse(EvalScoring.scorePackagePhoto(case, photo(front.copy(productName = "Seeds"))).passed)
+        assertFalse(EvalScoring.scorePackagePhoto(case, photo(front.copy(perServing = mapOf("kcal" to 45.0)))).passed)
+    }
+
+    @Test fun shippedRefineCasesHaveAParseablePreviousReadingAndAnAnswer() {
+        val root = listOf(File("../ai-evals"), File("ai-evals")).first { it.isDirectory }
+        val all = EvalCases.load(File(root, "cases"), "default").cases
+        val refine = all.filter { it.prompt == "package_refine" }
+        assertTrue(refine.size >= 2)
+        assertTrue("a text-only refinement is covered", refine.any { it.input.image == null })
+        refine.forEach { c ->
+            app.diurna.ai.PackagePrompt.parse(File(root, c.input.previous!!).readText())
+            assertTrue(c.id, !c.input.answer.isNullOrBlank())
+            c.input.image?.let { assertTrue(c.id, File(root, it).isFile) }
+        }
+        val pkg = all.filter { it.prompt == "package" }
+        assertTrue(pkg.any { it.expect.questions == "required" })
+        assertTrue(pkg.any { it.expect.questions == "none" })
+        assertTrue(pkg.any { (it.expect.minProducts ?: 0) >= 3 })
+        assertTrue(pkg.any { it.expect.identityContainsAny.isNotEmpty() })
+    }
 }

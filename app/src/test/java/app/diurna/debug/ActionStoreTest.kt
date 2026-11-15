@@ -54,6 +54,18 @@ class ActionStoreTest {
         assertEquals(1, r.attachments().size); assertEquals(id, r.attachments().single().id)
         assertNull(r.registerAttachment(ByteArray(30000), AttachmentKind.IMAGE))
     }
+    @Test fun decisionLogAttachmentIsJsonOnlyAndRedacted() {
+        val r = recorder(); r.enabled = true; r.knownSecrets = { listOf("private-test-secret") }
+        assertNull(r.registerAttachment("not json".toByteArray(), AttachmentKind.DECISION_LOG))
+        val log = org.json.JSONObject().put("entries", org.json.JSONArray().put(org.json.JSONObject()
+            .put("text", "Answer: private-test-secret and xai-abcdefghijkl12 api_key=hunter2")))
+        val id = r.registerAttachment(log.toString().toByteArray(), AttachmentKind.DECISION_LOG)!!
+        val f = r.attachments().single { it.id == id }.file
+        assertTrue(f.name.endsWith(".json"))
+        val text = org.json.JSONObject(f.readText()).getJSONArray("entries").getJSONObject(0).getString("text")
+        assertFalse(text, text.contains("private-test-secret") || text.contains("xai-abcdefghijkl12") || text.contains("hunter2"))
+        assertTrue(text.startsWith("Answer: "))
+    }
     @Test fun rejectsNonNumericBarcodeAndUntrustedMetadata() {
         val r = recorder(); r.enabled = true
         assertNull(r.registerAttachment("secret=data".toByteArray(), AttachmentKind.BARCODE))

@@ -291,18 +291,59 @@ object EvalScoring {
         case: EvalCase,
         reading: app.diurna.ai.PackageReading,
         mode: ScoringMode = ScoringMode.ACCURACY,
+    ): CaseScore = scorePackagePhoto(case, app.diurna.ai.PackagePhotoReading(listOf(reading)), mode)
+
+    private fun identity(p: app.diurna.ai.PackageReading) = "${p.brand} ${p.productName}"
+
+    /**
+     * Whole-photo scoring. Single-product bands apply to the primary product (the first with a
+     * panel, else the first); [CaseExpect.products] match products by name; questions are
+     * checked as asked-or-not.
+     */
+    fun scorePackagePhoto(
+        case: EvalCase,
+        photo: app.diurna.ai.PackagePhotoReading,
+        mode: ScoringMode = ScoringMode.ACCURACY,
     ): CaseScore {
         val bandsRequired = mode == ScoringMode.ACCURACY
         val e = case.expect
         val checks = mutableListOf<CheckResult>()
-        checks += CheckResult("parsed", true, "PackageReading panel=${reading.hasPanel} values=${reading.perServing.size}")
-        checks += CheckResult(
-            "non_negative", reading.perServing.values.all { it >= 0 && it.isFinite() }, "ok",
-        )
+        val all = photo.products
+        checks += CheckResult("parsed", true, "products=${all.size} panels=${all.count { it.hasPanel }} questions=${photo.questions.size}")
+        checks += CheckResult("non_negative", all.all { p -> p.perServing.values.all { it >= 0 && it.isFinite() } }, "ok")
+        e.minProducts?.let { n -> checks += CheckResult("min_products", all.size >= n, "got ${all.size} want >= $n", required = bandsRequired) }
+        if (e.identityContainsAny.isNotEmpty()) {
+            checks += CheckResult("identity", all.any { p -> e.identityContainsAny.any { identity(p).contains(it, ignoreCase = true) } },
+                "got ${all.map(::identity)}", required = bandsRequired)
+        }
+        when (e.questions) {
+            "none" -> checks += CheckResult("no_questions", photo.questions.isEmpty(), "got ${photo.questions.map { it.text }}", required = bandsRequired)
+            "required" -> {
+                checks += CheckResult("asks_question", photo.questions.isNotEmpty(), "got none", required = bandsRequired)
+                if (e.questionTopicsAny.isNotEmpty()) checks += CheckResult("question_topic",
+                    photo.questions.any { it.topic in e.questionTopicsAny }, "got ${photo.questions.map { it.topic }}", required = bandsRequired)
+            }
+        }
+        e.products.forEach { pe ->
+            val p = all.firstOrNull { p -> pe.nameContainsAny.any { identity(p).contains(it, ignoreCase = true) } }
+            val tag = pe.nameContainsAny.first()
+            checks += CheckResult("product_$tag", p != null, "got ${all.map(::identity)}", required = bandsRequired)
+            if (p != null) {
+                pe.servingGrams?.let { r -> checks += CheckResult("${tag}_serving_grams", p.servingGrams != null && r.contains(p.servingGrams!!),
+                    "got ${p.servingGrams}", required = bandsRequired) }
+                pe.nutrients.forEach { (key, band) ->
+                    val v = p.perServing[key]
+                    checks += CheckResult("${tag}_$key", v != null && band.contains(v), "got ${v ?: "unknown"} want ${band.min}-${band.max}",
+                        required = bandsRequired && band.required)
+                }
+            }
+        }
+        val reading = all.firstOrNull { it.hasPanel } ?: all.firstOrNull()
+            ?: app.diurna.ai.PackageReading(false, "", "", "", null, null, emptyMap(), null)
         when (e.outcome) {
             "no_panel" -> checks += CheckResult(
-                "no_invented_numbers", reading.perServing.isEmpty(),
-                "got ${reading.perServing.keys}", required = bandsRequired,
+                "no_invented_numbers", all.all { it.perServing.isEmpty() },
+                "got ${all.map { it.perServing.keys }}", required = bandsRequired,
             )
             "reading" -> {
                 if (e.requirePanel) {

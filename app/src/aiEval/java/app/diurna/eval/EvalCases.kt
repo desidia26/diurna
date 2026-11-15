@@ -62,6 +62,23 @@ data class CaseExpect(
     val ingredientsContainsAny: List<String> = emptyList(),
     /** package: a Nutrition Facts panel must have been read. */
     val requirePanel: Boolean = false,
+    /** package: at least this many products in the photo. */
+    val minProducts: Int? = null,
+    /** package: each listed product must be found (by name/brand) and meet its own bands. */
+    val products: List<ProductExpect> = emptyList(),
+    /** package: some product's brand + name contains one of these (front-of-package identification). */
+    val identityContainsAny: List<String> = emptyList(),
+    /** package: "none" (a clear label asks nothing) or "required" (ambiguity must be asked about); null = not checked. */
+    val questions: String? = null,
+    /** package with questions=required: some question has one of these topics. */
+    val questionTopicsAny: List<String> = emptyList(),
+)
+
+/** One product in a multi-product package photo. */
+data class ProductExpect(
+    val nameContainsAny: List<String>,
+    val nutrients: Map<String, NutrientExpect> = emptyMap(),
+    val servingGrams: DoubleRangeExpect? = null,
 )
 
 data class CaseInput(
@@ -82,6 +99,10 @@ data class CaseInput(
     val ingredients: Boolean = false,
     /** Density prompt: "volume" or "each". */
     val unitKind: String? = null,
+    /** package_refine: the previous interpretation (stored JSON, path under ai-evals/). */
+    val previous: String? = null,
+    /** package_refine: the person's answer. */
+    val answer: String? = null,
 )
 
 data class EvalCase(
@@ -158,6 +179,8 @@ object EvalCases {
                     detailed = input.path("detailed").asBoolean(false),
                     ingredients = input.path("ingredients").asBoolean(false),
                     unitKind = input.path("unitKind").takeIf { it.isTextual }?.asText(),
+                    previous = input.path("previous").takeIf { it.isTextual }?.asText(),
+                    answer = input.path("answer").takeIf { it.isTextual }?.asText(),
                 ),
                 expect = CaseExpect(
                     outcome = expect.path("outcome").asText("estimate"),
@@ -183,6 +206,17 @@ object EvalCases {
                     ingredientsContainsAny = expect.path("ingredientsContainsAny").takeIf { it.isArray }
                         ?.map { it.asText() }.orEmpty(),
                     requirePanel = expect.path("requirePanel").asBoolean(false),
+                    minProducts = expect.path("minProducts").takeIf { it.isNumber }?.asInt(),
+                    products = expect.path("products").takeIf { it.isArray }?.map { p ->
+                        ProductExpect(
+                            p.path("nameContainsAny").map { it.asText() },
+                            nutrientBands(p.path("nutrients")),
+                            doubleRange(p.path("servingGrams")),
+                        )
+                    }.orEmpty(),
+                    identityContainsAny = expect.path("identityContainsAny").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
+                    questions = expect.path("questions").takeIf { it.isTextual }?.asText(),
+                    questionTopicsAny = expect.path("questionTopicsAny").takeIf { it.isArray }?.map { it.asText() }.orEmpty(),
                 ),
             )
         }

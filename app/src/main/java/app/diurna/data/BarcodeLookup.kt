@@ -45,6 +45,24 @@ fun expandUpcE(code: String): String? {
     return "$ns$body$check"
 }
 
+/** Name search for product identification; a fake in tests. Returns the raw JSON, or null. */
+fun interface ProductSearch {
+    suspend fun search(query: String): String?
+}
+
+/**
+ * Products from an Open Food Facts search answer, each wrapped as a single-product answer
+ * (`{"status":1,"product":…}`) so the barcode parsers read it; at most [max], untrusted like any OFF data.
+ */
+fun parseOffSearch(json: String, max: Int = 3): List<Pair<String?, String>> = try {
+    val arr = org.json.JSONObject(json).optJSONArray("products") ?: org.json.JSONArray()
+    (0 until minOf(arr.length(), 10)).mapNotNull { i ->
+        val p = arr.optJSONObject(i) ?: return@mapNotNull null
+        val code = p.optString("code").filter { it.isDigit() }.takeIf { it.length in 8..14 }
+        code to org.json.JSONObject().put("status", 1).put("product", p).toString()
+    }.take(max)
+} catch (_: org.json.JSONException) { emptyList() }
+
 /** Where product data comes from; a fake in tests. */
 fun interface ProductSource {
     /** The product's JSON, or null if the barcode isn't known. Throws when it can't be reached. */
@@ -60,12 +78,23 @@ fun interface ProductSource {
  * ever parsed into numbers and short plain text by [parseOffProduct], and shown for a check
  * before anything is saved.
  */
-class OpenFoodFacts : ProductSource {
+class OpenFoodFacts : ProductSource, ProductSearch {
     override suspend fun fetch(code: String): String? {
         // Digits only by construction; checked again since it goes into a URL.
         require(code.length in 8..13 && code.all { it in '0'..'9' }) { "not a barcode" }
+        return get(URL("https://world.openfoodfacts.org/api/v2/product/$code?fields=product_name,brands,serving_size,serving_quantity,nutriments,ingredients_text,ingredients_text_en,ingredients"))
+    }
+
+    /** Full-text product search; the query is URL-encoded and capped. */
+    override suspend fun search(query: String): String? {
+        val q = query.trim().take(120).ifEmpty { return null }
+        val enc = java.net.URLEncoder.encode(q, "UTF-8")
+        return get(URL("https://world.openfoodfacts.org/cgi/search.pl?search_terms=$enc&search_simple=1&action=process&json=1&page_size=5" +
+            "&fields=code,product_name,brands,serving_size,serving_quantity,nutriments,ingredients_text,ingredients_text_en"))
+    }
+
+    private suspend fun get(url: URL): String? {
         return withContext(Dispatchers.IO) {
-            val url = URL("https://world.openfoodfacts.org/api/v2/product/$code?fields=product_name,brands,serving_size,serving_quantity,nutriments,ingredients_text,ingredients_text_en,ingredients")
             val conn = url.openConnection() as HttpURLConnection
             coroutineScope {
                 // Per-read timeouts alone don't bound a server that drips bytes slowly.

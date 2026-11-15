@@ -1,7 +1,9 @@
 package app.diurna.ui
 
 import app.diurna.data.CapturedFacts
+import app.diurna.data.DecisionLog
 import app.diurna.data.OnePhotoCapture.Capture
+import app.diurna.data.OnePhotoCapture.Row
 import app.diurna.domain.IngredientUnit
 import app.diurna.domain.PackageMerge
 import app.diurna.domain.PackageMerge.Source
@@ -31,7 +33,7 @@ val ONE_PHOTO_REQUIRED = listOf("kcal", "protein_g", "carbs_g", "fat_g")
 
 private fun valid(v: Double?) = v?.takeIf { it.isFinite() && it >= 0 }
 
-fun mergedWith(c: Capture, fill: ManualFill): PackageMerge.Merged {
+fun mergedWith(c: Row, fill: ManualFill): PackageMerge.Merged {
     val values = fill.values.mapNotNull { (k, v) -> valid(v)?.let { k to it } }.toMap()
     val grams = fill.servingGrams?.takeIf { it.isFinite() && it > 0 && it <= 2_000 }
     if (values.isEmpty() && grams == null) return c.merged
@@ -44,15 +46,15 @@ fun mergedWith(c: Capture, fill: ManualFill): PackageMerge.Merged {
     return PackageMerge.merge(c.inputs + manual)
 }
 
-fun missingRequired(c: Capture, fill: ManualFill): List<String> {
+fun missingRequired(c: Row, fill: ManualFill): List<String> {
     val m = mergedWith(c, fill)
     return ONE_PHOTO_REQUIRED.filter { it !in m.per100g }
 }
 
-fun servingsAvailable(c: Capture, fill: ManualFill): Boolean = mergedWith(c, fill).servingGrams != null
+fun servingsAvailable(c: Row, fill: ManualFill): Boolean = mergedWith(c, fill).servingGrams != null
 
 /** Required fields first, then the rest by key. */
-fun factRows(c: Capture, fill: ManualFill): List<FactRow> {
+fun factRows(c: Row, fill: ManualFill): List<FactRow> {
     val m = mergedWith(c, fill)
     val keys = ONE_PHOTO_REQUIRED.filter { it in m.per100g } + (m.per100g.keys - ONE_PHOTO_REQUIRED.toSet()).sorted()
     return keys.map { k -> m.per100g.getValue(k).let { FactRow(k, it.value, it.source, it.disagreements) } }
@@ -62,7 +64,7 @@ fun factRows(c: Capture, fill: ManualFill): List<FactRow> {
  * The recipe line for [amount] grams, or servings when [servings] (only with a known serving
  * weight). Refuses rather than saving a line with made-up zeros.
  */
-fun onePhotoLine(c: Capture, fill: ManualFill, name: String, amount: Double?, servings: Boolean): OnePhotoLine {
+fun onePhotoLine(capture: Capture, c: Row, fill: ManualFill, name: String, amount: Double?, servings: Boolean): OnePhotoLine {
     if (name.isBlank()) return OnePhotoLine.Problem("Enter a name.")
     if (amount == null || !amount.isFinite() || amount <= 0) return OnePhotoLine.Problem(if (servings) "Enter servings." else "Enter grams.")
     val m = mergedWith(c, fill)
@@ -91,9 +93,36 @@ fun onePhotoLine(c: Capture, fill: ManualFill, name: String, amount: Double?, se
         nutrition = nutrition,
         kcal = r("kcal")!!,
         source = ONE_PHOTO_SOURCE,
-        barcode = c.barcode,
-        captured = CapturedFacts.from(m, labelPending = c.labelLater || (c.label is app.diurna.data.OnePhotoCapture.LabelRead.NoPhoto)),
+        barcode = c.code?.code ?: c.picked?.barcode,
+        captured = CapturedFacts.from(m, labelPending = capture.labelLater || c.reading == null)
+            .copy(decisionLogJson = saveLog(capture, c, m, fill, name.trim(), grams, servings, amount).toJson()),
     ))
+}
+
+/** The capture's log plus this line's final decisions: each field's winner and why, edits, the save. */
+fun saveLog(capture: Capture, row: Row, m: PackageMerge.Merged, fill: ManualFill, name: String, grams: Double, servings: Boolean, amount: Double): DecisionLog {
+    var l = capture.log
+    val p = row.product
+    if (fill.servingGrams != null) l = l.add(DecisionLog.EDIT, "Person typed the serving weight: ${fmtNum(fill.servingGrams)} g", p)
+    fill.values.forEach { (k, v) -> l = l.add(DecisionLog.EDIT, "Person typed ${factLabel(k)}: ${fmtNum(v)} ${factUnit(k)} per ${if (fill.perServing) "serving" else "100 g"}", p) }
+    row.picked?.let { l = l.add(DecisionLog.GUESS, "Values from a confirmed name guess: ${it.title} (${it.source.wire})", p) }
+    m.servingGrams?.let { l = l.add(DecisionLog.FIELD, "serving weight ${fmtNum(it.value)} g from ${sourceLabel(it.source)} (${DecisionLog.PRECEDENCE})", p) }
+    val keys = ONE_PHOTO_REQUIRED.filter { it in m.per100g } + (m.per100g.keys - ONE_PHOTO_REQUIRED.toSet()).sorted()
+    keys.forEach { k ->
+        val f = m.per100g.getValue(k)
+        l = l.add(DecisionLog.FIELD, "${factLabel(k)} ${fmtNum(f.value)} ${factUnit(k)} per 100 g from ${sourceLabel(f.source)} (${DecisionLog.PRECEDENCE})", p)
+        if (f.disagreements.isNotEmpty()) l = l.add(DecisionLog.DISAGREEMENT,
+            "${factLabel(k)}: " + f.disagreements.joinToString("; ") { "${sourceLabel(it.source)} said ${fmtNum(it.value)}" } + " (more than 10% apart; ${sourceLabel(f.source)} kept)", p)
+    }
+    m.flags.forEach { l = l.add(DecisionLog.DISAGREEMENT, "Flag: ${it.name.lowercase()}", p) }
+    m.ingredients?.let { (_, src) -> l = l.add(DecisionLog.FIELD, "ingredients from ${sourceLabel(src)}", p) }
+    return l.add(DecisionLog.SAVE, "Saved “$name”: ${fmtNum(grams)} g" + if (servings) " (${fmtNum(amount)} serving(s))" else "", p)
+}
+
+fun fmtNum(v: Double): String = when {
+    v >= 100 -> "%.0f".format(v)
+    v >= 10 -> "%.1f".format(v).removeSuffix(".0")
+    else -> "%.2f".format(v).trimEnd('0').removeSuffix(".")
 }
 
 const val ONE_PHOTO_SOURCE = "package"
@@ -117,6 +146,10 @@ fun factUnit(key: String): String = when {
     key == "kcal" -> "kcal"
     else -> key.substringAfterLast('_')
 }
+
+/** Source chips for a row, in precedence order; a confirmed name guess is marked "Guess". */
+fun sourceChips(row: Row): List<String> =
+    row.inputs.sortedBy { it.source.ordinal }.map { if (it === row.picked?.input) "Guess · ${sourceLabel(it.source)}" else sourceLabel(it.source) }.distinct()
 
 fun sourceLabel(s: Source): String = when (s) {
     Source.MANUAL -> "You"

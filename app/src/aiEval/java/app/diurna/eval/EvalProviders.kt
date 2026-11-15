@@ -80,7 +80,8 @@ interface EvalLabelClient {
 interface EvalPackageClient {
     val providerId: String
     val model: String
-    suspend fun read(photo: ByteArray): app.diurna.ai.PackageReading
+    suspend fun read(photo: ByteArray): app.diurna.ai.PackagePhotoReading
+    suspend fun refine(photo: ByteArray?, previous: app.diurna.ai.PackagePhotoReading, answer: String): app.diurna.ai.PackagePhotoReading
 }
 
 interface EvalDensityClient {
@@ -161,6 +162,7 @@ object EvalProviders {
                 override val model = model
                 private val reader = app.diurna.ai.GrokPackageReader({ key }, model)
                 override suspend fun read(photo: ByteArray) = reader.read(photo)
+                override suspend fun refine(photo: ByteArray?, previous: app.diurna.ai.PackagePhotoReading, answer: String) = reader.refine(photo, previous, answer)
             }
             EvalClients(food, cardio, label, density, ingredientNutrition, ScoringMode.ACCURACY, pkg = pkg)
         }
@@ -211,6 +213,7 @@ object EvalProviders {
                 override val model = model
                 private val reader = app.diurna.ai.ClaudePackageReader({ key }, model)
                 override suspend fun read(photo: ByteArray) = reader.read(photo)
+                override suspend fun refine(photo: ByteArray?, previous: app.diurna.ai.PackagePhotoReading, answer: String) = reader.refine(photo, previous, answer)
             }
             EvalClients(food, cardio, label, density, ingredientNutrition, ScoringMode.ACCURACY, pkg = pkg)
         }
