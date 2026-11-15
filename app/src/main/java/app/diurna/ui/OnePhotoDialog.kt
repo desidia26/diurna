@@ -80,13 +80,15 @@ fun OnePhotoIngredientDialog(
     fallbackCode: String? = null,
     initialName: String? = null,
     initialGrams: Double? = null,
+    /** Where the debug log files this flow's actions (the Library's recipe editor, or the Day's Meal from photo). */
+    screen: Screen = Screen.LIBRARY,
 ) {
     val context = LocalContext.current
     val c = context.container
     val scope = rememberCoroutineScope()
     val flow = remember { UUID.randomUUID().toString() }
     fun event(name: String, result: Action.Result = Action.Result.OK, details: Map<String, String> = emptyMap()) =
-        c.actions.dispatch(Action.Event(Screen.LIBRARY, name, flow, result = result, details = details))
+        c.actions.dispatch(Action.Event(screen, name, flow, result = result, details = details))
     val pipeline = remember(c) {
         OnePhotoCapture(
             lookup = scan,
