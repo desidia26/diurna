@@ -79,6 +79,7 @@ android {
     sourceSets {
         // Exported Room schemas double as fixtures for migration tests.
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        getByName("androidTest").assets.srcDir("$projectDir/src/test/resources/barcodes")
         // AI prompt eval harness (JVM): shares the unit-test classpath, not shipped in the APK.
         // Built-in Kotlin (AGP 9) only compiles .kt files from Kotlin source dirs, not java.srcDir.
         getByName("test") {

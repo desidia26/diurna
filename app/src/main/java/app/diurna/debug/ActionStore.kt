@@ -66,7 +66,7 @@ class ActionRecorder(private val dir: File, private val maxBytes: Long = 20L * 1
             is Action.Event -> j.put("action", a.name).put("correlationId", safeId(a.correlationId))
                 .put("result", a.result.name).put("latencyMs", a.latencyMs).also { json ->
                     val details = JSONObject()
-                    a.details.filterKeys { it in setOf("exception", "message", "frames", "format", "checksum", "candidates") }
+                    a.details.filterKeys { it in setOf("exception", "message", "frames", "format", "checksum", "candidates", "source", "variant", "raw_candidates", "accepted_candidates", "lines", "numeric_runs", "rejected_runs") }
                         .forEach { (key, value) -> details.put(key, Redaction.text(value.take(256), knownSecrets())) }
                     if (details.length() > 0) json.put("details", details)
                 }

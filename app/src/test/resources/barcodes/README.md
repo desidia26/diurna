@@ -17,3 +17,9 @@ Expected results and exact successful retry are asserted by BarcodeFixtureTest.
 These fixtures test transforms with ZXing, not ML Kit recognition accuracy; device
 coverage tests the bundled ML Kit decoder separately. Larry's actual failed photo
 is not yet available. Never copy personal captures into fixtures without consent.
+
+`blurry-upca.png` is an authorized real-world soft-focus package photo. It was decoded to
+RGB pixels and encoded into a fresh PNG, with no source metadata copied. Verified chunks:
+IHDR/IDAT/IEND only (no EXIF, GPS, XMP, IPTC, comments, profiles or thumbnails). It is a
+safe-failure/live-fallback regression, NOT proof that unreadable bars or digits can be recovered.
+No report manifest, action log, private device/session IDs, or account metadata is included.
