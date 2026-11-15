@@ -56,4 +56,46 @@ class RecipeMathTest {
         assertEquals(10, half.carbsG)
         assertEquals(2, half.fiberG)
     }
+
+    @Test fun prefersLabeledKcalWhenEveryLineHasOne() {
+        // Same numbers as Meal from photo's oats + almonds: labels 150+85=235,
+        // while MacroEnergy on the macros would be 239 (fiber at 2 kcal/g).
+        val oats = RecipeMath.IngredientNutrition(proteinG = 5, carbsG = 27, fatG = 3, fiberG = 4, kcal = 150)
+        val almonds = RecipeMath.IngredientNutrition(proteinG = 3, carbsG = 3, fatG = 8, fiberG = 2, kcal = 85)
+        val t = RecipeMath.perServing(listOf(oats, almonds), 1.0)
+        assertEquals(235, t.kcal)
+        assertEquals(8, t.proteinG)
+        assertEquals(30, t.carbsG)
+        assertEquals(11, t.fatG)
+        assertEquals(6, t.fiberG)
+        val halved = RecipeMath.perServing(listOf(oats, almonds), 2.0)
+        assertEquals(118, halved.kcal) // 235/2 rounded
+    }
+
+    @Test fun derivesKcalFromMacrosWhenAnyLineOmitsIt() {
+        val labeled = RecipeMath.IngredientNutrition(proteinG = 5, carbsG = 27, fatG = 3, fiberG = 4, kcal = 150)
+        val macrosOnly = RecipeMath.IngredientNutrition(proteinG = 3, carbsG = 3, fatG = 8, fiberG = 2)
+        val t = RecipeMath.perServing(listOf(labeled, macrosOnly), 1.0)
+        val expected = MacroEnergy.kcal(8, 30, 11, 6).total.toInt()
+        assertEquals(239, expected)
+        assertEquals(expected, t.kcal)
+    }
+
+    @Test fun waterAtZeroKcalStillLetsNeighborsKeepTheirLabels() {
+        val water = RecipeMath.IngredientNutrition(kcal = 0)
+        val oats = RecipeMath.IngredientNutrition(proteinG = 5, carbsG = 27, fatG = 3, kcal = 150)
+        assertEquals(150, RecipeMath.perServing(listOf(water, oats), 1.0).kcal)
+    }
+
+    @Test fun explicitKcalTreatsZeroWithMacrosAsUnknown() {
+        assertEquals(150, RecipeMath.explicitKcal(150, 5, 27, 3))
+        assertEquals(0, RecipeMath.explicitKcal(0, 0, 0, 0))
+        assertNull(RecipeMath.explicitKcal(0, 5, 27, 3))
+    }
+
+    @Test fun scalePer100ScalesLabeledKcal() {
+        val per100 = RecipeMath.IngredientNutrition(proteinG = 10, carbsG = 20, fatG = 5, kcal = 200)
+        assertEquals(100, RecipeMath.scalePer100(per100, 50.0).kcal)
+        assertNull(RecipeMath.scalePer100(RecipeMath.IngredientNutrition(proteinG = 10), 50.0).kcal)
+    }
 }

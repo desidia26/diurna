@@ -160,6 +160,7 @@ fun rememberPhotoAttacher(host: PhotoImportHost, onAttached: (String) -> Unit): 
 fun AttachMenu(
     open: Boolean, attacher: PhotoAttacher, onClose: () -> Unit,
     onScan: (() -> Unit)? = null, allowPhotos: Boolean = true,
+    onMealFromPhoto: (() -> Unit)? = null,
 ) {
     DropdownMenu(expanded = open, onDismissRequest = onClose) {
         if (allowPhotos) {
@@ -168,6 +169,9 @@ fun AttachMenu(
         }
         if (onScan != null) {
             DropdownMenuItem(text = { Text("Scan barcode") }, onClick = { onClose(); onScan() })
+        }
+        if (onMealFromPhoto != null) {
+            DropdownMenuItem(text = { Text("Meal from photo") }, onClick = { onClose(); onMealFromPhoto() })
         }
     }
 }
