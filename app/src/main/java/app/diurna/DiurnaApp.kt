@@ -45,6 +45,7 @@ import app.diurna.data.DayFinalizer
 import app.diurna.data.DailyMetricRepository
 import app.diurna.data.DayRepository
 import app.diurna.data.NutritionRepository
+import app.diurna.data.NutrientRepository
 import app.diurna.data.FoodPhotos
 import app.diurna.data.FoodPhotoStore
 import app.diurna.data.FoodRepository
@@ -94,7 +95,8 @@ class AppContainer(context: Context) {
     val foodPhotoStore = FoodPhotoStore(db, foodPhotos)
     val food = FoodRepository(db, foodPhotos, foodPhotoStore)
     val photoImporter = PhotoImporter(context, foodPhotos, debug)
-    val library = LibraryRepository(db, photoStore = foodPhotoStore)
+    val nutrients = NutrientRepository(db)
+    val library = LibraryRepository(db, photoStore = foodPhotoStore, nutrients = nutrients)
     val backups = Backups(context, db, foodPhotos)
     /** What's new entries, read from assets once. */
     val changelog by lazy { ChangelogFiles.load(context.assets) }
@@ -193,6 +195,26 @@ class AppContainer(context: Context) {
             configured = openAiConfigured,
         ),
     )).let { app.diurna.debug.LoggedLabelReader(it, debug) }
+    /** One-photo package read (label + ingredients) for the confirm screen; the barcode is decoded on the phone. */
+    val packageReader: app.diurna.ai.PackageReader = app.diurna.ai.SelectedPackageReader({ aiProvider.get() }, mapOf(
+        AiProvider.ANTHROPIC to app.diurna.ai.ClaudePackageReader(
+            apiKey = { apiKeys.getValue(AiProvider.ANTHROPIC).get() },
+            baseUrl = { gateway.anthropicBaseOrNull() },
+            supportsImages = { gateway.supportsImages(AiProvider.ANTHROPIC) },
+        ),
+        AiProvider.XAI to app.diurna.ai.GrokPackageReader(
+            apiKey = { apiKeys.getValue(AiProvider.XAI).get() },
+            transport = xaiTransport,
+            supportsImages = { gateway.supportsImages(AiProvider.XAI) },
+        ),
+        AiProvider.OPENAI_COMPAT to app.diurna.ai.OpenAiCompatPackageReader(
+            apiKey = { apiKeys.getValue(AiProvider.OPENAI_COMPAT).get() },
+            modelProvider = { gateway.get().openAiModel.trim() },
+            transportProvider = { openAiTransport },
+            supportsImages = { gateway.supportsImages(AiProvider.OPENAI_COMPAT) },
+            configured = openAiConfigured,
+        ),
+    ))
 
     val densityEstimator: DensityEstimator = SelectedDensityEstimator({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeDensityEstimator(
@@ -253,6 +275,12 @@ class AppContainer(context: Context) {
         food.onPendingEstimates = { EstimateWorker.enqueue(context) }
         lockWallpaper.start(appScope)
     }
+    init {
+        appScope.launch {
+            runCatching { nutrients.backfillFromOffSnapshots() }
+        }
+    }
+
 }
 
 class DiurnaApp : Application() {

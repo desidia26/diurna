@@ -23,6 +23,7 @@ import app.diurna.domain.Targets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -173,7 +174,20 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     // Food
     fun addFood(text: String, photo: String? = null) = io("day.add_food") { c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text)); if (text.isNotBlank()) c.food.add(date, text, photo) }
     fun addFood(text: String, photos: List<String>) = io("day.add_food") { c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text)); if (text.isNotBlank()) c.food.add(date, text, photos) }
-    fun deleteFood(id: Long) = io("day.delete_food") { c.food.delete(id) }
+    // Deleting hides the entry for a few seconds first, so the card can offer Undo.
+    private val foodDeletes = PendingDelete<Long>(viewModelScope) { id ->
+        val event = app.diurna.debug.Action.Event(app.diurna.debug.Screen.DAY, "day.delete_food")
+        try {
+            withContext(Dispatchers.IO) { c.food.delete(id) }
+            c.actions.dispatch(event.copy(result = app.diurna.debug.Action.Result.OK))
+        } catch (e: Exception) {
+            c.actions.dispatch(event.copy(result = app.diurna.debug.Action.Result.FAILED)); throw e
+        }
+    }
+    val hiddenFood = foodDeletes.hidden
+    val undoableFood = foodDeletes.undoable
+    fun deleteFood(id: Long) = foodDeletes.start(id)
+    fun undoDeleteFood() = foodDeletes.undo()
     fun editFood(id: Long, text: String, time: String, photo: String?) = io("day.edit_food") { c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text)); c.food.edit(id, text, time, photo) }
     fun editFood(id: Long, text: String, time: String, photos: List<String>) = io("day.edit_food") { c.actions.dispatch(app.diurna.debug.Action.Text(app.diurna.debug.Screen.DAY, app.diurna.debug.TextField.FOOD, text)); c.food.edit(id, text, time, photos) }
     fun entryPhotos(entryId: Long) = c.food.observePhotos(entryId).map { rows -> rows.map { it.fileName } }

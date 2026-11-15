@@ -191,6 +191,11 @@ private fun AttachmentPreview(a: DebugAttachment) {
     if (a.kind == AttachmentKind.BARCODE) {
         val digits by produceState("") { value = withContext(Dispatchers.IO) { runCatching { a.file.readText().take(14) }.getOrDefault("Unavailable") } }
         Text(digits)
+    } else if (a.kind == AttachmentKind.DECISION_LOG) {
+        val entries by produceState("") { value = withContext(Dispatchers.IO) { runCatching {
+            app.diurna.data.DecisionLog.fromJson(a.file.readText())?.entries?.takeLast(8)?.joinToString("\n") { "${it.seq}. ${it.text}" } ?: "Unreadable log"
+        }.getOrDefault("Unavailable") } }
+        Text("Decision log\n$entries")
     } else {
         val bitmap by produceState<android.graphics.Bitmap?>(null, a.id) {
             value = withContext(Dispatchers.IO) { runCatching {

@@ -8,7 +8,7 @@ through this same boundary; this is not yet a WebView bridge or replay engine.
 - `Action.Text(screen, TextField.FOOD|EXERCISE|RECIPE|SEARCH, value)` is restricted to explicitly non-secret fields; disabled by default.
 - `container.debug.registerAttachment(bytes: ByteArray, kind: AttachmentKind, meta: Map<String,String> = emptyMap(), correlationId: String = UUID...) : String?`
 - Same overload with `file: File`; call on IO dispatcher. Copies immediately, before a temporary file is deleted. Null means disabled, invalid, oversized, evicted or unreadable. IDs are opaque UUIDs; never filenames supplied by callers.
-- Kinds: `IMAGE` (opaque image bytes) and `BARCODE` (UTF-8, 6–14 digits only). Metadata accepts only `format` (`[A-Z0-9_]{1,32}`). Pass one UUID correlation id to related events/attachments.
+- Kinds: `IMAGE` (opaque image bytes), `BARCODE` (UTF-8, 6–14 digits only) and `DECISION_LOG` (a JSON object; every string in it is redacted like typed text). Metadata accepts only `format` (`[A-Z0-9_]{1,32}`). Pass one UUID correlation id to related events/attachments.
 
 Never dispatch keys, passwords, request/response bodies, auth headers, endpoint URLs, porch QR
 contents or arbitrary exception messages. Event names must be fixed lowercase tokens, not user
@@ -54,3 +54,58 @@ Tests cover recorder redaction/retention/size/enable transitions and archive con
 plus the independent toggle behavior in a CI-only emulator Compose test. End-to-end share chooser,
 keyguard transitions during an actual ringing alarm, and arbitrary OEM camera behavior remain
 manual/emulator integration gaps.
+
+### Food scanner diagnostics
+With Record debug actions enabled, each scan dialog has one correlation ID (Day or Library).
+`scan.permission`, `scan.camera_bind`, `scan.frames` (first/every 120 frames and final total),
+`scan.live` (sampled candidate format/checksum, never raw frame pixels), `scan.capture`,
+`scan.decode.<original|crop|rotate|contrast|threshold|sharpen>`, `scan.ocr`, `scan.outcome`,
+and `scan.lookup` record outcomes; decode/OCR/lookup carry elapsed milliseconds.
+Denied permission, model unavailable, no-code, unreadable, timeout, lookup not-found and errors
+are non-OK, not successful scans. Camera bind failures include bounded/redacted exception class
+and message in allowlisted event details. Captured metadata-free original and failed final sharpen
+variant are copied before scratch cleanup; valid decoded numbers are BARCODE attachments.
+All use the existing private 20 MiB/7-day store. Debug-off callbacks perform no I/O, encoding or
+retention; disabling debug erases the store. Images are unredacted: review/remove before Share ZIP.
+No image upload, new permission, alarm-QR change or automatic export is introduced.
+
+### Live-read recovery / OCR validation
+A valid live read is retained only in its camera-binding session (up to eight products, five-second
+freshness before capture). A captured snapshot survives image retries, OCR unavailability and
+timeout. Live-only recovery always presents the printed-number confirmation list; even repeated
+matching live reads do not silently bypass confirmation. A conflicting photo/live read also needs
+selection. Stop/background, disposal, camera retry and retake invalidate old sessions/callbacks.
+A synchronized capture/completion gate and a separate terminal lookup gate prevent duplicate work.
+
+`scan.image_outcome.*` now describes ONLY the saved-image pipeline. `scan.outcome.*` is its resolved
+result, with `source=live_confirmation|combined_confirmation|saved_photo|none`. Thus an unreadable
+photo can correctly precede a successful confirmation fallback. `scan.decode_counts.summary`
+reports parsed/accepted decoder candidates by variant (accepted counts are before canonical deduplication); `scan.still_detector.summary` counts all ML Kit detections before null-value filtering; sampled `scan.live_counts.summary` does likewise.
+`scan.ocr_text.summary` reports detected lines, numeric runs and individually rejected runs;
+`scan.ocr.ready` reports accepted codes after spatial grouping. Rejected runs can participate in a
+valid aligned-fragment group, so these counts are not interchangeable. No raw OCR label text is
+recorded (even with typed-text consent); no new default text-retention channel is introduced.
+
+OCR groups bounded numeric-only fragments on an overlapping baseline with small gaps, including
+UPC outer digits split into separate recognizer blocks. It does not concatenate arbitrary text
+lines, repair letters, guess missing digits or manufacture a checksum. All OCR results require
+confirmation. Blur, occlusion and model delivery remain real limitations.
+
+CI's known-digit OCR test requests/checks the existing Play Services Latin module (no new engine
+or dependency), then strictly asserts recognition if ready. If Google Play cannot supply it on the
+existing google_apis emulator, this test is explicitly SKIPPED with “OCR correctness NOT VALIDATED”.
+That is an open engine-validation gap, NOT passing OCR correctness. Test XML/reports are retained
+on success as well as failure so skipped tests can be inspected. The sanitized blurry-photo replay
+is separately a safe-failure/live-fallback test, regardless of OCR availability.
+
+## Reviewed scanner integration
+
+Live-only fallback remains a human-confirmed candidate even after a photo error or low-memory image failure. `scan.image_outcome.*` describes saved-image processing; `scan.outcome.*` describes the final session resolution and its source (`live_confirmation`, `combined_confirmation`, `saved_photo`, or `none`). The session and lookup gates suppress stale/cancelled/duplicate completion. Candidate and OCR diagnostics contain counts/format/checksum metadata, not arbitrary recognized label text. Review corrections from scanner-decode are real-merged before scanner-reliability; debug-off attachment retention and the 20 MiB/7-day limits are unchanged.
+
+### Lookup outcomes
+
+`scan.lookup.<outcome>` distinguishes `known` (library), `found`, `not_found` (no Open Food Facts record under any spelling; `spellings_tried` counts the EAN-13 and, for UPC-A, the 12-digit form), `incomplete` (record exists but `problem` is `no_nutrition`, `no_calories` or `implausible`), `unreadable` (the answer wasn't a product response) and `unreachable`/`failed` (network). Details carry only these codes and counts, never product text.
+
+### One-photo ingredient
+
+The recipe editor's Package photo flow logs `onephoto.open`, `onephoto.photo` (OK/CANCELLED), `onephoto.photo_deleted` (`read`), `onephoto.decode` (`decoded`/`confirm`/`none`/`text_model_not_ready`, plus a candidate count), `onephoto.lookup` (same outcomes as `scan.lookup`), `onephoto.fdc` (`found`/`none`/`failed`), `onephoto.label` (`read`/`no_panel`/`offline`/`no_key`/`failed`/`no_photo`, with field count and whether ingredients were read), `onephoto.merge` (`ok`/`no_nutrition`, with source wires, field and disagreement counts and flags), `onephoto.identify` (front-of-package identification: candidate counts from USDA branded and Open Food Facts search), `onephoto.refine_start` / `onephoto.refine` (`ok`/`failed`, whether the photo was still in memory, product and question counts), `onephoto.pipeline` (unexpected failure), `onephoto.decision_log` (a decision log attachment was added to the report), `onephoto.save` (whether servings were known, the manual field count, `label_pending`, line count) and `onephoto.cancel`. With several packages, `onephoto.decode` also reports how many codes were matched to products. When debug reporting is on and the flow fails or is cancelled, the capture's decision log is attached as a `decision_log` JSON attachment; it holds product names and label text the user photographed, so it is only attached on-device while debug reporting is enabled and is shown in the report preview before sharing. All events in one flow share a correlation id. Details carry only codes and counts, never barcodes, product names, label text or the photo.

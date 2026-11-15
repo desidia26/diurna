@@ -50,6 +50,7 @@ import app.diurna.domain.DailyMetrics
 import app.diurna.domain.Metrics
 import androidx.compose.runtime.remember
 import app.diurna.domain.AminoAcids
+import app.diurna.domain.NutrientId
 import app.diurna.ui.theme.LocalStatusColors
 import java.time.LocalDate
 import kotlin.math.abs
@@ -87,6 +88,7 @@ fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues, onClose: 
         m.fats?.let { card -> item { FatDetailCardView(card, m.from, m.to) } }
         m.lipids?.let { card -> item { LipidDetailCardView(card) } }
         m.aminos?.let { card -> item { AminoDetailCardView(card) } }
+        m.micros?.let { card -> item { MicroDetailCardView(card) } }
         item { TrainingCardView(m.training) }
         // Only once cardio has been logged; lifting-only Metrics is unchanged.
         m.cardio?.let { c -> item { CardioCardView(c, onOpen = vm::openCardio) } }
@@ -455,6 +457,31 @@ private fun AminoDetailCardView(card: AminoDetailCard) {
                     )
                 else ->
                     Hint("Log a body weight to show WHO adult amino requirement reference lines.")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MicroDetailCardView(card: MicroDetailCard) {
+    val day = card.day
+    SectionCard("Micronutrients", chip = {
+        Hint(day.completenessLabel + if (day.partial) " · partial" else "")
+    }) {
+        val rows = NutrientId.entries.mapNotNull { id ->
+            val v = day.profile[id] ?: return@mapNotNull null
+            id to v
+        }
+        if (rows.isEmpty()) {
+            Hint("No micronutrient data in this range.")
+        } else {
+            rows.forEach { (id, amount) ->
+                val unit = id.unit.wire
+                val shown = if (amount >= 10) "%.0f".format(amount) else "%.1f".format(amount)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(id.displayName, style = MaterialTheme.typography.bodyMedium)
+                    Text("$shown $unit", style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
+                }
             }
         }
     }
