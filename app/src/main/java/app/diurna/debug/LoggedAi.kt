@@ -5,26 +5,39 @@ import app.diurna.domain.FoodIngredient
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
-suspend fun <T> DebugLog.operation(name: String, screen: Screen = Screen.BACKGROUND, block: suspend () -> T): T {
+suspend fun <T> DebugLog.operation(name: String, screen: Screen = Screen.BACKGROUND, block: suspend () -> T): T =
+    actions.operation(name, screen, block = block)
+
+/** STARTED, then OK / FAILED / CANCELLED with latency. [details] (allowlisted keys) go on STARTED. */
+suspend fun <T> Store.operation(name: String, screen: Screen = Screen.BACKGROUND,
+                                details: Map<String, String> = emptyMap(), block: suspend () -> T): T {
     val id = UUID.randomUUID().toString(); val start = System.nanoTime()
-    actions.dispatch(Action.Event(screen, name, id))
+    dispatch(Action.Event(screen, name, id, details = details))
     try {
         val value = block()
-        actions.dispatch(Action.Event(screen, name, id, Action.Result.OK, (System.nanoTime() - start) / 1_000_000))
+        dispatch(Action.Event(screen, name, id, Action.Result.OK, (System.nanoTime() - start) / 1_000_000))
         return value
     } catch (e: Exception) {
-        actions.dispatch(Action.Event(screen, name, id, if (e is CancellationException) Action.Result.CANCELLED else Action.Result.FAILED,
+        dispatch(Action.Event(screen, name, id, if (e is CancellationException) Action.Result.CANCELLED else Action.Result.FAILED,
             (System.nanoTime() - start) / 1_000_000))
         throw e
     }
 }
 
-class LoggedFoodEstimator(private val delegate: FoodEstimator, private val debug: DebugLog) : FoodEstimator {
+/** Logs each estimate as ai.food; STARTED carries how many photos went with it (a count, never the photos). */
+class LoggedFoodEstimator(private val delegate: FoodEstimator, private val actions: Store) : FoodEstimator {
+    constructor(delegate: FoodEstimator, debug: DebugLog) : this(delegate, debug.actions)
     override val model get() = delegate.model
     override suspend fun estimate(text: String, photo: ByteArray?, detailed: Boolean, ingredients: Boolean): FoodEstimate =
-        debug.operation("ai.food") { delegate.estimate(text, photo, detailed, ingredients) }
+        actions.operation("ai.food", details = mapOf("photos" to (if (photo == null) 0 else 1).toString())) {
+            delegate.estimate(text, photo, detailed, ingredients)
+        }
+    override suspend fun estimatePhotos(text: String, photos: List<ByteArray>, detailed: Boolean, ingredients: Boolean): FoodEstimate =
+        actions.operation("ai.food", details = mapOf("photos" to photos.size.toString())) {
+            delegate.estimatePhotos(text, photos, detailed, ingredients)
+        }
     override suspend fun guessBarcodeIngredients(ctx: BarcodeIngredientsContext): List<FoodIngredient> =
-        debug.operation("ai.barcode_ingredients") { delegate.guessBarcodeIngredients(ctx) }
+        actions.operation("ai.barcode_ingredients") { delegate.guessBarcodeIngredients(ctx) }
 }
 class LoggedCardioReader(private val delegate: CardioReader, private val debug: DebugLog) : CardioReader {
     override val model get() = delegate.model

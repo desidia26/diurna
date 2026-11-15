@@ -78,7 +78,7 @@ class EvalRunner(
         case: EvalCase,
         config: Config,
     ): CaseScore {
-        val photo = case.input.image?.let { rel ->
+        val photos = (listOfNotNull(case.input.image) + case.input.images).map { rel ->
             val f = File(imagesRoot, rel)
             if (!f.isFile) return CaseScore(
                 case.id, pid.id, case.prompt, passed = false,
@@ -86,6 +86,7 @@ class EvalRunner(
             )
             f.readBytes()
         }
+        val photo = photos.firstOrNull()
         return try {
             when (case.prompt) {
                 "food" -> {
@@ -95,9 +96,9 @@ class EvalRunner(
                             skipReason = "ollama smoke skips vision cases by default",
                         )
                     }
-                    val est = clients.food.estimate(
+                    val est = clients.food.estimatePhotos(
                         case.input.text.orEmpty(),
-                        photo,
+                        photos,
                         detailed = case.input.detailed || case.input.ingredients,
                         ingredients = case.input.ingredients,
                     )

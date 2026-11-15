@@ -59,6 +59,18 @@ interface FoodEstimator {
     ): FoodEstimate
 
     /**
+     * Like [estimate] with every photo of the entry, in gallery order (e.g. the food, its barcode
+     * side and its Nutrition Facts label). Providers that read images send them all; the default
+     * keeps only the first, for fakes and text-only estimators.
+     */
+    suspend fun estimatePhotos(
+        text: String,
+        photos: List<ByteArray>,
+        detailed: Boolean = false,
+        ingredients: Boolean = false,
+    ): FoodEstimate = estimate(text, photos.firstOrNull(), detailed, ingredients)
+
+    /**
      * Guess {name, grams} ingredients for a barcode product when OFF lacks usable percents.
      * Default throws; real providers override. Never returns amino milligrams.
      */

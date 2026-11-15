@@ -274,6 +274,9 @@ class AppContainer(context: Context) {
         days.onAlarmInputsChanged = { scheduler.reschedule() }
         dailyMetrics.onValueChanged = { if (dailyMetrics.isComplete(it)) CheckInReminder.dismiss(context) }
         food.onPendingEstimates = { EstimateWorker.enqueue(context) }
+        food.onReestimate = { details ->
+            actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.BACKGROUND, "food.reestimate", result = app.diurna.debug.Action.Result.OK, details = details))
+        }
         lockWallpaper.start(appScope)
     }
     init {
