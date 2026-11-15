@@ -26,7 +26,9 @@ hold() { # hold <note>
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 # Binary files and lockfile churn say nothing a reviewer can use; the CVE gate covers dependencies.
-git -C "$ROOT" diff --no-color --no-ext-diff "$base" "$head" -- . ':(exclude)*.png' ':(exclude)*.jpg' \
+# Three dots: only what <head> adds since it left <base>. With two, a branch behind main reads
+# as reverting everything main gained since, and the review flags changes the PR never made.
+git -C "$ROOT" diff --no-color --no-ext-diff "$base...$head" -- . ':(exclude)*.png' ':(exclude)*.jpg' \
   ':(exclude)app/schemas/**' ':(exclude)app/lint-baseline.xml' >"$work/change.diff"
 [[ -s "$work/change.diff" ]] || { echo '{"verdict":"clean","findings":[],"note":"no reviewable changes"}' >"$out"; exit 0; }
 (( $(stat -c %s "$work/change.diff") <= MAX_DIFF_BYTES )) || hold "the change is too large to review in one pass ($(stat -c %s "$work/change.diff") bytes); review it by hand"
@@ -44,7 +46,7 @@ schema='{"type":"object","additionalProperties":false,"required":["verdict","fin
 
 set +e
 (cd "$ROOT" && "$work/cli/node_modules/.bin/claude" -p \
-  "Review the change in .ai-review.diff (commits $base..$head) and answer with the verdict and findings." \
+  "Review the change in .ai-review.diff (commits $base...$head) and answer with the verdict and findings." \
   --bare --restricted --strict-mcp-config --no-session-persistence \
   --tools "Read,Grep,Glob" \
   --model "$MODEL" \
