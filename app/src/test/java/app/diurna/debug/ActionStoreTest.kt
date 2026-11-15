@@ -8,6 +8,14 @@ class ActionStoreTest {
     private fun recorder(cap: Long = 20000, now: () -> Long = { 1000L }) =
         ActionRecorder(Files.createTempDirectory("actions").toFile(), maxBytes = cap, clock = now)
 
+    @Test fun scannerDetailsAreAllowlistedBoundedAndRedacted() {
+        val r = recorder(); r.enabled = true; r.knownSecrets = { listOf("private-test-secret") }
+        r.store.dispatch(Action.Event(Screen.DAY, "scan.camera_bind.failed", details = mapOf(
+            "exception" to "IllegalStateException", "message" to "private-test-secret", "arbitrary" to "discard-me")))
+        val log = r.snapshot().joinToString()
+        assertTrue(log.contains("IllegalStateException")); assertTrue(log.contains("REDACTED"))
+        assertFalse(log.contains("private-test-secret")); assertFalse(log.contains("discard-me"))
+    }
     @Test fun disabledIsNoOp() {
         val r = recorder(); r.store.dispatch(Action.Event(Screen.DAY, "food.add"))
         assertTrue(r.snapshot().isEmpty()); assertNull(r.registerAttachment(byteArrayOf(1), AttachmentKind.IMAGE))

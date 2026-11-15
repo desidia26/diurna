@@ -12,7 +12,7 @@ enum class AttachmentKind { IMAGE, BARCODE }
 sealed interface Action {
     val screen: Screen
     data class Event(override val screen: Screen, val name: String, val correlationId: String = UUID.randomUUID().toString(),
-                     val result: Result = Result.STARTED, val latencyMs: Long? = null) : Action {
+                     val result: Result = Result.STARTED, val latencyMs: Long? = null, val details: Map<String, String> = emptyMap()) : Action {
         init { require(name.matches(Regex("[a-z][a-z0-9_.]{0,79}"))) }
     }
     data class Text(override val screen: Screen, val field: TextField, val value: String) : Action
@@ -64,7 +64,12 @@ class ActionRecorder(private val dir: File, private val maxBytes: Long = 20L * 1
         val j = JSONObject().put("version", 1).put("timestamp", clock()).put("screen", a.screen.name)
         when (a) {
             is Action.Event -> j.put("action", a.name).put("correlationId", safeId(a.correlationId))
-                .put("result", a.result.name).put("latencyMs", a.latencyMs)
+                .put("result", a.result.name).put("latencyMs", a.latencyMs).also { json ->
+                    val details = JSONObject()
+                    a.details.filterKeys { it in setOf("exception", "message", "frames", "format", "checksum", "candidates") }
+                        .forEach { (key, value) -> details.put(key, Redaction.text(value.take(256), knownSecrets())) }
+                    if (details.length() > 0) json.put("details", details)
+                }
             is Action.Text -> j.put("action", "field.text").put("field", a.field.name)
                 .put("text", Redaction.text(a.value, knownSecrets()))
         }
