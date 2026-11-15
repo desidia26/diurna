@@ -80,6 +80,8 @@ android {
         // Exported Room schemas double as fixtures for migration tests.
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
         getByName("androidTest").assets.srcDir("$projectDir/src/test/resources/barcodes")
+        // Package-finder device tests compare ML Kit's boxes with ai-evals/detections.json on the eval photos (test APK only).
+        getByName("androidTest").assets.srcDir("$rootDir/ai-evals")
         // AI prompt eval harness (JVM): shares the unit-test classpath, not shipped in the APK.
         // Built-in Kotlin (AGP 9) only compiles .kt files from Kotlin source dirs, not java.srcDir.
         getByName("test") {
@@ -115,6 +117,8 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.barcode.scanning)
+    // Bundled on-device object localizer (no download): finds each package in a several-package photo.
+    implementation(libs.mlkit.objects)
     implementation(libs.mlkit.text.recognition) // Unbundled Play Services OCR; sideloads download the model when first needed.
     implementation(libs.zxing.core)
     implementation(libs.anthropic.java)
@@ -177,6 +181,7 @@ afterEvaluate {
         val ollamaModelProp = providers.gradleProperty("ollamaModel")
         val ollamaBaseUrlProp = providers.gradleProperty("ollamaBaseUrl")
         val ollamaTextOnlyProp = providers.gradleProperty("ollamaTextOnly")
+        val pipelineProp = providers.gradleProperty("pipeline")
         val outDirProp = providers.gradleProperty("outDir").orElse("ai-evals/out")
         doFirst {
             systemProperty("provider", providerProp.get())
@@ -188,6 +193,7 @@ afterEvaluate {
             if (ollamaModelProp.isPresent) systemProperty("ollamaModel", ollamaModelProp.get())
             if (ollamaBaseUrlProp.isPresent) systemProperty("ollamaBaseUrl", ollamaBaseUrlProp.get())
             if (ollamaTextOnlyProp.isPresent) systemProperty("ollamaTextOnly", ollamaTextOnlyProp.get())
+            if (pipelineProp.isPresent) systemProperty("pipeline", pipelineProp.get())
             listOf("XAI_API_KEY", "ANTHROPIC_API_KEY", "OLLAMA_BASE_URL", "OLLAMA_MODEL", "OLLAMA_API_KEY").forEach { name ->
                 val v = System.getenv(name)
                 if (!v.isNullOrBlank()) environment(name, v)
