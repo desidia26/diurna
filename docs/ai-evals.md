@@ -11,6 +11,7 @@ Eval harness for every prompt that ships on `main`. It calls the **same** Kotlin
 | `EstimatePrompt` (detailed + ingredients) | Food estimate / backfill when Detailed + FDC key | text ± photo, `ingredients=true` | `food` + `input.ingredients` |
 | `CardioPrompt` | Claude + Grok cardio readers | workout-summary photo | `cardio` |
 | `LabelPrompt` | Claude + Grok label readers | Nutrition Facts photo | `label` |
+| `PackagePrompt` | Claude / Grok / OpenAI-compat package readers (one-photo ingredient capture) | one package photo: panel per serving + ingredients list | `package` |
 | `DensityPrompt` | Claude / Grok / OpenAI-compat density estimators (USDA FDC miss fallback) | ingredient name + `unit_kind` (`volume` / `each`) | `density` |
 
 **Not AI prompts** (no eval cases): Open Food Facts barcode lookup, schema.org recipe import, FDC amino resolution and FDC portion→density derivation (API, not a model call). AI density fallback is covered above.
@@ -80,8 +81,9 @@ Expectations are **bands and tolerances**, not exact values (kcal ±%, macro ran
 ### Adding a case
 
 1. Edit the JSON under `ai-evals/cases/` (or add an image under `ai-evals/images/` — see `images/SOURCE.md`; only generate or use public-domain/CC0).
-2. Set `prompt` to `food`, `cardio`, `label`, `density`, or `barcode_ingredients`. For detailed/ingredients food paths set `input.detailed` / `input.ingredients`.
-3. Set `expect.outcome` to `estimate`, `not_food`, `not_food_or_zeros`, `reading`, or `reject`.
+2. Set `prompt` to `food`, `cardio`, `label`, `package`, `density`, or `barcode_ingredients`. For detailed/ingredients food paths set `input.detailed` / `input.ingredients`.
+3. Set `expect.outcome` to `estimate`, `not_food`, `not_food_or_zeros`, `reading`, `no_panel` (package: rejected or no panel numbers, never invented ones), or `reject`.
+   Package cases use `expect.nutrients` (`{"kcal": {"min": 190, "max": 210}}`, keys from `PackagePrompt.NUTRIENT_KEYS`; add `"required": false` for values that are hard to read, so a miss is recorded but doesn't fail), `servingGrams`, `ingredientsContainsAny` and `requirePanel`. Bands come from what the photo actually shows; leave out anything you can't read confidently.
 4. Run `./gradlew aiEval -Pprovider=… -Pset=…` and adjust bands if a healthy model is consistently outside them.
 
 ## CI

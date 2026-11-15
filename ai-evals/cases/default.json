@@ -520,12 +520,14 @@
           "max": 1
         }
       }
-    }
-,
+    },
     {
       "id": "barcode-oat-bar",
       "prompt": "barcode_ingredients",
-      "tags": ["barcode", "typical"],
+      "tags": [
+        "barcode",
+        "typical"
+      ],
       "input": {
         "productName": "Oat & Honey Bar",
         "brand": "Acme",
@@ -540,13 +542,19 @@
       "expect": {
         "outcome": "ingredients",
         "minIngredients": 3,
-        "nameContainsAny": ["oat", "honey"]
+        "nameContainsAny": [
+          "oat",
+          "honey"
+        ]
       }
     },
     {
       "id": "barcode-protein-shake-no-text",
       "prompt": "barcode_ingredients",
-      "tags": ["barcode", "sparse"],
+      "tags": [
+        "barcode",
+        "sparse"
+      ],
       "input": {
         "productName": "Chocolate Protein Shake",
         "brand": "Premier",
@@ -560,7 +568,293 @@
       "expect": {
         "outcome": "ingredients",
         "minIngredients": 1,
-        "nameContainsAny": ["protein", "milk", "whey", "cocoa", "chocolate"]
+        "nameContainsAny": [
+          "protein",
+          "milk",
+          "whey",
+          "cocoa",
+          "chocolate"
+        ]
+      }
+    },
+    {
+      "id": "package-pecans-real",
+      "prompt": "package",
+      "tags": [
+        "vision",
+        "real",
+        "typical"
+      ],
+      "input": {
+        "image": "images/real/pecans.jpg"
+      },
+      "expect": {
+        "outcome": "reading",
+        "requirePanel": true,
+        "servingGrams": {
+          "min": 27,
+          "max": 29
+        },
+        "nutrients": {
+          "kcal": {
+            "min": 190,
+            "max": 210
+          },
+          "fat_g": {
+            "min": 18,
+            "max": 22
+          },
+          "sat_fat_g": {
+            "min": 1.5,
+            "max": 2.5
+          },
+          "protein_g": {
+            "min": 2,
+            "max": 4
+          },
+          "fiber_g": {
+            "min": 2,
+            "max": 4,
+            "required": false
+          },
+          "carbs_g": {
+            "min": 2,
+            "max": 6,
+            "required": false
+          },
+          "sodium_mg": {
+            "min": 0,
+            "max": 5,
+            "required": false
+          },
+          "potassium_mg": {
+            "min": 100,
+            "max": 130,
+            "required": false
+          }
+        },
+        "ingredientsContainsAny": [
+          "pecan"
+        ]
+      }
+    },
+    {
+      "id": "package-craisins-rotated-real",
+      "prompt": "package",
+      "tags": [
+        "vision",
+        "real",
+        "edge"
+      ],
+      "input": {
+        "image": "images/real/craisins-rotated.jpg"
+      },
+      "expect": {
+        "outcome": "reading",
+        "nutrients": {
+          "kcal": {
+            "min": 120,
+            "max": 140,
+            "required": false
+          }
+        },
+        "ingredientsContainsAny": [
+          "cranberr"
+        ]
+      }
+    },
+    {
+      "id": "package-flax-label-real",
+      "prompt": "package",
+      "tags": [
+        "vision",
+        "real",
+        "typical"
+      ],
+      "input": {
+        "image": "images/real/flax-label.jpg"
+      },
+      "expect": {
+        "outcome": "reading",
+        "requirePanel": true,
+        "servingGrams": {
+          "min": 6.5,
+          "max": 7.5
+        },
+        "nutrients": {
+          "kcal": {
+            "min": 40,
+            "max": 50
+          },
+          "fat_g": {
+            "min": 2.5,
+            "max": 3.5
+          },
+          "protein_g": {
+            "min": 1.5,
+            "max": 2.5
+          },
+          "carbs_g": {
+            "min": 1.5,
+            "max": 2.5
+          },
+          "fiber_g": {
+            "min": 1.5,
+            "max": 2.5
+          },
+          "sodium_mg": {
+            "min": 0,
+            "max": 1,
+            "required": false
+          },
+          "calcium_mg": {
+            "min": 15,
+            "max": 25,
+            "required": false
+          },
+          "sat_fat_g": {
+            "min": 0.2,
+            "max": 0.4,
+            "required": false
+          },
+          "iron_mg": {
+            "min": 0.3,
+            "max": 0.4,
+            "required": false
+          },
+          "potassium_mg": {
+            "min": 55,
+            "max": 65,
+            "required": false
+          }
+        },
+        "ingredientsContainsAny": [
+          "flax"
+        ]
+      }
+    },
+    {
+      "id": "package-flax-barcode-side-real",
+      "prompt": "package",
+      "tags": [
+        "vision",
+        "real",
+        "edge"
+      ],
+      "input": {
+        "image": "images/real/flax-barcode.jpg"
+      },
+      "expect": {
+        "outcome": "no_panel"
+      }
+    },
+    {
+      "id": "package-almonds-real",
+      "prompt": "package",
+      "tags": [
+        "vision",
+        "real",
+        "typical"
+      ],
+      "input": {
+        "image": "images/real/almonds.jpg"
+      },
+      "expect": {
+        "outcome": "reading",
+        "requirePanel": true,
+        "servingGrams": {
+          "min": 29,
+          "max": 31
+        },
+        "nutrients": {
+          "kcal": {
+            "min": 160,
+            "max": 180
+          },
+          "fat_g": {
+            "min": 14,
+            "max": 16
+          },
+          "protein_g": {
+            "min": 5,
+            "max": 7
+          },
+          "carbs_g": {
+            "min": 5,
+            "max": 7,
+            "required": false
+          },
+          "fiber_g": {
+            "min": 3,
+            "max": 5,
+            "required": false
+          },
+          "sat_fat_g": {
+            "min": 0.5,
+            "max": 1.5,
+            "required": false
+          },
+          "calcium_mg": {
+            "min": 70,
+            "max": 90,
+            "required": false
+          },
+          "potassium_mg": {
+            "min": 200,
+            "max": 240,
+            "required": false
+          }
+        },
+        "ingredientsContainsAny": [
+          "almond"
+        ]
+      }
+    },
+    {
+      "id": "package-cereal-synthetic",
+      "prompt": "package",
+      "tags": [
+        "vision",
+        "typical"
+      ],
+      "input": {
+        "image": "images/label-cereal-synthetic.jpg"
+      },
+      "expect": {
+        "outcome": "reading",
+        "requirePanel": true,
+        "nutrients": {
+          "kcal": {
+            "min": 120,
+            "max": 160
+          },
+          "protein_g": {
+            "min": 3,
+            "max": 8
+          },
+          "carbs_g": {
+            "min": 24,
+            "max": 34
+          },
+          "fat_g": {
+            "min": 0,
+            "max": 5
+          }
+        }
+      }
+    },
+    {
+      "id": "package-not-label",
+      "prompt": "package",
+      "tags": [
+        "vision",
+        "edge"
+      ],
+      "input": {
+        "image": "images/edge-abstract-shapes.jpg"
+      },
+      "expect": {
+        "outcome": "no_panel"
       }
     }
   ]

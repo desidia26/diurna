@@ -77,6 +77,12 @@ interface EvalLabelClient {
     suspend fun read(photo: ByteArray): NutritionLabelReading
 }
 
+interface EvalPackageClient {
+    val providerId: String
+    val model: String
+    suspend fun read(photo: ByteArray): app.diurna.ai.PackageReading
+}
+
 interface EvalDensityClient {
     val providerId: String
     val model: String
@@ -96,6 +102,7 @@ data class EvalClients(
     val density: EvalDensityClient? = null,
     val ingredientNutrition: EvalIngredientNutritionClient? = null,
     val scoringMode: ScoringMode = ScoringMode.ACCURACY,
+    val pkg: EvalPackageClient? = null,
 )
 
 object EvalProviders {
@@ -149,7 +156,13 @@ object EvalProviders {
                 private val est = app.diurna.ai.GrokNutritionEstimator({ key }, { model }, { app.diurna.ai.HttpXaiTransport() })
                 override suspend fun estimate(name: String) = est.estimate(name)
             }
-            EvalClients(food, cardio, label, density, ingredientNutrition, ScoringMode.ACCURACY)
+            val pkg = object : EvalPackageClient {
+                override val providerId = id.id
+                override val model = model
+                private val reader = app.diurna.ai.GrokPackageReader({ key }, model)
+                override suspend fun read(photo: ByteArray) = reader.read(photo)
+            }
+            EvalClients(food, cardio, label, density, ingredientNutrition, ScoringMode.ACCURACY, pkg = pkg)
         }
         EvalProviderId.CLAUDE -> {
             val key = env("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() }
@@ -193,7 +206,13 @@ object EvalProviders {
                 private val est = app.diurna.ai.ClaudeNutritionEstimator({ key }, { model })
                 override suspend fun estimate(name: String) = est.estimate(name)
             }
-            EvalClients(food, cardio, label, density, ingredientNutrition, ScoringMode.ACCURACY)
+            val pkg = object : EvalPackageClient {
+                override val providerId = id.id
+                override val model = model
+                private val reader = app.diurna.ai.ClaudePackageReader({ key }, model)
+                override suspend fun read(photo: ByteArray) = reader.read(photo)
+            }
+            EvalClients(food, cardio, label, density, ingredientNutrition, ScoringMode.ACCURACY, pkg = pkg)
         }
         EvalProviderId.OLLAMA -> {
             val base = (ollamaBaseUrl?.takeIf { it.isNotBlank() }

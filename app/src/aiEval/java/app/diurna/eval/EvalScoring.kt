@@ -287,6 +287,65 @@ object EvalScoring {
     }
 
 
+    fun scorePackage(
+        case: EvalCase,
+        reading: app.diurna.ai.PackageReading,
+        mode: ScoringMode = ScoringMode.ACCURACY,
+    ): CaseScore {
+        val bandsRequired = mode == ScoringMode.ACCURACY
+        val e = case.expect
+        val checks = mutableListOf<CheckResult>()
+        checks += CheckResult("parsed", true, "PackageReading panel=${reading.hasPanel} values=${reading.perServing.size}")
+        checks += CheckResult(
+            "non_negative", reading.perServing.values.all { it >= 0 && it.isFinite() }, "ok",
+        )
+        when (e.outcome) {
+            "no_panel" -> checks += CheckResult(
+                "no_invented_numbers", reading.perServing.isEmpty(),
+                "got ${reading.perServing.keys}", required = bandsRequired,
+            )
+            "reading" -> {
+                if (e.requirePanel) {
+                    checks += CheckResult("has_panel", reading.hasPanel, "hasPanel=${reading.hasPanel}", required = bandsRequired)
+                }
+                e.servingGrams?.let { r ->
+                    val g = reading.servingGrams
+                    checks += CheckResult(
+                        "serving_grams", g != null && r.contains(g), "got $g want ${r.min}-${r.max}", required = bandsRequired,
+                    )
+                }
+                e.nutrients.forEach { (key, band) ->
+                    val v = reading.perServing[key]
+                    checks += CheckResult(
+                        key, v != null && band.contains(v),
+                        "got ${v ?: "unknown"} want ${band.min}-${band.max}",
+                        required = bandsRequired && band.required,
+                    )
+                }
+                if (e.ingredientsContainsAny.isNotEmpty()) {
+                    val text = reading.ingredientsText.orEmpty()
+                    checks += CheckResult(
+                        "ingredients",
+                        e.ingredientsContainsAny.any { text.contains(it, ignoreCase = true) },
+                        "got ${text.take(60)}", required = bandsRequired,
+                    )
+                }
+            }
+            else -> checks += CheckResult("unknown_outcome", false, e.outcome)
+        }
+        return CaseScore(case.id, "", case.prompt, passed = checks.filter { it.required }.all { it.passed }, checks = checks)
+    }
+
+    fun scorePackageFailure(case: EvalCase, error: String): CaseScore {
+        val ok = case.expect.outcome == "no_panel" || case.expect.outcome == "reject"
+        return CaseScore(
+            caseId = case.id, provider = "", prompt = case.prompt,
+            passed = ok, error = error,
+            checks = listOf(CheckResult("failure_as_reject", ok, error)),
+            parseFailure = !ok,
+        )
+    }
+
     fun scoreBarcodeIngredients(
         case: EvalCase,
         ingredients: List<FoodIngredient>,
