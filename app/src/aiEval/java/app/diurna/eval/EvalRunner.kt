@@ -170,7 +170,8 @@ class EvalRunner(
                     if (photo == null) {
                         return CaseScore(case.id, pid.id, case.prompt, passed = false, error = "package case needs image")
                     }
-                    EvalScoring.scorePackagePhoto(case, reader.read(photo), clients.scoringMode).copy(provider = pid.id)
+                    // Sent as the phone sends it: scaled to PhotoSizing.MAX_EDGE.
+                    EvalScoring.scorePackagePhoto(case, reader.read(EvalImages.fit(photo)), clients.scoringMode).copy(provider = pid.id)
                 }
                 "package_refine" -> {
                     if (pid == EvalProviderId.OLLAMA && config.ollamaTextOnly && photo != null) {
