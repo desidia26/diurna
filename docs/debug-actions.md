@@ -105,3 +105,7 @@ Live-only fallback remains a human-confirmed candidate even after a photo error 
 ### Lookup outcomes
 
 `scan.lookup.<outcome>` distinguishes `known` (library), `found`, `not_found` (no Open Food Facts record under any spelling; `spellings_tried` counts the EAN-13 and, for UPC-A, the 12-digit form), `incomplete` (record exists but `problem` is `no_nutrition`, `no_calories` or `implausible`), `unreadable` (the answer wasn't a product response) and `unreachable`/`failed` (network). Details carry only these codes and counts, never product text.
+
+### One-photo ingredient
+
+The recipe editor's Package photo flow logs `onephoto.open`, `onephoto.photo` (OK/CANCELLED), `onephoto.photo_deleted` (`read`), `onephoto.decode` (`decoded`/`confirm`/`none`/`text_model_not_ready`, plus a candidate count), `onephoto.lookup` (same outcomes as `scan.lookup`), `onephoto.fdc` (`found`/`none`/`failed`), `onephoto.label` (`read`/`no_panel`/`offline`/`no_key`/`failed`/`no_photo`, with field count and whether ingredients were read), `onephoto.merge` (`ok`/`no_nutrition`, with source wires, field and disagreement counts and flags), `onephoto.save` (whether servings were known, the manual field count, `label_pending`) and `onephoto.cancel`. All events in one flow share a correlation id. Details carry only codes and counts, never barcodes, product names, label text or the photo.

@@ -135,7 +135,8 @@ fun RecipeIngredientEntity.toDraft() = IngredientDraft(
 
 /**
  * Recipe editor: name, yield, optional cooked weight, ingredient lines with live per-serving totals.
- * Add ingredients manually, via USDA FDC (when a key is set), barcode (OFF), or a saved library meal.
+ * Add ingredients manually, via USDA FDC (when a key is set), one package photo (barcode + label,
+ * with live barcode scan as a fallback), or a saved library meal.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -164,7 +165,9 @@ fun RecipeDialog(
         }
     }
     var problem by remember { mutableStateOf<String?>(null) }
-    var addMode by remember { mutableStateOf<String?>(null) } // manual / fdc / barcode / meal
+    var addMode by remember { mutableStateOf<String?>(null) } // manual / fdc / photo / meal
+    // Index of a package line whose label is being read later.
+    var relabel by remember { mutableStateOf<Int?>(null) }
     var lookingUp by remember { mutableStateOf(false) }
 
     // Auto-resolve blocked volume/each lines (USDA → builtin → AI) once on open.
@@ -257,7 +260,13 @@ fun RecipeDialog(
                             if (aiNutrition || aiDensity) {
                                 Text("AI estimate", style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
                             }
+                            line.captured?.let { cap ->
+                                val from = cap.facts().values.map { it.source }.distinct().joinToString(", ") { sourceLabel(it) }
+                                if (from.isNotEmpty()) Hint("From $from")
+                                if (cap.labelPending()) Text("Label not read yet", style = MaterialTheme.typography.bodySmall, color = LocalStatusColors.current.warn)
+                            }
                         }
+                        if (line.captured?.labelPending() == true) TextButton(onClick = { relabel = i }) { Text("Read label") }
                         TextButton(onClick = { lines.removeAt(i) }) { Text("Remove") }
                     }
                 }
@@ -265,7 +274,7 @@ fun RecipeDialog(
                     TextButton(onClick = { addMode = "manual" }) { Text("Manual") }
                     if (hasFdcKey) TextButton(onClick = { addMode = "fdc" }) { Text("USDA") }
                     else Hint("Add a USDA FDC key in Setup to search Foundation / SR Legacy.")
-                    TextButton(onClick = { addMode = "barcode" }) { Text("Barcode") }
+                    TextButton(onClick = { addMode = "photo" }) { Text("Package photo") }
                     TextButton(onClick = { addMode = "meal" }) { Text("Saved item") }
                 }
                 problem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
@@ -338,7 +347,7 @@ fun RecipeDialog(
             onDismiss = { addMode = null },
             onAdd = { lines.add(it); addMode = null },
         )
-        "barcode" -> BarcodeIngredientDialog(
+        "photo" -> OnePhotoIngredientDialog(
             scan = scanBarcode,
             onDismiss = { addMode = null },
             onAdd = { lines.add(it); addMode = null },
@@ -347,6 +356,17 @@ fun RecipeDialog(
             meals = savedMeals.filter { it.id != initial.id && !it.isRecipe },
             onDismiss = { addMode = null },
             onAdd = { lines.add(it); addMode = null },
+        )
+    }
+    relabel?.let { i ->
+        val line = lines.getOrNull(i)
+        if (line == null) relabel = null else OnePhotoIngredientDialog(
+            scan = scanBarcode,
+            fallbackCode = line.barcode,
+            initialName = line.name,
+            initialGrams = line.grams,
+            onDismiss = { relabel = null },
+            onAdd = { if (i in lines.indices) lines[i] = it; relabel = null },
         )
     }
 }
@@ -533,79 +553,6 @@ private fun FdcIngredientDialog(
 }
 
 @Composable
-private fun BarcodeIngredientDialog(
-    scan: suspend (String, Boolean) -> app.diurna.data.LibraryRepository.ScanResult,
-    onDismiss: () -> Unit,
-    onAdd: (IngredientDraft) -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    // Reuse the camera dialog when possible; also allow paste for tests / no-camera.
-    var code by remember { mutableStateOf("") }
-    var amountStr by remember { mutableStateOf("100") }
-    var problem by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Barcode ingredient") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Hint("Looks up Open Food Facts, then scales to the grams you enter.")
-                OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth(), label = { Text("Barcode") }, singleLine = true)
-                OutlinedTextField(
-                    amountStr, { amountStr = it }, Modifier.fillMaxWidth(), label = { Text("Grams") }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                )
-                problem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = code.isNotBlank() && !busy, onClick = {
-                val grams = amountStr.toDoubleOrNull()
-                if (grams == null || grams <= 0) { problem = "Enter grams."; return@TextButton }
-                busy = true; problem = null
-                scope.launch {
-                    when (val r = scan(code, false)) {
-                        is app.diurna.data.LibraryRepository.ScanResult.Known -> {
-                            val m = r.meal
-                            // Treat saved meal macros as one serving; scale by grams/100 as a crude default
-                            // when note has no weight — prefer using "Saved item" for library meals.
-                            val factor = grams / 100.0
-                            onAdd(mealToDraft(m, grams, factor, barcode = m.barcode))
-                        }
-                        is app.diurna.data.LibraryRepository.ScanResult.Found -> {
-                            val m = r.draft
-                            val factor = grams / 100.0
-                            onAdd(mealToDraft(m, grams, factor, barcode = m.barcode, source = "barcode"))
-                        }
-                        is app.diurna.data.LibraryRepository.ScanResult.NotFound -> {
-                            val m = r.draft
-                            if (m.barcode != null) {
-                                // Keep barcode on the ingredient even when OFF had nothing usable.
-                                onAdd(mealToDraft(m.copy(name = m.name.ifBlank { "Scanned item" }), grams, grams / 100.0, barcode = m.barcode, source = "barcode"))
-                            } else problem = "Product not found."
-                        }
-                        is app.diurna.data.LibraryRepository.ScanResult.Incomplete -> {
-                            val m = r.draft
-                            if (m.barcode != null) {
-                                onAdd(mealToDraft(m.copy(name = m.name.ifBlank { "Scanned item" }), grams, grams / 100.0, barcode = m.barcode, source = "barcode"))
-                            } else problem = r.problem.message
-                        }
-                        is app.diurna.data.LibraryRepository.ScanResult.Failed -> {
-                            val m = r.draft
-                            if (m.barcode != null) {
-                                onAdd(mealToDraft(m.copy(name = m.name.ifBlank { "Scanned item" }), grams, grams / 100.0, barcode = m.barcode, source = "barcode"))
-                            } else problem = r.message
-                        }
-                    }
-                    busy = false
-                }
-            }) { Text(if (busy) "Looking up…" else "Add") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
-@Composable
 private fun SavedMealIngredientDialog(
     meals: List<MealEntity>,
     onDismiss: () -> Unit,
@@ -647,7 +594,6 @@ private fun mealToDraft(
     m: MealEntity,
     grams: Double?,
     factor: Double,
-    barcode: String? = null,
     sourceMealId: Long? = null,
     source: String = "meal",
 ): IngredientDraft {
@@ -676,7 +622,6 @@ private fun mealToDraft(
         nutrition = nut,
         kcal = s(m.kcal),
         source = source,
-        barcode = barcode,
         sourceMealId = sourceMealId,
     )
 }
