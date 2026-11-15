@@ -147,7 +147,7 @@ class RecipeImportTest {
     }
 
     @Test fun importerUsesFetcherAndMapsErrors() = runBlocking {
-        val ok = RecipeImporter { sampleHtml() }.importFromUrl("https://example.com/r")
+        val ok = RecipeImporter { sampleHtml().let { FetchedPage(it, it.length, false) } }.importFromUrl("https://example.com/r")
         assertTrue(ok is RecipeImportResult.Ok)
         assertEquals("Banana Bread", (ok as RecipeImportResult.Ok).recipe.name)
 
@@ -156,7 +156,7 @@ class RecipeImportTest {
         assertTrue(blocked is RecipeImportResult.Problem)
         assertEquals("That address is not allowed", (blocked as RecipeImportResult.Problem).message)
 
-        val none = RecipeImporter { "<html></html>" }.importFromUrl("https://example.com/r")
+        val none = RecipeImporter { FetchedPage("<html></html>", 13, false) }.importFromUrl("https://example.com/r")
         assertTrue(none is RecipeImportResult.Problem)
     }
 
