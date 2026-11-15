@@ -33,6 +33,11 @@ class EstimateRunnerTest {
             beforeReturn()
             return FoodEstimate(text.length * 10, text.length * 20, 1, 2, 3, "note for $text")
         }
+        val galleries = mutableListOf<List<ByteArray>>()
+        override suspend fun estimatePhotos(text: String, photos: List<ByteArray>, detailed: Boolean, ingredients: Boolean): FoodEstimate {
+            galleries += photos
+            return estimate(text, photos.firstOrNull(), detailed, ingredients)
+        }
     }
 
     private val fake = Fake()
@@ -148,6 +153,46 @@ class EstimateRunnerTest {
         assertFalse("the removed photo's file is deleted", java.io.File(t.photoDir, name).exists())
         runner.runPending()
         assertNull(fake.photos.last())
+    }
+
+    // Debug report ea12351c: the label was the second photo and never reached the model.
+    @Test fun everyPhotoOfTheEntryGoesWithTheEstimateInGalleryOrder() = runTest {
+        val barcode = t.food.photos.newName().also { java.io.File(t.photoDir, it).writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1)) }
+        val label = t.food.photos.newName().also { java.io.File(t.photoDir, it).writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 2)) }
+        t.food.add(t.mon, "links", barcode)
+        runner.runPending()
+        val id = entries().single().id
+        t.food.edit(id, "3 links", entries().single().time, listOf(barcode, label))
+        runner.runPending()
+        val sent = fake.galleries.last()
+        assertEquals(2, sent.size)
+        assertArrayEquals(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1), sent[0])
+        assertArrayEquals(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 2), sent[1])
+    }
+
+    // Larry: re-estimate when photos are added or removed (and reordered), not only the first one.
+    @Test fun addingRemovingOrReorderingExtraPhotosReEstimates() = runTest {
+        val a = t.food.photos.newName().also { java.io.File(t.photoDir, it).writeBytes(byteArrayOf(1)) }
+        val b = t.food.photos.newName().also { java.io.File(t.photoDir, it).writeBytes(byteArrayOf(2)) }
+        val c = t.food.photos.newName().also { java.io.File(t.photoDir, it).writeBytes(byteArrayOf(3)) }
+        t.food.add(t.mon, "links", a)
+        runner.runPending()
+        val id = entries().single().id
+        suspend fun time() = entries().single().time
+        val reasons = mutableListOf<Map<String, String>>()
+        t.food.onReestimate = { reasons += it }
+        for (photos in listOf(listOf(a, b), listOf(a, b, c), listOf(a, c, b), listOf(a, c))) {
+            assertNotNull(entries().single().estimatedAt)
+            t.food.edit(id, "links", time(), photos)
+            assertNull("$photos re-estimates", entries().single().estimatedAt)
+            runner.runPending()
+        }
+        assertEquals(listOf("1", "1", "0", "0"), reasons.map { it["photos_added"] })
+        assertEquals(listOf("0", "0", "0", "1"), reasons.map { it["photos_removed"] })
+        assertEquals("2", reasons[2]["photos_moved"])
+        // Same photos, same text: the numbers stay.
+        t.food.edit(id, "links", time(), listOf(a, c))
+        assertNotNull(entries().single().estimatedAt)
     }
 
     @Test fun missingPhotoFallsBackToTextOnly() = runTest {

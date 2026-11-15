@@ -1,6 +1,6 @@
 # Eval image sources
 
-All images in this folder were **generated for this repo** (Python/Pillow drawing code in the PR that added them). None are photographs of real people, meals, or commercial device screenshots.
+Images in this folder were **generated for this repo**, except the `*-real.jpg` files listed under *Real photos* below (Python/Pillow drawing code in the PR that added them). None are photographs of real people, meals, or commercial device screenshots.
 
 | File | Purpose |
 |------|---------|
@@ -10,5 +10,39 @@ All images in this folder were **generated for this repo** (Python/Pillow drawin
 | `edge-abstract-shapes.jpg` | Non-food / non-workout / non-label edge case |
 | `label-cereal-synthetic.jpg` | Fake FDA Nutrition Facts panel (140 kcal cereal) for LabelPrompt |
 | `menu-chipotle-synthetic.jpg` | Short synthetic restaurant menu for menu-photo food estimate |
+| `label-oats-dual-column-synthetic.jpg` | Fake oats panel with Dry and Prepared columns (ambiguous serving basis) for `package-oats-dual-column-synthetic` (a question is required) and `package-refine-oats-prepared` |
 
-License: CC0-equivalent — generated for Diurna evals; free to reuse in this project.
+## Real photos
+
+Cropped from photos in debug report ea12351c (Nov 2026), which Larry sent and which reproduces the bug, with all metadata (EXIF, GPS, timestamps) stripped. They show retail packaging only: no people, places or other personal details.
+
+| File | Purpose |
+|------|---------|
+| `links-barcode-real.jpg` | Barcode side of a plant-based link package; no nutrition text. Sent first, as in the report |
+| `links-label-real.jpg` | The same package's Nutrition Facts panel: 1 link (43 g), 60 kcal. `food-photos-barcode-then-label` expects 3 links ≈ 180 kcal |
+
+License (generated images): CC0-equivalent — generated for Diurna evals; free to reuse in this project.
+
+## Real package photos (`real/`)
+
+Photos of packages Larry owns, contributed by him for evals and barcode tests, with his consent to publish them here. Each was cropped to the package (no people or home interior) and re-encoded from raw pixels with Pillow, so no EXIF, GPS, XMP, ICC or other metadata carries over. `RealFixturePrivacyTest` fails if any file here has an APPn (other than JFIF) or comment segment. The package artwork and text belong to the brands; the photos are used only as test inputs.
+
+| File | Shows | Used by |
+|------|-------|---------|
+| `real/pecans.jpg` | Member's Mark pecan halves: panel, ingredients, partial barcode | `package-pecans-real`; barcode (uncertain) |
+| `real/craisins-rotated.jpg` | Ocean Spray Craisins, rotated 90°: small panel, ingredients, small barcode | `package-craisins-rotated-real`; barcode (uncertain) |
+| `real/flax-label.jpg` | Roots Circle flax seeds panel and ingredients | `package-flax-label-real` |
+| `real/flax-barcode.jpg` | Same jar, barcode side (UPC 860009719569), no panel | `package-flax-barcode-side-real` (`no_panel`); barcode (reliable) |
+| `real/almonds.jpg` | Mariani sliced almonds: panel, ingredients, barcode (UPC 076991000411) | `package-almonds-real`; barcode (reliable) |
+| `real/montage-pecans-almonds-flax.jpg` | 2×2 montage of `pecans.jpg`, `almonds.jpg` and `flax-label.jpg` (one cell blank), rebuilt from pixels | `package-montage-three-real` (multi-product) |
+| `real/oatmeal-six.jpg` | One kitchen-counter photo of five oatmeal ingredients side by side: Roots Circle flax jar (front label and barcode only, no panel), Ocean Spray Craisins (back, small panel), Mariani sliced almonds (panel and barcode), Member's Mark pecan halves (panel) and a Kroger Old Fashioned oats canister (panel, barcode, no front). A box of fresh mangos sits behind them as a non-package distractor. Larry's own photo, used with his permission; cropped to the counter top (stool, floor and room below removed) and kept at its full 2048 px width; the eval harness scales package photos to 1568 px before sending, as the app does | `package-oatmeal-six-real` (multi-product, tag `multi-six`) |
+
+### Adding another real photo
+
+Only with the owner's consent. Crop to the package, then re-encode without metadata:
+
+```bash
+python3 -c "from PIL import Image; import sys; im=Image.open(sys.argv[1]).convert('RGB').crop(tuple(map(int,sys.argv[3].split(',')))); Image.frombytes('RGB', im.size, im.tobytes()).save(sys.argv[2], 'JPEG', quality=88, optimize=True)" in.jpg ai-evals/images/real/name.jpg LEFT,TOP,RIGHT,BOTTOM
+```
+
+Then add a `package` case to `cases/default.json` with bands read from the photo (mark hard-to-read fields `"required": false`), and, if it shows a barcode, add it to `RealPackageBarcodeTest` as reliable or uncertain. Run `./gradlew testDebugUnitTest` (the privacy test covers the new file).

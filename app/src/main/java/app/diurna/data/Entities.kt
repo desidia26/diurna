@@ -63,6 +63,8 @@ data class MealEntity(
      * Public product data only; see [OffSnapshot]. Null when never looked up or added manually.
      */
     @ColumnInfo(name = "off_snapshot_json") val offSnapshotJson: String? = null,
+    /** One-photo capture: ingredients, serving basis and per-field provenance (v21). */
+    @Embedded val captured: CapturedFacts? = null,
     /** [KIND_SIMPLE], [KIND_RECIPE], or [KIND_RESTAURANT]. Existing rows migrate to simple. */
     @ColumnInfo(defaultValue = "'simple'") val kind: String = KIND_SIMPLE,
     /** How many servings the recipe batch makes. Null/1 for simple meals. */
@@ -190,6 +192,8 @@ data class RecipeIngredientEntity(
     val barcode: String? = null,
     /** Library meal this line was copied from, if any. */
     @ColumnInfo(name = "source_meal_id") val sourceMealId: Long? = null,
+    /** One-photo capture: ingredients, serving basis and per-field provenance (v21). */
+    @Embedded val captured: CapturedFacts? = null,
 )
 
 @Entity(tableName = "workout_template", indices = [Index(value = ["name"], unique = true)])
@@ -331,7 +335,7 @@ data class FoodEntryEntity(
     val text: String,
     /** Epoch millis of when it was entered; differs from [date] when backfilled. */
     @ColumnInfo(name = "logged_at") val loggedAt: Long,
-    // AI estimate, derived from [text] (and [photo]). Changing either clears these and re-estimates.
+    // AI estimate, derived from [text] and the entry's photos. Changing either clears these and re-estimates (see EditReestimate).
     @ColumnInfo(name = "kcal_low") val kcalLow: Int? = null,
     @ColumnInfo(name = "kcal_high") val kcalHigh: Int? = null,
     @ColumnInfo(name = "protein_g") val proteinG: Int? = null,
@@ -490,7 +494,7 @@ data class CatalogExercise(
 
 /**
  * One JPEG attached to a food entry or saved meal/recipe. Files live in [FoodPhotos]; this row
- * stores only the name. [food_entry.photo] remains the primary (position 0) for AI estimates.
+ * stores only the name. [food_entry.photo] remains the primary (position 0); AI estimates get every photo (see EntryPhotos).
  */
 @Entity(
     tableName = "food_photo",

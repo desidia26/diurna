@@ -26,8 +26,13 @@ enum class ScanVariant { ORIGINAL, CROP, ROTATE, CONTRAST, THRESHOLD, SHARPEN }
 
 /** Scanner never owns debug storage: an opt-in recorder may copy the file during this callback. */
 interface ScanDiagnostics {
+    fun onResolved(resolution: ScanResolution) {}
+    fun onEvent(name: String, outcome: String, details: Map<String, String> = emptyMap(), latencyMs: Long? = null) {}
+    val enabled: Boolean get() = false
+    fun onFailedVariant(pixels: ScanPixels) {}
     fun onCaptured(file: File) {}
     fun onAttempt(variant: ScanVariant, result: String) {}
+    fun onAttempt(variant: ScanVariant, result: String, latencyMs: Long?) { onAttempt(variant, result) }
     fun onResult(result: String, codes: List<ProductCode>) {}
     companion object { val NONE = object : ScanDiagnostics {} }
 }
@@ -82,16 +87,25 @@ suspend fun decodeProductImage(
     decode: suspend (ScanPixels, ScanVariant) -> List<ProductCode>,
     recognizeText: suspend (ScanPixels) -> List<String>,
     diagnostics: ScanDiagnostics = ScanDiagnostics.NONE,
+    recognizeLayout: (suspend (ScanPixels) -> List<OcrLine>)? = null,
 ): ScanOutcome {
     for (variant in ScanVariant.entries) {
+        val started = if (diagnostics.enabled) System.nanoTime() else 0L
         val codes = try {
-            decode(image.variant(variant), variant).validDistinct().also {
-                diagnostics.onAttempt(variant, if (it.isEmpty()) "no_code" else "decoded")
+            image.variant(variant).let { pixels ->
+                decode(pixels, variant).also { raw ->
+                    if (diagnostics.enabled) diagnostics.onEvent("decode_counts", "summary", mapOf("variant" to variant.name.lowercase(),
+                        "raw_candidates" to raw.size.toString(), "accepted_candidates" to raw.count { it.isValid() }.toString()))
+                }.validDistinct().also {
+                    if (it.isEmpty() && variant == ScanVariant.SHARPEN && diagnostics.enabled) diagnostics.onFailedVariant(pixels)
+                }
+            }.also {
+                diagnostics.onAttempt(variant, if (it.isEmpty()) "no_code" else "decoded", if (diagnostics.enabled) (System.nanoTime() - started) / 1_000_000 else null)
             }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            diagnostics.onAttempt(variant, "decoder_error")
+            diagnostics.onAttempt(variant, "decoder_error", if (diagnostics.enabled) (System.nanoTime() - started) / 1_000_000 else null)
             emptyList()
         }
         if (codes.isNotEmpty()) {
@@ -99,8 +113,10 @@ suspend fun decodeProductImage(
             return if (codes.size == 1) ScanOutcome.Decoded(codes.single()) else ScanOutcome.Confirm(codes)
         }
     }
+    val ocrStart = if (diagnostics.enabled) System.nanoTime() else 0L
+    diagnostics.onEvent("ocr", "start")
     val codes = try {
-        ocrProductCodes(recognizeText(image))
+        (if (recognizeLayout != null) ocrProductCodesFromLayout(recognizeLayout(image)) else ocrProductCodes(recognizeText(image))).also { diagnostics.onEvent("ocr", "ready", mapOf("candidates" to it.size.toString()), if (diagnostics.enabled) (System.nanoTime() - ocrStart) / 1_000_000 else null) }
     } catch (e: CancellationException) {
         throw e
     } catch (e: TextRecognitionNotReady) {

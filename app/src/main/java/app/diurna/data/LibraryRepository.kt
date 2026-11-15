@@ -94,9 +94,26 @@ class LibraryRepository(
                 "\"${blocked.name}\" needs a density (or grams) before volume can convert to mass.",
             )
         }
+        val withTotals = withRecipeTotals(meal, lines)
+        when (val v = validate(withTotals)) {
+            is Validated.Bad -> v.problem
+            is Validated.Good -> {
+                val id = if (v.meal.id == 0L) meals.insert(v.meal) else {
+                    meals.update(v.meal)
+                    v.meal.id
+                }
+                ingredients.deleteForMeal(id)
+                ingredients.insertAll(lines.mapIndexed { i, line -> line.copy(id = 0, mealId = id, position = i) })
+                Result.Ok
+            }
+        }
+    }
+
+    /** [meal] as a recipe whose per-serving totals are [lines] summed over its yield ([RecipeMath]). */
+    private fun withRecipeTotals(meal: MealEntity, lines: List<RecipeIngredientEntity>): MealEntity {
         val yield = meal.servingsYield?.takeIf { it > 0 } ?: 1.0
         val totals = RecipeMath.perServing(lines.map { it.toNutrition() }, yield)
-        val withTotals = meal.copy(
+        return meal.copy(
             kind = MealEntity.KIND_RECIPE,
             servingsYield = yield,
             kcal = totals.kcal,
@@ -131,18 +148,6 @@ class LibraryRepository(
             aminoMatched = totals.aminoMatched,
             aminoTotal = totals.aminoTotal,
         )
-        when (val v = validate(withTotals)) {
-            is Validated.Bad -> v.problem
-            is Validated.Good -> {
-                val id = if (v.meal.id == 0L) meals.insert(v.meal) else {
-                    meals.update(v.meal)
-                    v.meal.id
-                }
-                ingredients.deleteForMeal(id)
-                ingredients.insertAll(lines.mapIndexed { i, line -> line.copy(id = 0, mealId = id, position = i) })
-                Result.Ok
-            }
-        }
     }
 
     private sealed interface Validated {
@@ -199,12 +204,20 @@ class LibraryRepository(
          * Barcode known but OFF had no usable product. Draft has [MealEntity.barcode] and a failed
          * snapshot so the user can enter values manually; the barcode is still persisted on save/log.
          */
-        data class NotFound(val draft: MealEntity) : ScanResult
-        /** Network/HTTP failure. Draft still carries the barcode for manual entry + later retry. */
-        data class Failed(val message: String, val draft: MealEntity) : ScanResult
+        data class NotFound(val draft: MealEntity, val tried: List<String> = emptyList()) : ScanResult
+        /**
+         * OFF has the product but no usable numbers ([problem]). Draft keeps the barcode plus the
+         * product's name, serving and ingredients (snapshot lookupOk=false) for manual entry.
+         */
+        data class Incomplete(val draft: MealEntity, val problem: OffProblem) : ScanResult
+        /**
+         * Network/HTTP failure, or an answer that wasn't a product response ([reason] "unreadable").
+         * Draft still carries the barcode for manual entry + later retry.
+         */
+        data class Failed(val message: String, val draft: MealEntity, val reason: String = "unreachable") : ScanResult
     }
 
-    /** The library first (works offline), then Open Food Facts. */
+    /** The library first (works offline), then Open Food Facts under each [barcodeSpellings]. */
     suspend fun scan(raw: String, upcE: Boolean = false): ScanResult {
         val code = normalizeBarcode(raw, upcE) ?: return ScanResult.NotFound(
             MealEntity(name = "", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, barcode = null),
@@ -215,24 +228,38 @@ class LibraryRepository(
             barcode = code, kind = MealEntity.KIND_SIMPLE,
             offSnapshotJson = OffSnapshot.failed().encode(),
         )
-        val json = try {
-            products.fetch(code)
+        val found = try {
+            lookupOff(code, products)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             return ScanResult.Failed("Couldn't reach Open Food Facts. Check your connection.", blank)
         }
-        if (json == null) return ScanResult.NotFound(blank)
         val at = System.currentTimeMillis()
-        val snap = parseOffSnapshot(json, at) ?: OffSnapshot.failed(at)
-        val draft = parseOffProduct(json)?.copy(
-            barcode = code,
-            kind = MealEntity.KIND_SIMPLE,
-            offSnapshotJson = snap.encode(),
-        ) ?: return ScanResult.NotFound(
-            blank.copy(offSnapshotJson = snap.encode()),
-        )
-        return ScanResult.Found(draft)
+        return when (found) {
+            is OffLookup.NoProduct -> ScanResult.NotFound(blank, found.tried)
+            is OffLookup.Unreadable -> ScanResult.Failed(
+                "Open Food Facts sent an answer the app couldn't read. Try again later.", blank, reason = "unreadable",
+            )
+            is OffLookup.Incomplete -> ScanResult.Incomplete(
+                blank.copy(
+                    name = offProductName(found.json).orEmpty(),
+                    offSnapshotJson = offIdentitySnapshot(found.json, at).encode(),
+                ),
+                found.problem,
+            )
+            is OffLookup.Found -> {
+                val snap = parseOffSnapshot(found.json, at) ?: OffSnapshot.failed(at)
+                // lookupOff only returns Found when parseOffProduct succeeds.
+                ScanResult.Found(
+                    parseOffProduct(found.json)!!.copy(
+                        barcode = code,
+                        kind = MealEntity.KIND_SIMPLE,
+                        offSnapshotJson = snap.encode(),
+                    ),
+                )
+            }
+        }
     }
 
     suspend fun mealByBarcode(code: String): MealEntity? = meals.byBarcode(code)
@@ -290,6 +317,54 @@ class LibraryRepository(
     }
 
     /**
+     * Logs a meal made of [lines] (e.g. the packages confirmed from one photo) on [date] as one
+     * entry with the recipe's exact totals (one serving: the whole of every line). With
+     * [saveToLibrary] the recipe is also saved to the Library under [name] and the entry linked to
+     * it; otherwise nothing but the entry is stored, and its numbers stay its own.
+     */
+    suspend fun logRecipe(
+        date: LocalDate,
+        name: String,
+        lines: List<RecipeIngredientEntity>,
+        saveToLibrary: Boolean,
+        photos: List<String> = emptyList(),
+    ): Result {
+        val clean = name.trim()
+        if (clean.isEmpty()) return Result.Problem("Give the meal a name.")
+        if (lines.isEmpty()) return Result.Problem("Add at least one ingredient.")
+        lines.firstOrNull { it.grams == null && IngredientNeedsMass(it) }?.let {
+            return Result.Problem("\"${it.name}\" needs a density (or grams) before volume can convert to mass.")
+        }
+        val recipe = withRecipeTotals(MealEntity(name = clean, kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_RECIPE, servingsYield = 1.0), lines)
+        val entryId = db.withTransaction {
+            val saved = if (!saveToLibrary) recipe else when (val v = validate(recipe)) {
+                is Validated.Bad -> return@withTransaction v.problem
+                is Validated.Good -> {
+                    val id = meals.insert(v.meal)
+                    ingredients.insertAll(lines.mapIndexed { i, line -> line.copy(id = 0, mealId = id, position = i) })
+                    v.meal.copy(id = id)
+                }
+            }
+            val t = now()
+            db.dayDao().insertIgnore(DayEntity(date.key()))
+            val id = food.insert(
+                FoodEntryEntity(
+                    date = date.key(),
+                    time = if (date == t.toLocalDate()) t.hhmm() else "12:00",
+                    text = clean,
+                    loggedAt = System.currentTimeMillis(),
+                    photo = photos.firstOrNull(),
+                )
+            )
+            applyMeal(id, saved, 1.0)
+            id
+        }
+        if (entryId !is Long) return entryId as Result
+        if (photos.isNotEmpty()) photoStore?.replaceAll(FoodPhotoEntity.OWNER_ENTRY, entryId, photos)
+        return Result.Ok
+    }
+
+    /**
      * Changes how many servings a meal entry was. Scales from the saved meal when it still exists,
      * otherwise from the entry's own numbers.
      */
@@ -342,7 +417,7 @@ class LibraryRepository(
         fun s(x: Int) = (x * servings).roundToInt()
         fun o(x: Int?) = x?.let { (it * servings).roundToInt() }
         food.setMeal(
-            entryId, meal.id, servings, text, s(meal.kcal), s(meal.proteinG), s(meal.carbsG), s(meal.fatG),
+            entryId, meal.id.takeIf { it > 0 }, servings, text, s(meal.kcal), s(meal.proteinG), s(meal.carbsG), s(meal.fatG),
             o(meal.fiberG), o(meal.solubleFiberG), o(meal.insolubleFiberG),
             o(meal.sugarsG), o(meal.addedSugarsG), o(meal.starchG),
             o(meal.satFatG), o(meal.monoFatG), o(meal.polyFatG), o(meal.transFatG),
@@ -431,6 +506,7 @@ fun RecipeIngredientEntity.toNutrition(): RecipeMath.IngredientNutrition =
         proteinG = proteinG,
         carbsG = carbsG,
         fatG = fatG,
+        kcal = RecipeMath.explicitKcal(kcal, proteinG, carbsG, fatG),
         fiberG = fiberG,
         solubleFiberG = solubleFiberG,
         insolubleFiberG = insolubleFiberG,
