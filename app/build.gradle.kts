@@ -76,6 +76,11 @@ android {
         // The Anthropic SDK's HTTP dependencies each ship the same license/metadata files.
         resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/INDEX.LIST")
     }
+    androidResources {
+        // ML Kit object detection bundles a classifier model (1.6 MB) used only with enableClassification(),
+        // which PackageDetector never turns on; PackageDetectorTest covers detection without it.
+        ignoreAssetsPatterns += "<dir>mlkit_odt_default_classifier"
+    }
     sourceSets {
         // Exported Room schemas double as fixtures for migration tests.
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
