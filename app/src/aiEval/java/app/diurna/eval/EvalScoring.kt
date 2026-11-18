@@ -185,6 +185,10 @@ object EvalScoring {
                     val v = p.durationS?.roundToInt()
                     checks += CheckResult("duration_s", v != null && r.contains(v), "got $v want ${r.min}-${r.max}", required = bandsRequired)
                 }
+                if (e.durationAbsent) {
+                    val v = p.durationS?.roundToInt()
+                    checks += CheckResult("duration_absent", v == null, "got $v want blank", required = bandsRequired)
+                }
                 e.kcal?.let { r ->
                     val v = p.kcal
                     checks += CheckResult("kcal", v != null && r.contains(v), "got $v want ${r.min}-${r.max}", required = bandsRequired)

@@ -63,4 +63,17 @@ class CardioFormTest {
         assertEquals(CardioForm.Problem("Distance should be a whole number"), CardioForm.parse(CardioForm.Fields(distance = "3.2km"), row))
         assertEquals(CardioForm.Problem("Distance should be a number"), CardioForm.parse(CardioForm.Fields(distance = "3.2km"), Cardio.Style.RUN_KM))
     }
+
+    @Test fun aPhotoReadKeepsSecondsInTheTimeField() {
+        // 19:26 read off a rower's summary stays 19:26, not 19 or 20 min.
+        assertEquals("19:26", CardioForm.fields(CardioPiece(distanceM = 4289, durationS = 1166.0), row).time)
+        assertEquals(CardioForm.Ok(CardioPiece(distanceM = 4289, durationS = 1166.0)), CardioForm.parse(CardioForm.Fields(distance = "4289", time = "19:26"), row))
+    }
+
+    @Test fun photoHintAsksForTheTimeWhenTheScreenShowedNone() {
+        val missing = CardioForm.photoHint("Autumn Equinox", CardioPiece(distanceM = 4289, kcal = 163))
+        assertEquals("Read from your photo: Autumn Equinox. No elapsed time was readable, so enter the time you finished in. Fix anything that's off, then save.", missing)
+        val shown = CardioForm.photoHint("", CardioPiece(distanceM = 2168, durationS = 602.0))
+        assertEquals("Read from your photo. Fix anything that's off, then save.", shown)
+    }
 }

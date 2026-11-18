@@ -243,6 +243,34 @@
       }
     },
     {
+      "id": "cardio-rower-planned-length-real",
+      "prompt": "cardio",
+      "tags": ["vision", "real", "regression"],
+      "input": {
+        "image": "images/real/rower-time-cut-off.jpg"
+      },
+      "expect": {
+        "outcome": "reading",
+        "distanceM": { "min": 4250, "max": 4330 },
+        "kcal": { "min": 155, "max": 170 },
+        "durationAbsent": true
+      }
+    },
+    {
+      "id": "cardio-rower-total-time-real",
+      "prompt": "cardio",
+      "tags": ["vision", "real", "regression"],
+      "input": {
+        "image": "images/real/rower-total-time.jpg"
+      },
+      "expect": {
+        "outcome": "reading",
+        "distanceM": { "min": 2140, "max": 2200 },
+        "durationS": { "min": 600, "max": 604 },
+        "kcal": { "min": 76, "max": 86 }
+      }
+    },
+    {
       "id": "food-detailed-oatmeal",
       "prompt": "food",
       "tags": [

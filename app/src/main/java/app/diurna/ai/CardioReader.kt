@@ -4,6 +4,7 @@ import app.diurna.domain.Cardio
 import app.diurna.domain.CardioPiece
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -27,7 +28,9 @@ object CardioPrompt {
 
 Report the totals for the whole workout, exactly as the screen shows them, with their units:
 - distance and distance_unit: total distance as a number, and "m", "km" or "mi" as shown.
-- duration_s: total elapsed time in seconds (15:07 is 907, 1:02:30 is 3750).
+- tiles: every value on the summary's stats tiles or rows, left to right and top to bottom, each as "LABEL: value" exactly as printed (e.g. "TOTAL DISTANCE: 2,168 m", "TIME: 15:07"). Skip a tile whose label or value is cut off at the edge of the photo or unreadable. Don't include the title or header.
+- planned: the workout's planned length exactly as its title, program name or header prints it (e.g. "30 MIN", "20 min"), or "" if none. That is the plan, not how long it took.
+- time: how long the workout actually took: the elapsed-time value copied from one of your tiles as printed, seconds included (e.g. "15:07", "1:02:30", "32m 10s"), or "" if no tile shows it. Never put the planned length here: workouts often end before or after their plan, and a blank is fine because the person will type it in.
 - pace_s and pace_unit: the AVERAGE pace as time per distance, in seconds (2:10 is 130), and what it's per: "500m" (rowers' split), "km" or "mi". Don't work it out yourself.
 - best_pace_s: the best/fastest pace in the same unit as pace_unit, if shown.
 - speed and speed_unit: the AVERAGE speed if shown instead of or as well as pace, and "kmh" or "mph".
@@ -45,15 +48,20 @@ Use 0 (and unit "none") for anything the screen doesn't show or you can't read c
     private fun oneOf(vararg values: String) = mapOf("type" to "string", "enum" to values.toList())
 
     /**
-     * Every field required, 0 or "none" for not shown: both providers' strict structured output
-     * handle plain required numbers and enums, so nothing depends on nullable-type support.
+     * Every field required, 0, "none", "" or [] for not shown: both providers' strict structured
+     * output handle plain required numbers, strings, string arrays and enums, so nothing depends on
+     * nullable-type support.
      */
     val SCHEMA: Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to mapOf(
             "distance" to NUM,
             "distance_unit" to oneOf("m", "km", "mi", "none"),
-            "duration_s" to NUM,
+            // The tiles come before the time, and the plan gets its own slot, so the time is read
+            // from what the screen shows rather than taken from the workout's title (see elapsed).
+            "tiles" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
+            "planned" to mapOf("type" to "string"),
+            "time" to mapOf("type" to "string"),
             "pace_s" to NUM,
             "pace_unit" to oneOf("500m", "km", "mi", "none"),
             "best_pace_s" to NUM,
@@ -65,7 +73,7 @@ Use 0 (and unit "none") for anything the screen doesn't show or you can't read c
             "note" to mapOf("type" to "string"),
         ),
         "required" to listOf(
-            "distance", "distance_unit", "duration_s", "pace_s", "pace_unit", "best_pace_s",
+            "distance", "distance_unit", "tiles", "planned", "time", "pace_s", "pace_unit", "best_pace_s",
             "speed", "speed_unit", "watts", "kcal", "avg_hr", "note",
         ),
         "additionalProperties" to false,
@@ -104,7 +112,7 @@ Use 0 (and unit "none") for anything the screen doesn't show or you can't read c
         val split = pace?.let { p -> num("pace_s")?.let(p::toSplit) } ?: speed?.let { sp -> num("speed")?.let(sp::toSplit) }
         val piece = CardioPiece(
             distanceM = metresPer?.let { m -> num("distance")?.let { Math.round(it * m).toInt() } },
-            durationS = num("duration_s"),
+            durationS = elapsed(text("time"), node.get("tiles")),
             splitS = split,
             bestSplitS = pace?.let { p -> num("best_pace_s")?.let(p::toSplit) },
             watts = int("watts"),
@@ -116,6 +124,45 @@ Use 0 (and unit "none") for anything the screen doesn't show or you can't read c
             throw EstimateFailed(if (note.isNotEmpty()) "No distance or time found ($note). Enter it by hand." else "No distance or time found. Enter it by hand.")
         }
         return CardioReading(piece, note)
+    }
+
+    /**
+     * The elapsed time in seconds, kept only when one of the reply's own tiles shows it. A model
+     * that can't find the time tile (cut off at the photo's edge, say) tends to fill in the
+     * workout's planned length from its title instead: "22 MIN" logged as 22:00 for a class that
+     * took 19:26 (report r1118). That plan is never a tile, so the check leaves the time blank for
+     * the person to type. A piece that ran exactly its planned length still shows it on a tile, so
+     * it's kept. Target, goal and remaining tiles don't count.
+     */
+    internal fun elapsed(time: String, tiles: JsonNode?): Double? {
+        val seconds = seconds(time) ?: return null
+        val shown = tiles?.takeIf { it.isArray }?.mapNotNull { t -> t.takeIf { it.isTextual }?.asText() }.orEmpty()
+            .filterNot { NOT_ELAPSED.containsMatchIn(it.substringBefore(":")) }
+            .flatMap(::timesIn)
+        return seconds.takeIf { s -> shown.any { abs(it - s) < 0.5 } }
+    }
+
+    private val NOT_ELAPSED = Regex("""(?i)target|goal|plan|remain|left|estimat""")
+    private val CLOCK = Regex("""(?<![\d:.])\d{1,3}(?::[0-5]\d){1,2}(?:\.\d+)?(?![\d:])""")
+    private val HMS = Regex("""(?i)(?:(\d+)\s*h(?:ours?|rs?)?\s*)?(?:(\d+)\s*m(?:in(?:utes?|s)?)?\s*)?(?:(\d+(?:\.\d+)?)\s*s(?:ec(?:onds?|s)?)?)?""")
+    private val UNIT_TIME = Regex("""(?i)\d\s*(h|hrs?|hours?|min|mins|minutes?|s|secs?|seconds?)\b|\d\s*m\s*\d+\s*s\b""")
+
+    /** "19:26", "1:02:30", "15:07.4", "32m 10s", "1h 5m", "45 min" in seconds; null for anything else. */
+    internal fun seconds(text: String): Double? {
+        val t = text.trim()
+        if (t.isEmpty()) return null
+        Cardio.parseClock(t)?.let { return it }
+        val (h, min, sec) = (HMS.matchEntire(t) ?: return null).destructured
+        if (h.isEmpty() && min.isEmpty() && sec.isEmpty()) return null
+        return (h.toDoubleOrNull() ?: 0.0) * 3600 + (min.toDoubleOrNull() ?: 0.0) * 60 + (sec.toDoubleOrNull() ?: 0.0)
+    }
+
+    /** Every time a tile's value shows: clocks, or a value with h/m/s units ("4,289 m" is a distance, not minutes). */
+    private fun timesIn(tile: String): List<Double> {
+        val value = tile.substringAfter(": ", tile).trim()
+        val clocks = CLOCK.findAll(value).mapNotNull { Cardio.parseClock(it.value) }.toList()
+        if (clocks.isNotEmpty() || !UNIT_TIME.containsMatchIn(value)) return clocks
+        return listOfNotNull(seconds(value))
     }
 }
 

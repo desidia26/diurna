@@ -41,6 +41,8 @@ data class CaseExpect(
     val noteMaxLen: Int? = null,
     val distanceM: IntRangeExpect? = null,
     val durationS: IntRangeExpect? = null,
+    /** cardio: the screen shows no readable elapsed time, so duration must come back blank (never a planned length). */
+    val durationAbsent: Boolean = false,
     val kcal: IntRangeExpect? = null,
     val avgHr: IntRangeExpect? = null,
     /** barcode_ingredients: minimum ingredient count when outcome is ingredients. */
@@ -203,6 +205,7 @@ object EvalCases {
                     noteMaxLen = expect.path("noteMaxLen").takeIf { it.isNumber }?.asInt(),
                     distanceM = intRange(expect.path("distanceM")),
                     durationS = intRange(expect.path("durationS")),
+                    durationAbsent = expect.path("durationAbsent").asBoolean(false),
                     kcal = intRange(expect.path("kcal")),
                     avgHr = intRange(expect.path("avgHr")),
                     minIngredients = expect.path("minIngredients").takeIf { it.isNumber }?.asInt(),
