@@ -77,6 +77,16 @@ class EvalScoringTest {
         assertTrue(s.passed)
     }
 
+    @Test fun cardioDurationAbsentFailsOnAPlannedLength() {
+        val c = EvalCase(
+            "c", "cardio", input = CaseInput(image = "x.jpg"),
+            expect = CaseExpect(outcome = "reading", distanceM = IntRangeExpect(4250, 4330), durationAbsent = true),
+        )
+        // The workout's "22 MIN" header read as the time: the bug from report r1118.
+        assertFalse(EvalScoring.scoreCardio(c, CardioReading(CardioPiece(distanceM = 4289, durationS = 1320.0), "22 min")).passed)
+        assertTrue(EvalScoring.scoreCardio(c, CardioReading(CardioPiece(distanceM = 4289), "22 min")).passed)
+    }
+
     @Test fun cardioRejectWhenReadingReturnedFails() {
         val c = EvalCase("c", "cardio", input = CaseInput(image = "x.jpg"), expect = CaseExpect(outcome = "reject"))
         assertFalse(EvalScoring.scoreCardio(c, CardioReading(CardioPiece(distanceM = 1, durationS = 1.0), "x")).passed)

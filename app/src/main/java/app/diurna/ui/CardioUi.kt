@@ -155,6 +155,16 @@ object CardioForm {
     /** What the dialog asks for in [style]; any other field is still shown when it holds a value. */
     data class Labels(val distance: String?, val pace: String?, val bestSplit: Boolean, val watts: Boolean)
 
+    /**
+     * The confirm dialog's line after a photo read. When the screen showed no elapsed time it says so,
+     * so a blank Time reads as "type it in" rather than a missed field (the reader never fills in a
+     * workout's planned length instead).
+     */
+    fun photoHint(note: String, piece: CardioPiece): String =
+        "Read from your photo" + (note.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "") + ". " +
+            (if (piece.durationS == null) "No elapsed time was readable, so enter the time you finished in. " else "") +
+            "Fix anything that's off, then save."
+
     fun labels(style: Cardio.Style) = Labels(
         distance = style.unitLabel.takeIf { style.hasDistance },
         pace = when {
@@ -261,7 +271,7 @@ fun CardioDialog(edit: CardioEdit, style: Cardio.Style, onDismiss: () -> Unit, o
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 edit.problem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
                 if (edit.fromPhoto && edit.problem == null) {
-                    Hint("Read from your photo" + (edit.note.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "") + ". Fix anything that's off, then save.")
+                    Hint(CardioForm.photoHint(edit.note, edit.piece))
                 }
                 l.distance?.let { unit ->
                     val type = if (style.unitM == 1.0) KeyboardType.Number else KeyboardType.Decimal

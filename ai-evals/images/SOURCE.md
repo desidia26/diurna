@@ -37,6 +37,15 @@ Cropped from photos in debug report ea12351c (Nov 2026), which Larry sent and wh
 | `links-barcode-real.jpg` | Barcode side of a plant-based link package; no nutrition text. Sent first, as in the report |
 | `links-label-real.jpg` | The same package's Nutrition Facts panel: 1 link (43 g), 60 kcal. `food-photos-barcode-then-label` expects 3 links ≈ 180 kcal |
 
+## Real cardio summary screens (`real/`)
+
+Photos Larry took of his rowing machine's end-of-workout screen, from debug report r1118 (Nov 2026), which reproduces the bug. Cropped to the TV screen (no room, people or other personal details) from the app's own downscaled copy, and re-encoded from raw pixels with Pillow, so no EXIF, GPS, XMP, ICC or other metadata carries over (`RealFixturePrivacyTest` covers them).
+
+| File | Shows | Used by |
+|------|-------|---------|
+| `real/rower-time-cut-off.jpg` | A class titled "22 MIN": 4,289 m, 2:10 avg split, 1:53 best, 158 W, 163 Cal. The time tile is cut off at the left edge (Larry's actual time was 19:26, not readable here) | `cardio-rower-planned-length-real`: time must come back blank, never 22:00 |
+| `real/rower-total-time.jpg` | "15 MIN PRECISE SPEED" that took 10:02: 2,168 m, 2:15 avg, 1:44 best, 139 W, 81 Cal | `cardio-rower-total-time-real`: time 10:02, not 15 min |
+
 ## Real package photos (`real/`)
 
 Photos of packages Larry owns, contributed by him for evals and barcode tests, with his consent to publish them here. Each was cropped to the package (no people or home interior) and re-encoded from raw pixels with Pillow, so no EXIF, GPS, XMP, ICC or other metadata carries over. `RealFixturePrivacyTest` fails if any file here has an APPn (other than JFIF) or comment segment. The package artwork and text belong to the brands; the photos are used only as test inputs.
