@@ -1,0 +1,3 @@
+Log a recipe by pasting its link
+
+Typing or pasting a recipe link in the Day screen's food box now imports the recipe, the same way Import URL on the Meals page does, instead of asking the AI to guess from the link. You check the ingredients in the recipe editor, Save adds it to your recipes, and then you pick how many servings to log. Share links that redirect, like Samsung Food's, work too. If a recipe you already saved has the same name, you can log that one instead. If the page has no recipe, you're told why, and when the link itself has words in it (like "homemade-alfredo-sauce") you can have those estimated instead. A link with no words, like a short share link, is never estimated as food. Plain text is estimated exactly as before.

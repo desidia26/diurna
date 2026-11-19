@@ -241,6 +241,26 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
         return r
     }
     suspend fun mealByBarcode(code: String) = c.library.mealByBarcode(code)
+
+    // A recipe link typed in the food box: the Library's import, its recipe editor, then servings.
+    val hasFdcKey = c.usdaKey.lastFour.map { it != null }.state(false)
+
+    /** Hardened HTTPS fetch + schema.org Recipe parse ([app.diurna.data.recipe.RecipeImporter]); no AI, no keys. */
+    suspend fun importRecipeFromUrl(url: String): app.diurna.data.recipe.RecipeImportResult =
+        c.dayRecipeImporter.importFromUrl(url)
+    suspend fun searchFdc(query: String) = c.fdcClient.search(query)
+    suspend fun loadFdcNutrition(fdcId: Int) = c.fdcClient.nutritionProfile(fdcId)
+    suspend fun resolveDensities(lines: List<app.diurna.data.RecipeIngredientEntity>) =
+        lines.map { c.densityResolver.enrichLine(it) }
+    /** Saves the confirmed recipe to the Library and returns it, so the servings step can log it. */
+    suspend fun saveImportedRecipe(meal: MealEntity, lines: List<app.diurna.data.RecipeIngredientEntity>) =
+        c.library.saveRecipeReturning(meal, lines)
+
+    /** Debug log for the food box's link route: a fixed [outcome] token only, never the link or text. */
+    fun logFoodLink(outcome: String) = c.actions.dispatch(app.diurna.debug.Action.Event(
+        app.diurna.debug.Screen.DAY, "day.food_link", result = app.diurna.debug.Action.Result.OK,
+        details = mapOf("outcome" to outcome),
+    ))
     fun setServings(entryId: Long, servings: Double) = io("day.set_servings") { c.library.setServings(entryId, servings) }
     suspend fun saveEntryAsMeal(entryId: Long, meal: MealEntity) = c.library.saveEntryAsMeal(entryId, meal)
 }

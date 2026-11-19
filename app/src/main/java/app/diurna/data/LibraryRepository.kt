@@ -86,17 +86,21 @@ class LibraryRepository(
      * Saves a recipe meal and replaces its ingredient snapshots. Recomputes per-serving totals
      * from [lines] via [RecipeMath]; refuses when a volume line has no resolved grams.
      */
-    suspend fun saveRecipe(meal: MealEntity, lines: List<RecipeIngredientEntity>): Result = db.withTransaction {
-        if (lines.isEmpty()) return@withTransaction Result.Problem("Add at least one ingredient.")
+    suspend fun saveRecipe(meal: MealEntity, lines: List<RecipeIngredientEntity>): Result =
+        saveRecipeReturning(meal, lines).first
+
+    /** [saveRecipe], also returning the saved recipe (null on a problem) so it can be logged straight away. */
+    suspend fun saveRecipeReturning(meal: MealEntity, lines: List<RecipeIngredientEntity>): Pair<Result, MealEntity?> = db.withTransaction {
+        if (lines.isEmpty()) return@withTransaction Result.Problem("Add at least one ingredient.") to null
         val blocked = lines.firstOrNull { it.grams == null && IngredientNeedsMass(it) }
         if (blocked != null) {
             return@withTransaction Result.Problem(
                 "\"${blocked.name}\" needs a density (or grams) before volume can convert to mass.",
-            )
+            ) to null
         }
         val withTotals = withRecipeTotals(meal, lines)
         when (val v = validate(withTotals)) {
-            is Validated.Bad -> v.problem
+            is Validated.Bad -> v.problem to null
             is Validated.Good -> {
                 val id = if (v.meal.id == 0L) meals.insert(v.meal) else {
                     meals.update(v.meal)
@@ -104,7 +108,7 @@ class LibraryRepository(
                 }
                 ingredients.deleteForMeal(id)
                 ingredients.insertAll(lines.mapIndexed { i, line -> line.copy(id = 0, mealId = id, position = i) })
-                Result.Ok
+                Result.Ok to meals.get(id)
             }
         }
     }

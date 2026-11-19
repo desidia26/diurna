@@ -128,4 +128,16 @@ class RecipeImportLoggingTest {
         assertEquals("a.com", d.getString("host"))
         assertFalse(d.has("url"))
     }
+
+    @Test fun dayScreenImportsLogUnderDay() {
+        val rec = recorder(typed = false)
+        val logged = LoggedRecipeImporter(
+            RecipeImporter { SafeHttp.readCapped(ByteArrayInputStream(recipePage.toByteArray())) },
+            rec.store, screen = Screen.DAY,
+        )
+        runBlocking { logged.importFromUrl(url) }
+        val log = rec.snapshot().map { JSONObject(it) }
+        assertEquals(listOf("DAY", "DAY"), log.map { it.getString("screen") })
+        assertFalse(log.joinToString().contains("/recipes/chili"))
+    }
 }

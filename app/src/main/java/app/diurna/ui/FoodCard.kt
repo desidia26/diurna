@@ -72,6 +72,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.diurna.domain.FoodLink
 import app.diurna.domain.ArmedState
 import app.diurna.data.ExerciseSetEntity
 import app.diurna.domain.AlarmRules
@@ -86,8 +87,14 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
     // Photos attached to the entry being typed; saveable so a trip to the camera can't lose them.
     var photos by rememberSaveable { mutableStateOf(listOf<String>()) }
     val attacher = rememberPhotoAttacher(vm) { new -> photos = (photos + new).distinct().take(5) }
+    // A recipe link goes to recipe import, never to the AI as if the link were food.
+    var link by remember { mutableStateOf<FoodLink.Route.Link?>(null) }
     fun log() {
         if (text.isBlank()) return // the text is the entry; a photo only adds to it
+        when (val r = FoodLink.route(text)) {
+            is FoodLink.Route.Link -> { link = r; return }
+            is FoodLink.Route.Plain -> Unit
+        }
         vm.addFood(text, photos)
         text = ""
         photos = emptyList()
@@ -202,6 +209,14 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
         undoable?.let { id -> s.food.find { it.id == id } }?.let { gone ->
             UndoBar("Deleted \u201c${gone.text.lines().first()}\u201d", onUndo = vm::undoDeleteFood)
         }
+    }
+    link?.let { l ->
+        FoodLinkFlow(
+            l, vm, detailed, meals,
+            onDismiss = { link = null },
+            onEstimate = { words -> link = null; vm.addFood(words, photos); text = ""; photos = emptyList() },
+            onRecipeReady = { recipe -> link = null; servingsOf = recipe },
+        )
     }
     if (mealFromPhoto) {
         MealFromPhotoFlow(
