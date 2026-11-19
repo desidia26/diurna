@@ -17,6 +17,7 @@ import app.diurna.data.WorkoutWithExercises
 import app.diurna.data.totals
 import app.diurna.domain.AlarmRules
 import app.diurna.domain.DailyMetrics
+import app.diurna.domain.Metrics
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import app.diurna.domain.NutritionTotals
@@ -53,6 +54,8 @@ data class DayUi(
     val locked: Boolean,
     val morning: AlarmRules.MorningResult,
     val targets: Targets?,
+    /** The selected day's week is marked as a deload. */
+    val deload: Boolean = false,
 ) {
     val totals: NutritionTotals get() = food.totals()
     val plannedTemplate: Template? get() =
@@ -68,10 +71,11 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     private val date get() = c.selectedDate.value.value
 
     val day: StateFlow<DayUi?> = c.selectedDate.value.flatMapLatest { d ->
-        val workoutWithLast = c.days.observeWorkout(d).mapLatest { w ->
-            w to (w?.exercises.orEmpty().sortedBy { it.logged.position }.map {
+        // Marking any week a deload can change "last time", so hints follow the deload table too.
+        val workoutWithLast = combine(c.days.observeWorkout(d), c.days.observeDeloadMondays(), ::Pair).mapLatest { (w, deloads) ->
+            Triple(w, w?.exercises.orEmpty().sortedBy { it.logged.position }.map {
                 ExerciseUi(it.copy(sets = it.sets.sortedBy { s -> s.position }), c.days.lastTime(it.exercise.id, d))
-            })
+            }, Metrics.weekOf(d) in deloads)
         }
         combine(
             combine(c.days.observeDay(d), c.routine.observeRoutine(), c.routine.observeTemplates(), ::Triple),
@@ -79,7 +83,7 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
             c.food.observe(d),
             c.nutrition.observeTargets(d),
             minuteTicker,
-        ) { (day, routineDays, tpls), (workout, exercises), food, targets, now ->
+        ) { (day, routineDays, tpls), (workout, exercises, deload), food, targets, now ->
             val rd = routineDays.find { it.weekday == d.dayOfWeek.value }
             val alarm = AlarmRules.effective(d, now, day?.alarmOverride, rd?.alarmTime ?: "06:30", day?.scheduledAlarm)
             DayUi(
@@ -88,6 +92,7 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
                 locked = AlarmRules.isLocked(d, now),
                 morning = AlarmRules.morning(d, now, alarm, day?.scannedAt),
                 targets = targets,
+                deload = deload,
             )
         }
     }.state(null)

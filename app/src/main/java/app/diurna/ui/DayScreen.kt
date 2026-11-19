@@ -102,7 +102,7 @@ fun DayScreen(
         if (armed == ArmedState.NeedsPorchCode) {
             item { Hint("Alarms aren't armed yet. Print your porch code and scan it once in Setup.") }
         }
-        item { DateHeader(eyebrow = s.date.format(WeekdayName) + if (s.date == s.today) " · Today" else "", title = s.date.short(), onPrev = { vm.shift(-1) }, onNext = { vm.shift(1) }) }
+        item { DateHeader(eyebrow = s.date.format(WeekdayName) + (if (s.date == s.today) " · Today" else "") + (if (s.deload) " · Deload week" else ""), title = s.date.short(), onPrev = { vm.shift(-1) }, onNext = { vm.shift(1) }) }
         if (s.date != s.today) {
             item {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {

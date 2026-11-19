@@ -52,6 +52,59 @@ class DayRepositoryTest {
         assertEquals(mon.minusDays(14), days.lastTime(workout(mon).ex("Bench press").exercise.id, mon)!!.date)
     }
 
+    // ---- Deload weeks ----
+
+    @Test fun setDeloadStoresTheWeeksMondayAndClears() = runTest {
+        val wed = mon.plusDays(2)
+        days.setDeload(wed, true)
+        assertTrue(days.observeDeload(mon).first())
+        assertTrue("any day of the week reads it", days.isDeload(mon.plusDays(6)))
+        assertFalse(days.isDeload(mon.plusDays(7)))
+        assertEquals(listOf(mon), days.observeDeloadWeeks(mon.minusDays(7), mon.plusDays(13)).first())
+        days.setDeload(wed, true) // twice is still one week
+        days.setDeload(mon.plusDays(5), false)
+        assertFalse(days.observeDeload(mon).first())
+    }
+
+    @Test fun lastTimeSkipsAnEarlierDeloadWeek() = runTest {
+        val push = t.template("Push A", "Bench press")
+        days.startWorkout(mon.minusDays(14), push)
+        t.fill(mon.minusDays(14), "Bench press", 185.0, 8, 8, 6)
+        days.startWorkout(mon.minusDays(7), push)
+        t.fill(mon.minusDays(7), "Bench press", 135.0, 5, 5)
+        days.setDeload(mon.minusDays(7), true)
+
+        days.startWorkout(mon, push)
+        val bench = workout(mon).ex("Bench press")
+        val last = days.lastTime(bench.exercise.id, mon)!!
+        assertEquals(mon.minusDays(14), last.date)
+        assertEquals(listOf(8, 8, 6), last.sets.map { it.reps })
+        assertEquals("blank rows follow the pre-deload session", 3, bench.sets.size)
+    }
+
+    @Test fun lastTimeInsideADeloadWeekUsesThatWeeksSessions() = runTest {
+        val push = t.template("Push A", "Bench press")
+        days.setDeload(mon, true)
+        days.startWorkout(mon.minusDays(7), push)
+        t.fill(mon.minusDays(7), "Bench press", 185.0, 8, 8, 6)
+        days.startWorkout(mon, push)
+        t.fill(mon, "Bench press", 135.0, 5, 5, 5)
+
+        val thu = mon.plusDays(3)
+        days.startWorkout(thu, push)
+        assertEquals(mon, days.lastTime(workout(thu).ex("Bench press").exercise.id, thu)!!.date)
+    }
+
+    @Test fun lastTimeFallsBackToDeloadWhenThatIsAllThereIs() = runTest {
+        val push = t.template("Push A", "Bench press")
+        days.setDeload(mon.minusDays(7), true)
+        days.startWorkout(mon.minusDays(7), push)
+        t.fill(mon.minusDays(7), "Bench press", 135.0, 5, 5)
+
+        days.startWorkout(mon, push)
+        assertEquals(mon.minusDays(7), days.lastTime(workout(mon).ex("Bench press").exercise.id, mon)!!.date)
+    }
+
     @Test fun removeExerciseTakesItsSetsAndLeavesTheRest() = runTest {
         days.startWorkout(mon, t.template("Push A", "Bench press", "Dips"))
         t.fill(mon, "Bench press", 185.0, 8, 8, 6)

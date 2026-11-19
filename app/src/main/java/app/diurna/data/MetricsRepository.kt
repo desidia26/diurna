@@ -17,6 +17,7 @@ class MetricsRepository(db: AppDatabase) {
     private val workouts = db.workoutDao()
     private val food = db.foodDao()
     private val dailyMetrics = db.dailyMetricDao()
+    private val deloads = db.deloadDao()
 
     /** The range's days, plus the 6 before [from] so the first 7-day averages have a full window. */
     data class Snapshot(
@@ -35,6 +36,8 @@ class MetricsRepository(db: AppDatabase) {
         val checkIn: List<DailyMetrics.Def> = emptyList(),
         /** Check-in values over the same days as [days]. */
         val checkInValues: List<DailyMetricValueEntity> = emptyList(),
+        /** Mondays of deload weeks touching the range. */
+        val deloads: Set<LocalDate> = emptySet(),
     )
 
     data class Training(val lifting: List<Metrics.Session>, val cardio: List<Cardio.Session>)
@@ -53,12 +56,14 @@ class MetricsRepository(db: AppDatabase) {
                 dailyMetrics.observeAll(),
                 dailyMetrics.observeValuesRange(from.minusDays(6).key(), today.key()),
             ) { defs, values -> defs.map { it.def() } to values }
+            val deloadWeeks = deloads.observeRange(Metrics.weekOf(from).key(), today.key())
+                .map { w -> w.mapTo(mutableSetOf(), LocalDate::parse) }
             combine(
-                combine(days.observeRange(from.minusDays(6).key(), today.key()), checkIn, ::Pair),
+                combine(days.observeRange(from.minusDays(6).key(), today.key()), checkIn, deloadWeeks, ::Triple),
                 training,
                 food.observeMacros(from.key(), today.key()),
                 food.observeEstimatedFoodCount(),
-            ) { (rows, checkIn), t, macros, foodCount ->
+            ) { (rows, checkIn, deloadSet), t, macros, foodCount ->
                 Snapshot(
                     from, today, rows, t.lifting, t.cardio,
                     macros = macros.associate { row ->
@@ -87,6 +92,7 @@ class MetricsRepository(db: AppDatabase) {
                     hasEstimatedFood = foodCount > 0,
                     checkIn = checkIn.first,
                     checkInValues = checkIn.second,
+                    deloads = deloadSet,
                 )
             }
         }

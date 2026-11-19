@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -47,12 +48,20 @@ fun WeekScreen(vm: WeekViewModel, contentPadding: PaddingValues, onOpenDay: (Loc
                 Modifier.fillMaxWidth().padding(bottom = 4.dp),
             )
         }
-        items(w.days, key = { it.date.toString() }) { d -> WeekRow(d, today = w.today) { onOpenDay(d.date) } }
+        item {
+            // Marks the week lighter on purpose: its sessions aren't next week's "last time", and Metrics outlines it.
+            FilterChip(
+                selected = w.deload,
+                onClick = { vm.setDeload(!w.deload) },
+                label = { Text(if (w.deload) "✓ Deload week" else "Deload week") },
+            )
+        }
+        items(w.days, key = { it.date.toString() }) { d -> WeekRow(d, today = w.today, deload = w.deload) { onOpenDay(d.date) } }
     }
 }
 
 @Composable
-private fun WeekRow(d: WeekDayUi, today: LocalDate, onClick: () -> Unit) {
+private fun WeekRow(d: WeekDayUi, today: LocalDate, deload: Boolean, onClick: () -> Unit) {
     val isToday = d.date == today
     Surface(
         onClick = onClick,
@@ -70,7 +79,7 @@ private fun WeekRow(d: WeekDayUi, today: LocalDate, onClick: () -> Unit) {
                 if (d.scannedAt != null && d.morning.status != AlarmRules.Morning.OFF) Chip(d.scannedAt)
                 MorningChip(d.morning)
                 when {
-                    d.workoutName != null -> Chip("✓ ${d.workoutName}", Tone.Sky)
+                    d.workoutName != null -> Chip("✓ ${d.workoutName}" + if (deload) " · deload" else "", Tone.Sky)
                     d.plannedName != null -> Chip(d.plannedName, if (d.date < today) Tone.Warn else Tone.Neutral) // planned but not logged
                 }
             }

@@ -755,4 +755,21 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v21ToV22AddsDeloadWeekTable() {
+        helper.createDatabase(dbName + "-22", 21).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-10-12', 1)")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-22", 22, true)
+        db.query("SELECT COUNT(*) FROM deload_week").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("starts with no weeks marked", 0, it.getInt(0))
+        }
+        db.query("SELECT finalized FROM day WHERE date = '2026-10-12'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(1, it.getInt(0))
+        }
+        db.execSQL("INSERT INTO deload_week (monday) VALUES ('2026-10-12')")
+        db.close()
+    }
 }

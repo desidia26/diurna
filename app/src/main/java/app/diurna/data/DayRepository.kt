@@ -4,8 +4,10 @@ import androidx.room.withTransaction
 import app.diurna.domain.AlarmRules
 import app.diurna.domain.CardioPiece
 import app.diurna.domain.DayText
+import app.diurna.domain.Metrics
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -35,6 +37,7 @@ class DayRepository(
     private val workouts = db.workoutDao()
     private val exercises = db.exerciseDao()
     private val food = db.foodDao()
+    private val deloads = db.deloadDao()
 
     /** Called after anything that can change which alarm should be armed. */
     var onAlarmInputsChanged: suspend () -> Unit = {}
@@ -124,10 +127,33 @@ class DayRepository(
         onAlarmInputsChanged()
     }
 
+    // ---- Deload weeks ----
+
+    fun observeDeload(date: LocalDate): Flow<Boolean> = deloads.observe(Metrics.weekOf(date).key())
+    suspend fun isDeload(date: LocalDate): Boolean = deloads.isDeload(Metrics.weekOf(date).key())
+
+    /** Mondays of every deload week; "last time" can reach back to any of them. */
+    fun observeDeloadMondays(): Flow<Set<LocalDate>> = deloads.observeAll().map { w -> w.mapTo(mutableSetOf(), LocalDate::parse) }
+
+    /** Mondays of the deload weeks touching [from]..[to]. */
+    fun observeDeloadWeeks(from: LocalDate, to: LocalDate): Flow<List<LocalDate>> =
+        deloads.observeRange(Metrics.weekOf(from).key(), to.key()).map { it.map(LocalDate::parse) }
+
+    /** Marks or clears the week holding [date]. A label, so finished weeks can be marked too. */
+    suspend fun setDeload(date: LocalDate, on: Boolean) {
+        val monday = Metrics.weekOf(date).key()
+        if (on) deloads.insert(DeloadWeekEntity(monday)) else deloads.delete(monday)
+    }
+
     // ---- Workout ----
 
+    /**
+     * The latest earlier session, skipping deload weeks other than [before]'s own; if only deload
+     * sessions exist, the latest of those, so a lift done only in a deload still gets hints.
+     */
     suspend fun lastTime(exerciseId: Long, before: LocalDate): LastTime? {
-        val ref = workouts.lastTimeRef(exerciseId, before.key()) ?: return null
+        val ref = workouts.lastTimeRefSkippingDeloads(exerciseId, before.key(), Metrics.weekOf(before).key())
+            ?: workouts.lastTimeRef(exerciseId, before.key()) ?: return null
         return LastTime(LocalDate.parse(ref.date), workouts.filledSets(ref.loggedExerciseId))
     }
 

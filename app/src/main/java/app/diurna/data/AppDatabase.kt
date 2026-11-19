@@ -32,8 +32,9 @@ import app.diurna.domain.DailyMetrics
         DailyMetricEntity::class,
         DailyMetricValueEntity::class,
         NutrientValueEntity::class,
+        DeloadWeekEntity::class,
     ],
-    version = 21,
+    version = 22,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -72,6 +73,8 @@ import app.diurna.domain.DailyMetrics
         AutoMigration(from = 19, to = 20),
         // v21: one-photo capture columns on meal + recipe_ingredient (all nullable; unknown stays null).
         AutoMigration(from = 20, to = 21),
+        // v22: deload weeks, one row per marked Monday.
+        AutoMigration(from = 21, to = 22),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -88,6 +91,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun ingredientNutritionCacheDao(): IngredientNutritionCacheDao
     abstract fun dailyMetricDao(): DailyMetricDao
     abstract fun nutrientValueDao(): NutrientValueDao
+    abstract fun deloadDao(): DeloadDao
 
     /** v2: food estimates, body weight, finalized-day snapshots. The v1 estimate columns were never written. */
     @DeleteColumn(tableName = "food_entry", columnName = "kcal_estimate")
