@@ -180,4 +180,22 @@ class RecipeRepositoryTest {
         assertTrue(lib.logRecipe(t.mon, "Empty", emptyList(), saveToLibrary = false) is LibraryRepository.Result.Problem)
         assertTrue(t.food.observe(t.mon).first().isEmpty())
     }
+
+    @Test fun saveRecipeReturningGivesTheSavedRecipeToLog() = runBlocking {
+        val lines = listOf(RecipeIngredientEntity(
+            mealId = 0, position = 0, name = "Cream", amount = 200.0, unit = "g", grams = 200.0,
+            proteinG = 4, carbsG = 6, fatG = 70, kcal = 680, source = "import",
+        ))
+        val meal = MealEntity(name = "Alfredo", kcal = 0, proteinG = 0, carbsG = 0, fatG = 0,
+            kind = MealEntity.KIND_RECIPE, servingsYield = 4.0)
+        val (r, saved) = lib.saveRecipeReturning(meal, lines)
+        assertEquals(LibraryRepository.Result.Ok, r)
+        assertEquals("Alfredo", saved!!.name)
+        assertEquals(170, saved.kcal)
+        lib.logMeal(t.mon, saved.id, servings = 2.0)
+        assertEquals(340, t.food.observe(t.mon).first().single().kcalLow)
+        val (again, none) = lib.saveRecipeReturning(meal, lines)
+        assertTrue(again is LibraryRepository.Result.Problem)
+        assertEquals(null, none)
+    }
 }

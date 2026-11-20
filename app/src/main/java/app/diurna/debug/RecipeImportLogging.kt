@@ -39,19 +39,21 @@ class LoggedRecipeImporter(
     private val delegate: RecipeImportSource,
     private val actions: Store,
     private val nanoTime: () -> Long = System::nanoTime,
+    /** Where the link was pasted: Library's import dialog, or the Day screen's food box. */
+    private val screen: Screen = Screen.LIBRARY,
 ) : RecipeImportSource {
     override suspend fun importFromUrl(url: String): RecipeImportResult {
         val id = UUID.randomUUID().toString()
         val start = nanoTime()
         val parts = recipeUrlParts(url)
-        actions.dispatch(Action.Event(Screen.LIBRARY, NAME, id, details = mapOf("host" to parts.host)))
-        parts.path?.let { actions.dispatch(Action.Text(Screen.LIBRARY, TextField.URL, parts.host + it)) }
+        actions.dispatch(Action.Event(screen, NAME, id, details = mapOf("host" to parts.host)))
+        parts.path?.let { actions.dispatch(Action.Text(screen, TextField.URL, parts.host + it)) }
         fun ms() = (nanoTime() - start) / 1_000_000
         val result = try {
             delegate.importFromUrl(url)
         } catch (e: Exception) {
             val cancelled = e is CancellationException
-            actions.dispatch(Action.Event(Screen.LIBRARY, NAME, id,
+            actions.dispatch(Action.Event(screen, NAME, id,
                 if (cancelled) Action.Result.CANCELLED else Action.Result.FAILED, ms(),
                 mapOf("host" to parts.host, "outcome" to if (cancelled) "cancelled" else "error")))
             throw e
@@ -66,7 +68,7 @@ class LoggedRecipeImporter(
                 is RecipeImportResult.Problem -> put("outcome", result.reason.takeIf { it.matches(TOKEN_RE) } ?: "unknown")
             }
         }
-        actions.dispatch(Action.Event(Screen.LIBRARY, NAME, id,
+        actions.dispatch(Action.Event(screen, NAME, id,
             if (result is RecipeImportResult.Ok) Action.Result.OK else Action.Result.FAILED, ms(), details))
         return result
     }

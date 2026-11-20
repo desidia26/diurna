@@ -38,6 +38,12 @@ Recipe link imports log `recipe_import` (STARTED with the site's host; then OK/F
 count, HTTP status and latency). The host alone is logged whenever debug logging is on; the path goes
 out as `TextField.URL` typed text, so it is kept only with typed-text logging on. The query, fragment,
 user info, page body and error messages are never logged.
+A link typed in the Day screen's food box goes to the same import, logged as `recipe_import` under
+screen `DAY`, and is not logged as `field.text` FOOD (the full link can carry share tokens). The flow
+logs `day.food_link` with a fixed `outcome`: `routed` when a link sends the entry to import,
+`fallback_estimate` when a failed import is estimated from the link's words instead, and
+`fallback_none` when there were no words to estimate. The estimate itself is then the usual
+`day.add_food` with only those words as its text.
 Food estimates (`ai.food`) carry `photos` on STARTED: how many of the entry's photos went to the
 model (all of them, in gallery order, up to 5). Only the count is logged, never the photos.
 An edit that re-estimates an entry logs `food.reestimate` with `reason` (`text`, `photos` or

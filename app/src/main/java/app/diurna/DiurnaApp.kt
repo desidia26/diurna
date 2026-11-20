@@ -176,6 +176,9 @@ class AppContainer(context: Context) {
     /** HTTPS schema.org Recipe import; never sees API keys. */
     val recipeImporter: app.diurna.data.recipe.RecipeImportSource =
         app.diurna.debug.LoggedRecipeImporter(RecipeImporter(), actions)
+    /** The same import for a link typed in the Day screen's food box; logged under DAY. */
+    val dayRecipeImporter: app.diurna.data.recipe.RecipeImportSource =
+        app.diurna.debug.LoggedRecipeImporter(RecipeImporter(), actions, screen = app.diurna.debug.Screen.DAY)
     /** Reads Nutrition Facts labels into the meal editor; person confirms before saving. */
     val labelReader: LabelReader = SelectedLabelReader({ aiProvider.get() }, mapOf(
         AiProvider.ANTHROPIC to ClaudeLabelReader(
