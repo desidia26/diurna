@@ -21,6 +21,10 @@ import app.diurna.domain.Metrics
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import app.diurna.domain.NutritionTotals
+import app.diurna.domain.DailyValues
+import app.diurna.domain.DvBasis
+import app.diurna.data.key
+import java.time.Period
 import app.diurna.domain.Targets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -216,6 +220,22 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     // Saved meals
     val meals = c.library.observeMeals().state(emptyList())
     val detailedNutrition = c.settings.detailedNutrition.state(false)
+
+    /** Each entry's vitamins and minerals on the selected day, by entry id. */
+    val entryMicros = c.selectedDate.value.flatMapLatest { d -> c.nutrients.observeByEntry(d.key()) }.state(emptyMap())
+
+    /**
+     * The selected day's Daily Values from the basis picked in Setup. A finished day scales by its
+     * frozen kcal target; age is the profile's on that day. The basis itself isn't frozen.
+     */
+    val dailyValues = c.selectedDate.value.flatMapLatest { d ->
+        combine(c.settings.dvBasis, c.nutrition.observeTargets(d), c.settings.profile) { basis, targets, profile ->
+            DailyValues.forDay(basis, targets?.kcal, profile?.sex, profile?.let { Period.between(it.birthDate, d).years })
+        }
+    }.state(DailyValues.forDay(DvBasis.FDA, null, null, null))
+
+    val dvPercent = c.settings.dvViewPercent.state(true)
+    fun setDvPercent(percent: Boolean) = io("day.dv_view") { c.settings.setDvViewPercent(percent) }
     fun logMeal(mealId: Long, servings: Double = 1.0, photo: String? = null) =
         io("day.log_meal") { c.library.logMeal(date, mealId, servings, photo = photo) }
     fun logMeal(mealId: Long, servings: Double, photos: List<String>) =
