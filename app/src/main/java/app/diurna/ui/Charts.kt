@@ -89,7 +89,10 @@ fun LineChart(
     }
 }
 
-/** Bars from zero, the last one highlighted (the current, unfinished period). */
+/**
+ * Bars from zero, the last one highlighted (the current, unfinished period). Bars flagged in
+ * [outlined] (e.g. deload weeks) are drawn as an outline instead of filled.
+ */
 @Composable
 fun BarChart(
     values: List<Double>,
@@ -97,6 +100,7 @@ fun BarChart(
     modifier: Modifier = Modifier,
     height: Dp = 120.dp,
     label: (Double) -> String = { it.roundToInt().toString() },
+    outlined: List<Boolean> = emptyList(),
 ) {
     val hi = (values.maxOrNull() ?: 0.0).takeIf { it > 0 } ?: 1.0
     val base = MaterialTheme.colorScheme.primaryContainer
@@ -115,7 +119,15 @@ fun BarChart(
         val gap = (slot * 0.2f).coerceAtMost(8.dp.toPx())
         values.forEachIndexed { i, v ->
             if (v <= 0) return@forEachIndexed
-            drawRoundRect(
+            val stroke = 1.5.dp.toPx()
+            // The fill colour is too dark to read as a thin line, so outlines use the accent.
+            if (outlined.getOrElse(i) { false }) drawRoundRect(
+                if (i == values.lastIndex) current else current.copy(alpha = 0.6f),
+                topLeft = Offset(i * slot + gap / 2 + stroke / 2, y(v) + stroke / 2),
+                size = Size(slot - gap - stroke, y(0.0) - y(v) - stroke),
+                cornerRadius = CornerRadius(3.dp.toPx()),
+                style = Stroke(stroke),
+            ) else drawRoundRect(
                 if (i == values.lastIndex) current else base,
                 topLeft = Offset(i * slot + gap / 2, y(v)),
                 size = Size(slot - gap, y(0.0) - y(v)),

@@ -100,7 +100,7 @@ data class AminoDetailCard(
 data class TrainingCard(
     val weeks: List<Metrics.WeekVolume>,
     val thisWeek: Double,
-    /** This week against the average of the earlier weeks in the range, as a fraction (0.08 = +8%). */
+    /** This week against the average of the earlier non-deload weeks in the range, as a fraction (0.08 = +8%). */
     val vsEarlier: Double?,
     val workouts: Int,
     val prs: Int,
@@ -191,7 +191,7 @@ data class MetricsUi(
 
 enum class LiftMetric(val label: String) { E1RM("e1RM"), VOLUME("Volume") }
 
-data class SessionRow(val date: LocalDate, val sets: String, val e1rm: Double?, val volume: Double, val pr: Boolean)
+data class SessionRow(val date: LocalDate, val sets: String, val e1rm: Double?, val volume: Double, val pr: Boolean, val deload: Boolean = false)
 
 data class ExerciseDetail(
     val exerciseId: Long,
@@ -313,13 +313,12 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
 
         val sessions = s.sessions.filter { it.date in s.from..s.to }
         val prs = Metrics.prs(s.sessions).filter { it.session.date in s.from..s.to }
-        val weeks = Metrics.weeklyVolume(s.sessions, s.from, s.to)
-        val earlier = weeks.dropLast(1).filter { it.volume > 0 }
+        val weeks = Metrics.weeklyVolume(s.sessions, s.from, s.to, s.deloads)
         val thisWeek = weeks.lastOrNull()?.volume ?: 0.0
         val training = TrainingCard(
             weeks = weeks,
             thisWeek = thisWeek,
-            vsEarlier = earlier.takeIf { it.isNotEmpty() }?.map { it.volume }?.average()?.let { thisWeek / it - 1 },
+            vsEarlier = Metrics.vsEarlier(weeks),
             workouts = sessions.map { it.date }.distinct().size,
             prs = prs.size,
         )
@@ -519,7 +518,7 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
             heaviest = all.filter { it.topSet != null }.maxByOrNull { it.topWeight!! }?.let { setText(it.topSet!!) to it.date },
             bestVolume = all.filter { it.volume > 0 }.maxByOrNull { it.volume }?.let { it.volume to it.date },
             sessions = ranged.reversed().map { x ->
-                SessionRow(x.date, x.sets.filter { it.reps != null }.joinToString(" · ", transform = ::setText), x.bestE1rm, x.volume, x.loggedId in prDates)
+                SessionRow(x.date, x.sets.filter { it.reps != null }.joinToString(" · ", transform = ::setText), x.bestE1rm, x.volume, x.loggedId in prDates, Metrics.weekOf(x.date) in s.deloads)
             },
         )
     }

@@ -576,15 +576,19 @@ private fun TrainingCardView(t: TrainingCard) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Stat(volume(t.thisWeek), "lb this week")
+            if (t.weeks.lastOrNull()?.deload == true) Stat("Deload", "this week")
             t.vsEarlier?.let { Stat("${if (it >= 0) "+" else "−"}${(abs(it) * 100).roundToInt()}%", "vs earlier weeks", if (it >= 0) s.good else s.warn) }
             Stat("${t.prs}", if (t.prs == 1) "PR" else "PRs")
         }
+        val deloads = t.weeks.count { it.deload }
         BarChart(
             t.weeks.map { it.volume },
-            description = "Weekly volume, ${t.weeks.size} weeks, this week ${volume(t.thisWeek)} lb",
+            description = "Weekly volume, ${t.weeks.size} weeks" + (if (deloads > 0) ", $deloads deload" else "") + ", this week ${volume(t.thisWeek)} lb",
             label = ::volume,
+            outlined = t.weeks.map { it.deload },
         )
         t.weeks.firstOrNull()?.let { ChartDates(it.monday.short(), "This week") }
+        if (deloads > 0) Hint("Outlined bars are deload weeks.")
     }
 }
 
@@ -812,7 +816,10 @@ private fun ExerciseScreen(d: ExerciseDetail, range: Metrics.Range, padding: Pad
                         if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                         Row(Modifier.fillMaxWidth().heightIn(min = 46.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Hint(s.date.short(), Modifier.width(52.dp))
-                            Text(s.sets, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            Column(Modifier.weight(1f)) {
+                                Text(s.sets, style = MaterialTheme.typography.bodyMedium)
+                                if (s.deload) Hint("Deload week")
+                            }
                             val v = if (d.metric == LiftMetric.E1RM) s.e1rm?.roundToInt()?.toString() ?: "—" else volume(s.volume)
                             Text(
                                 if (s.pr) "$v ★" else v, fontWeight = FontWeight.SemiBold,

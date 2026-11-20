@@ -383,6 +383,21 @@ interface WorkoutDao {
     )
     suspend fun lastTimeRef(exerciseId: Long, before: String): LastTimeRef?
 
+    /**
+     * [lastTimeRef] leaving out deload weeks other than [currentMonday]'s, so the week after a deload
+     * starts from the numbers before it. `date(x, '-6 days', 'weekday 1')` is the Monday on or before x.
+     */
+    @Query(
+        """SELECT le.id AS loggedExerciseId, w.date AS date
+           FROM logged_exercise le JOIN day_workout w ON w.id = le.workout_id
+           WHERE le.exercise_id = :exerciseId AND w.date < :before
+             AND EXISTS (SELECT 1 FROM exercise_set s WHERE s.logged_exercise_id = le.id AND $DONE)
+             AND NOT EXISTS (SELECT 1 FROM deload_week d
+                             WHERE d.monday = date(w.date, '-6 days', 'weekday 1') AND d.monday <> :currentMonday)
+           ORDER BY w.date DESC LIMIT 1"""
+    )
+    suspend fun lastTimeRefSkippingDeloads(exerciseId: Long, before: String, currentMonday: String): LastTimeRef?
+
     @Query("SELECT * FROM exercise_set s WHERE logged_exercise_id = :loggedId AND $DONE ORDER BY position")
     suspend fun filledSets(loggedId: Long): List<ExerciseSetEntity>
 
@@ -726,4 +741,25 @@ interface NutrientValueDao {
         "DELETE FROM nutrient_value WHERE owner_kind = :kind AND owner_id = :ownerId AND nutrient_id = :nutrientId",
     )
     suspend fun deleteOne(kind: String, ownerId: Long, nutrientId: String)
+}
+
+@Dao
+interface DeloadDao {
+    @Query("SELECT EXISTS (SELECT 1 FROM deload_week WHERE monday = :monday)")
+    fun observe(monday: String): Flow<Boolean>
+
+    @Query("SELECT EXISTS (SELECT 1 FROM deload_week WHERE monday = :monday)")
+    suspend fun isDeload(monday: String): Boolean
+
+    @Query("SELECT monday FROM deload_week ORDER BY monday")
+    fun observeAll(): Flow<List<String>>
+
+    @Query("SELECT monday FROM deload_week WHERE monday BETWEEN :from AND :to ORDER BY monday")
+    fun observeRange(from: String, to: String): Flow<List<String>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(week: DeloadWeekEntity)
+
+    @Query("DELETE FROM deload_week WHERE monday = :monday")
+    suspend fun delete(monday: String)
 }

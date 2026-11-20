@@ -112,16 +112,28 @@ object Metrics {
 
     fun weekOf(date: LocalDate): LocalDate = date.with(DayOfWeek.MONDAY)
 
-    data class WeekVolume(val monday: LocalDate, val volume: Double)
+    data class WeekVolume(val monday: LocalDate, val volume: Double, val deload: Boolean = false)
 
     /**
      * Total volume per Monday-to-Sunday week, every week touching [from]..[to], empty weeks included.
      * Each bar is a whole week, even where the range starts mid-week, so the first bar isn't cut short.
+     * [deloads] are Mondays of weeks marked as deloads.
      */
-    fun weeklyVolume(sessions: List<Session>, from: LocalDate, to: LocalDate): List<WeekVolume> {
+    fun weeklyVolume(sessions: List<Session>, from: LocalDate, to: LocalDate, deloads: Set<LocalDate> = emptySet()): List<WeekVolume> {
         val totals = sessions.filter { it.date in weekOf(from)..to }.groupBy { weekOf(it.date) }.mapValues { (_, s) -> s.sumOf { it.volume } }
         return generateSequence(weekOf(from)) { it.plusWeeks(1) }.takeWhile { it <= to }
-            .map { WeekVolume(it, totals[it] ?: 0.0) }.toList()
+            .map { WeekVolume(it, totals[it] ?: 0.0, it in deloads) }.toList()
+    }
+
+    /**
+     * The last week's volume against the average of earlier weeks with lifting, as a fraction (0.1 is
+     * +10%). Deload weeks are left out on both sides: they're lighter on purpose.
+     */
+    fun vsEarlier(weeks: List<WeekVolume>): Double? {
+        val thisWeek = weeks.lastOrNull()?.takeIf { !it.deload } ?: return null
+        val earlier = weeks.dropLast(1).filter { it.volume > 0 && !it.deload }
+        if (earlier.isEmpty()) return null
+        return thisWeek.volume / earlier.map { it.volume }.average() - 1
     }
 
     data class Usage(val exerciseId: Long, val name: String, val sessions: Int, val last: LocalDate)

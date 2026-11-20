@@ -229,6 +229,13 @@ data class RoutineDayEntity(
     @ColumnInfo(name = "template_id") val templateId: Long?,
 )
 
+/**
+ * A Monday-to-Sunday week marked as a deload, keyed by its Monday (yyyy-MM-dd). Its sessions don't
+ * become "last time" for later weeks, and Metrics marks it. A label only: nothing else is rewritten.
+ */
+@Entity(tableName = "deload_week")
+data class DeloadWeekEntity(@PrimaryKey val monday: String)
+
 @Entity(tableName = "day")
 data class DayEntity(
     @PrimaryKey val date: String,

@@ -21,7 +21,7 @@ data class WeekDayUi(
     val stepGoal: Int = 10_000,
 )
 
-data class WeekUi(val start: LocalDate, val today: LocalDate, val days: List<WeekDayUi>) {
+data class WeekUi(val start: LocalDate, val today: LocalDate, val days: List<WeekDayUi>, val deload: Boolean = false) {
     private val scored = days.filter { it.morning.scored }
     val onTime = scored.count { it.morning.status == AlarmRules.Morning.ON_TIME }
     val scoredCount = scored.size
@@ -33,11 +33,12 @@ class WeekViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
         val start = d.with(DayOfWeek.MONDAY)
         combine(
             combine(c.days.observeWeek(start), c.routine.observeRoutine(), c.routine.observeTemplates(), ::Triple),
-            c.settings.stepGoal, minuteTicker,
-        ) { (rows, routineDays, tpls), goal, now -> Triple(Triple(rows, routineDays, tpls), goal, now) }
-            .mapLatest { (data, goal, now) ->
+            c.settings.stepGoal, minuteTicker, c.days.observeDeload(start),
+        ) { (rows, routineDays, tpls), goal, now, deload -> Triple(Triple(rows, routineDays, tpls), goal, now) to deload }
+            .mapLatest { (t, deload) ->
+            val (data, goal, now) = t
             val (rows, routineDays, tpls) = data
-            WeekUi(start, now.toLocalDate(), rows.map { r ->
+            WeekUi(start, now.toLocalDate(), deload = deload, days = rows.map { r ->
                 val rd = routineDays.find { it.weekday == r.date.dayOfWeek.value }
                 val alarm = AlarmRules.effective(r.date, now, r.day?.alarmOverride, rd?.alarmTime ?: "06:30", r.day?.scheduledAlarm)
                 WeekDayUi(
@@ -55,6 +56,8 @@ class WeekViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
             })
         }
     }.state(null)
+
+    fun setDeload(on: Boolean) = io("week.set_deload") { c.days.setDeload(c.selectedDate.value.value, on) }
 
     fun shift(days: Long) = c.selectedDate.shift(days)
     fun goTo(d: LocalDate) = c.selectedDate.goTo(d)

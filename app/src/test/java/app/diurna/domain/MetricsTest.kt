@@ -98,6 +98,25 @@ class MetricsTest {
         assertEquals("a range starting mid-week still gets the whole first week", 1500.0, Metrics.weeklyVolume(s, d(4), d(13)).first().volume, 1e-9)
     }
 
+    @Test fun weeklyVolumeFlagsDeloadWeeks() {
+        val s = Metrics.sessions(session(d(5), 1, 100.0 to 10) + session(d(12), 1, 60.0 to 5))
+        val weeks = Metrics.weeklyVolume(s, d(5), d(19), deloads = setOf(d(12)))
+        assertEquals(listOf(false, true, false), weeks.map { it.deload })
+        assertEquals("no deloads marked reads as before", listOf(false, false, false), Metrics.weeklyVolume(s, d(5), d(19)).map { it.deload })
+    }
+
+    @Test fun vsEarlierLeavesDeloadWeeksOut() {
+        val weeks = listOf(
+            Metrics.WeekVolume(d(5), 1000.0),
+            Metrics.WeekVolume(d(12), 400.0, deload = true),
+            Metrics.WeekVolume(d(19), 0.0), // nothing logged
+            Metrics.WeekVolume(d(26), 1100.0),
+        )
+        assertEquals(0.1, Metrics.vsEarlier(weeks)!!, 1e-9)
+        assertNull("a deload this week isn't compared", Metrics.vsEarlier(weeks.dropLast(1) + Metrics.WeekVolume(d(26), 500.0, deload = true)))
+        assertNull("nothing earlier to compare with", Metrics.vsEarlier(weeks.takeLast(1)))
+    }
+
     @Test fun rangeStarts() {
         assertEquals(d(1), Metrics.Range.W4.start(d(28), null))
         assertEquals("All starts at the first day with data", d(3), Metrics.Range.ALL.start(d(28), d(3)))
