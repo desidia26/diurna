@@ -18,6 +18,7 @@ import app.diurna.data.totals
 import app.diurna.domain.AlarmRules
 import app.diurna.domain.DailyMetrics
 import app.diurna.domain.Metrics
+import app.diurna.domain.WorkoutFold
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import app.diurna.domain.NutritionTotals
@@ -123,6 +124,10 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     val folded = MutableStateFlow(emptySet<String>())
     fun toggleFold(section: String) {
         folded.value = folded.value.let { if (section in it) it - section else it + section }
+    }
+    /** Called on arriving at a day (opening the tab or changing the date); a finished workout opens folded. */
+    fun arrive(ui: DayUi) {
+        folded.value = WorkoutFold.onArrival(folded.value, ui.exercises.map { it.logged.sets })
     }
 
     // Navigation

@@ -92,6 +92,8 @@ fun DayScreen(
     val ui by vm.day.collectAsStateWithLifecycle()
     val armed by vm.armed.collectAsStateWithLifecycle()
     val s = ui ?: return
+    // Keyed on the date alone: logging the last set later doesn't refold, and a reopened card stays open.
+    LaunchedEffect(s.date) { vm.arrive(s) }
     LazyColumn(
         contentPadding = PaddingValues(
             start = 16.dp, end = 16.dp, top = contentPadding.calculateTopPadding() + 16.dp,
