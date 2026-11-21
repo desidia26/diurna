@@ -16,7 +16,11 @@ import app.diurna.domain.DensityLookup
 import app.diurna.domain.DensityUnitKind
 import app.diurna.domain.IngredientDensity
 import app.diurna.domain.RecipeMath
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -26,18 +30,18 @@ import org.junit.Test
 
 private class MemCache : IngredientDensityCacheDao {
     private val map = linkedMapOf<String, IngredientDensityCacheEntity>()
-    override suspend fun get(key: String) = map[key]
-    override suspend fun upsert(row: IngredientDensityCacheEntity) { map[row.queryKey] = row }
-    override suspend fun delete(key: String) { map.remove(key) }
-    fun size() = map.size
+    override suspend fun get(key: String) = synchronized(map) { map[key] }
+    override suspend fun upsert(row: IngredientDensityCacheEntity) { synchronized(map) { map[row.queryKey] = row } }
+    override suspend fun delete(key: String) { synchronized(map) { map.remove(key) } }
+    fun size() = synchronized(map) { map.size }
 }
 
 private class MemNutritionCache : IngredientNutritionCacheDao {
     private val map = linkedMapOf<String, IngredientNutritionCacheEntity>()
-    override suspend fun get(name: String) = map[name]
-    override suspend fun upsert(row: IngredientNutritionCacheEntity) { map[row.normalizedName] = row }
-    override suspend fun delete(name: String) { map.remove(name) }
-    fun size() = map.size
+    override suspend fun get(name: String) = synchronized(map) { map[name] }
+    override suspend fun upsert(row: IngredientNutritionCacheEntity) { synchronized(map) { map[row.normalizedName] = row } }
+    override suspend fun delete(name: String) { synchronized(map) { map.remove(name) } }
+    fun size() = synchronized(map) { map.size }
 }
 
 class IngredientDensityResolverTest {
@@ -444,5 +448,77 @@ class IngredientDensityResolverTest {
                 "Flour, wheat, all-purpose",
             ),
         )
+    }
+
+    @Test fun concurrentResolvesOfTheSameNameShareOneSearch() = runBlocking {
+        val searches = AtomicInteger(0)
+        val transport = FdcTransport { path, _ ->
+            when {
+                path.contains("/foods/search") -> {
+                    searches.incrementAndGet()
+                    Thread.sleep(150)
+                    """{"foods":[{"fdcId":1,"description":"Flour, wheat, all-purpose"}]}"""
+                }
+                path.contains("/food/1") -> flourFood
+                else -> null
+            }
+        }
+        val resolver = IngredientDensityResolver(FdcClient({ "k" }, transport), MemCache(), ai = null)
+        val hits = coroutineScope {
+            listOf(
+                async { resolver.resolve("all-purpose flour", DensityUnitKind.VOLUME) },
+                async { resolver.resolve("All-Purpose Flour", DensityUnitKind.VOLUME) },
+                async { resolver.resolve("all-purpose flour", DensityUnitKind.VOLUME) },
+            ).awaitAll()
+        }
+        assertEquals(1, searches.get())
+        assertTrue(hits.all { it != null && it.fdcId == 1 })
+        assertEquals(hits[0]!!.gPerMl!!, hits[1]!!.gPerMl!!, 0.0)
+    }
+
+    @Test fun concurrentResolvesOfDifferentNamesDoNotShareASearch() = runBlocking {
+        val searches = AtomicInteger(0)
+        val transport = FdcTransport { path, _ ->
+            if (path.contains("/foods/search")) {
+                searches.incrementAndGet()
+                Thread.sleep(80)
+                """{"foods":[]}"""
+            } else null
+        }
+        val resolver = IngredientDensityResolver(FdcClient({ "k" }, transport), MemCache(), ai = null)
+        coroutineScope {
+            val a = async { resolver.resolve("all-purpose flour", DensityUnitKind.VOLUME) }
+            val b = async { resolver.resolve("garlic", DensityUnitKind.EACH) }
+            a.await()
+            b.await()
+        }
+        assertEquals(2, searches.get())
+    }
+
+    @Test fun enrichLineAppliesSharedLookupToEachLinesOwnAmount() = runBlocking {
+        val searches = AtomicInteger(0)
+        val transport = FdcTransport { path, _ ->
+            when {
+                path.contains("/foods/search") -> {
+                    searches.incrementAndGet()
+                    Thread.sleep(80)
+                    """{"foods":[{"fdcId":1,"description":"Flour, wheat, all-purpose"}]}"""
+                }
+                path.contains("/food/1") -> flourFood
+                else -> null
+            }
+        }
+        val resolver = IngredientDensityResolver(FdcClient({ "k" }, transport), MemCache(), ai = null)
+        val cup = RecipeIngredientEntity(mealId = 1, position = 0, name = "flour", amount = 1.0, unit = "cup", grams = null)
+        val half = RecipeIngredientEntity(mealId = 1, position = 1, name = "flour", amount = 0.5, unit = "cup", grams = null)
+        val (a, b) = coroutineScope {
+            val x = async { resolver.enrichLine(cup) }
+            val y = async { resolver.enrichLine(half) }
+            x.await() to y.await()
+        }
+        assertEquals(1, searches.get())
+        assertNotNull(a.grams)
+        assertNotNull(b.grams)
+        assertEquals(a.grams!!, b.grams!! * 2, 0.01)
     }
 }

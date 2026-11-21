@@ -41,6 +41,8 @@ class IngredientDensityResolver(
     private val nutritionCache: IngredientNutritionCacheDao? = null,
     private val nowMs: () -> Long = { System.currentTimeMillis() },
 ) {
+    private val densityFlight = InFlight<DensityLookup?>()
+    private val nutritionFlight = InFlight<FetchedNutrition?>()
     /**
      * Look up density for [name] + [kind]. [forceRefresh] skips a positive cache hit
      * (still used after manual clear). Never overwrites a line the user marked manual.
@@ -55,25 +57,36 @@ class IngredientDensityResolver(
 
         val key = IngredientDensity.cacheKey(normalized, kind)
         if (!forceRefresh) {
-            cache.get(key)?.let { row ->
-                val retry = row.retryAfter
-                if (retry != null && retry > nowMs()) {
-                    // Negative / pending still cooling down.
-                    if (row.source == IngredientDensity.Source.MISS ||
-                        row.source == IngredientDensity.Source.PENDING
-                    ) {
-                        return@withContext null
-                    }
-                }
-                if (row.toLookup().hasValue) return@withContext row.toLookup()
+            cachedLookup(key)?.let { return@withContext it }
+            // Concurrent callers with the same name share one USDA / AI round trip.
+            return@withContext densityFlight.join(key) {
+                cachedLookup(key) ?: lookupUncached(normalized, kind)
             }
         }
+        lookupUncached(normalized, kind)
+    }
 
+    /** Positive cache hit, or null when missing / still in a negative cooldown. */
+    private suspend fun cachedLookup(key: String): DensityLookup? {
+        val row = cache.get(key) ?: return null
+        val retry = row.retryAfter
+        if (retry != null && retry > nowMs()) {
+            // Negative / pending still cooling down.
+            if (row.source == IngredientDensity.Source.MISS ||
+                row.source == IngredientDensity.Source.PENDING
+            ) {
+                return null
+            }
+        }
+        return row.toLookup().takeIf { it.hasValue }
+    }
+
+    private suspend fun lookupUncached(normalized: String, kind: DensityUnitKind): DensityLookup? {
         // 1) USDA FDC — search with cleaned name
         val fromFdc = tryFdc(normalized, kind)
         if (fromFdc != null) {
             writePositive(normalized, kind, fromFdc)
-            return@withContext fromFdc
+            return fromFdc
         }
 
         // 2) Builtin hand list (volume only)
@@ -86,7 +99,7 @@ class IngredientDensityResolver(
                     description = opt.id,
                 )
                 writePositive(normalized, kind, hit)
-                return@withContext hit
+                return hit
             }
         }
 
@@ -95,21 +108,21 @@ class IngredientDensityResolver(
             try {
                 val hit = ai.estimate(normalized, kind)
                 writePositive(normalized, kind, hit)
-                return@withContext hit
+                return hit
             } catch (_: NoApiKey) {
                 writeNegative(normalized, kind, IngredientDensity.Source.PENDING, PENDING_RETRY_MS)
-                return@withContext null
+                return null
             } catch (_: EstimateRetryable) {
                 writeNegative(normalized, kind, IngredientDensity.Source.PENDING, PENDING_RETRY_MS)
-                return@withContext null
+                return null
             } catch (_: EstimateFailed) {
                 writeNegative(normalized, kind, IngredientDensity.Source.MISS, MISS_RETRY_MS)
-                return@withContext null
+                return null
             }
         }
 
         writeNegative(normalized, kind, IngredientDensity.Source.MISS, MISS_RETRY_MS)
-        null
+        return null
     }
 
     /**
@@ -246,29 +259,46 @@ class IngredientDensityResolver(
         val normalized = IngredientDensity.normalizeName(line.name)
         if (normalized.isEmpty()) return line
 
-        // 1) Positive nutrition cache
-        nutritionCache?.get(normalized)?.let { row ->
-            val retry = row.retryAfter
-            if (retry != null && retry > nowMs() &&
-                row.source in setOf(IngredientDensity.Source.MISS, IngredientDensity.Source.PENDING)
-            ) {
-                return line
-            }
-            if (row.source == IngredientDensity.Source.USDA || row.source == IngredientDensity.Source.AI) {
-                val profile = row.toProfile()
-                val src = if (row.source == IngredientDensity.Source.USDA) "fdc" else "ai"
-                return applyNutrition(line, profile, src, row.description, skipNameMatch = true)
-            }
-        }
+        cachedNutrition(normalized)?.let { return applyFetchedNutrition(line, it) }
 
+        // Concurrent enrichments of the same name share one USDA / AI nutrition fetch.
+        // The key includes fdcId so a line that already pinned a food does not share with a
+        // name-only search (rare on import, where density resolve usually fills fdcId first).
+        val fetched = nutritionFlight.join("$normalized:${line.fdcId ?: 0}") {
+            cachedNutrition(normalized) ?: fetchNutrition(line, normalized)
+        } ?: return line
+        return applyFetchedNutrition(line, fetched)
+    }
+
+
+    private fun applyFetchedNutrition(line: RecipeIngredientEntity, fetched: FetchedNutrition): RecipeIngredientEntity {
+        val profile = fetched.profile ?: return line
+        return applyNutrition(line, profile, fetched.source, fetched.description, skipNameMatch = true)
+    }
+
+    /** Cached hit, [FetchedNutrition.MISS] during a negative cooldown, or null when we should fetch. */
+    private suspend fun cachedNutrition(normalized: String): FetchedNutrition? {
+        val row = nutritionCache?.get(normalized) ?: return null
+        val retry = row.retryAfter
+        if (retry != null && retry > nowMs() &&
+            row.source in setOf(IngredientDensity.Source.MISS, IngredientDensity.Source.PENDING)
+        ) {
+            return FetchedNutrition.MISS
+        }
+        if (row.source == IngredientDensity.Source.USDA || row.source == IngredientDensity.Source.AI) {
+            val src = if (row.source == IngredientDensity.Source.USDA) "fdc" else "ai"
+            return FetchedNutrition(row.toProfile(), src, row.description)
+        }
+        return null
+    }
+
+    private suspend fun fetchNutrition(line: RecipeIngredientEntity, normalized: String): FetchedNutrition? {
         // 2) USDA FDC — reuse line fdcId, or search by cleaned name
         if (fdc.hasApiKey()) {
             val fromFdc = tryFdcNutrition(line, normalized)
             if (fromFdc != null) {
                 writeNutritionPositive(normalized, fromFdc, IngredientDensity.Source.USDA)
-                return applyNutrition(
-                    line, fromFdc, "fdc", fromFdc.description, skipNameMatch = true,
-                )
+                return FetchedNutrition(fromFdc, "fdc", fromFdc.description)
             }
         }
 
@@ -277,7 +307,7 @@ class IngredientDensityResolver(
             try {
                 val profile = nutritionAi.estimate(normalized)
                 writeNutritionPositive(normalized, profile, IngredientDensity.Source.AI)
-                return applyNutrition(line, profile, "ai", profile.description, skipNameMatch = true)
+                return FetchedNutrition(profile, "ai", profile.description)
             } catch (_: NoApiKey) {
                 writeNutritionNegative(normalized, IngredientDensity.Source.PENDING, PENDING_RETRY_MS)
             } catch (_: EstimateRetryable) {
@@ -286,7 +316,7 @@ class IngredientDensityResolver(
                 writeNutritionNegative(normalized, IngredientDensity.Source.MISS, MISS_RETRY_MS)
             }
         }
-        return line
+        return null
     }
 
     /**
@@ -451,6 +481,17 @@ class IngredientDensityResolver(
          * Distinguishes "missing" (import / blank) from "filled as zero".
          */
         val FILLED_NUTRITION_SOURCES = setOf("fdc", "ai")
+    }
+}
+
+/** A fetched or cached per-100g profile, or [MISS] when a negative cache says not to retry yet. */
+private data class FetchedNutrition(
+    val profile: FdcNutritionProfile?,
+    val source: String,
+    val description: String?,
+) {
+    companion object {
+        val MISS = FetchedNutrition(null, "miss", null)
     }
 }
 

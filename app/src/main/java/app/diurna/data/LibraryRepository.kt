@@ -92,7 +92,7 @@ class LibraryRepository(
     /** [saveRecipe], also returning the saved recipe (null on a problem) so it can be logged straight away. */
     suspend fun saveRecipeReturning(meal: MealEntity, lines: List<RecipeIngredientEntity>): Pair<Result, MealEntity?> = db.withTransaction {
         if (lines.isEmpty()) return@withTransaction Result.Problem("Add at least one ingredient.") to null
-        val blocked = lines.firstOrNull { it.grams == null && IngredientNeedsMass(it) }
+        val blocked = lines.firstOrNull { RecipeSaveCheck.needsMass(it) }
         if (blocked != null) {
             return@withTransaction Result.Problem(
                 "\"${blocked.name}\" needs a density (or grams) before volume can convert to mass.",
@@ -336,7 +336,7 @@ class LibraryRepository(
         val clean = name.trim()
         if (clean.isEmpty()) return Result.Problem("Give the meal a name.")
         if (lines.isEmpty()) return Result.Problem("Add at least one ingredient.")
-        lines.firstOrNull { it.grams == null && IngredientNeedsMass(it) }?.let {
+        lines.firstOrNull { RecipeSaveCheck.needsMass(it) }?.let {
             return Result.Problem("\"${it.name}\" needs a density (or grams) before volume can convert to mass.")
         }
         val recipe = withRecipeTotals(MealEntity(name = clean, kcal = 0, proteinG = 0, carbsG = 0, fatG = 0, kind = MealEntity.KIND_RECIPE, servingsYield = 1.0), lines)
@@ -499,11 +499,6 @@ class LibraryRepository(
     suspend fun deleteExercise(id: Long): Boolean = exercises.deleteIfUnused(id) > 0
 }
 
-/** Volume / each without resolved grams needs a density or grams-per-each. */
-private fun IngredientNeedsMass(line: RecipeIngredientEntity): Boolean {
-    val u = line.unit.lowercase()
-    return u == "ml" || u == "cup" || u == "tbsp" || u == "tsp" || u == "each"
-}
 
 fun RecipeIngredientEntity.toNutrition(): RecipeMath.IngredientNutrition =
     RecipeMath.IngredientNutrition(

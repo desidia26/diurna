@@ -38,16 +38,9 @@ class DensityLookupWorker(context: Context, params: WorkerParameters) : Coroutin
                 if (isStopped) break
                 val lines = db.recipeIngredientDao().forMeal(id)
                 if (lines.none { it.needsDensityLookup() || it.needsEnrichment() }) continue
-                var changed = false
-                val updated = lines.map { line ->
-                    val next = resolver.enrichLine(line)
-                    if (next != line) {
-                        if (next.grams != null && line.grams == null) filled++
-                        changed = true
-                    }
-                    next
-                }
-                if (!changed) continue
+                val updated = RecipeLookups.mapParallel(lines) { resolver.enrichLine(it) }
+                if (updated.zip(lines).all { (next, line) -> next == line }) continue
+                filled += updated.zip(lines).count { (next, line) -> next.grams != null && line.grams == null }
                 val meal = db.mealDao().get(id) ?: continue
                 if (meal.kind != MealEntity.KIND_RECIPE) continue
                 if (updated.any { it.needsDensityLookup() }) {

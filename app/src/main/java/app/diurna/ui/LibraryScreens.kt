@@ -218,6 +218,7 @@ fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
             loadFdcNutrition = vm::loadFdcNutrition,
             scanBarcode = vm::scanBarcode,
             fillDensities = vm::resolveDensities,
+            logEvent = vm::logRecipeEditor,
             onDismiss = { editingRecipe = null },
             onSave = vm::saveRecipe,
         )

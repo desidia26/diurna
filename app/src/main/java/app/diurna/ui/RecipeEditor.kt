@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -36,7 +37,10 @@ import androidx.compose.ui.unit.dp
 import app.diurna.data.LibraryRepository.Result
 import app.diurna.data.MealEntity
 import app.diurna.data.RecipeIngredientEntity
+import app.diurna.data.density.RecipeLookups
 import app.diurna.data.fdc.FdcSearchHit
+import app.diurna.domain.DensityUnitKind
+import app.diurna.domain.IngredientDensity
 import app.diurna.domain.IngredientDensities
 import app.diurna.domain.IngredientUnit
 import app.diurna.domain.IngredientUnits
@@ -151,6 +155,8 @@ fun RecipeDialog(
     loadFdcNutrition: suspend (Int) -> app.diurna.data.fdc.FdcNutritionProfile?,
     scanBarcode: suspend (String, Boolean) -> app.diurna.data.LibraryRepository.ScanResult,
     fillDensities: (suspend (List<RecipeIngredientEntity>) -> List<RecipeIngredientEntity>)? = null,
+    /** Debug log hook: event name, allowlisted details (fixed tokens and counts only), latency. */
+    logEvent: (String, Map<String, String>, Long?) -> Unit = { _, _, _ -> },
     onDismiss: () -> Unit,
     onSave: suspend (MealEntity, List<RecipeIngredientEntity>) -> Result,
 ) {
@@ -170,24 +176,49 @@ fun RecipeDialog(
     var relabel by remember { mutableStateOf<Int?>(null) }
     var decisionsFor by remember { mutableStateOf<app.diurna.data.DecisionLog?>(null) }
     var lookingUp by remember { mutableStateOf(false) }
+    var lookupDone by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var lookupTotal by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var lookupJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // Save was tapped: from then on, what still blocks it is shown at the top, live.
+    var triedSave by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var weighing by remember { mutableStateOf<IngredientDraft?>(null) }
 
-    // Auto-resolve blocked volume/each lines (USDA → builtin → AI) once on open.
+    // Auto-resolve blocked volume/each lines (USDA → builtin → AI) once on open, several at a time
+    // so each shows up as it resolves, and Save can wait for the rest instead of failing.
     androidx.compose.runtime.LaunchedEffect(initial.id, initialLines) {
         val filler = fillDensities ?: return@LaunchedEffect
-        if (lines.none { it.grams == null && (it.unit.needsDensity || it.unit.needsGramsPerEach) }) return@LaunchedEffect
+        val todo = lines.filter { it.grams == null && (it.unit.needsDensity || it.unit.needsGramsPerEach) }
+        if (todo.isEmpty()) return@LaunchedEffect
+        lookupJob = coroutineContext[kotlinx.coroutines.Job]
         lookingUp = true
+        lookupTotal = todo.size
+        lookupDone = 0
+        val unique = todo.map { d ->
+            val kind = DensityUnitKind.of(d.unit) ?: DensityUnitKind.VOLUME
+            IngredientDensity.cacheKey(d.name, kind)
+        }.toSet().size
+        val start = System.nanoTime()
         try {
-            val entities = lines.mapIndexed { i, d -> d.toEntity(initial.id, i) }
-            val filled = filler(entities)
-            filled.forEachIndexed { i, ent ->
-                if (i in lines.indices) {
-                    lines[i] = ent.toDraft()
-                }
+            RecipeLookups.forEachParallel(todo, onEach = { _, draft, filled ->
+                // Lines can be removed meanwhile, so find this one again by identity.
+                val at = lines.indexOfFirst { it === draft }
+                if (filled != null && at >= 0) lines[at] = filled.toDraft()
+                lookupDone++
+            }) { draft ->
+                filler(listOf(draft.toEntity(initial.id, 0))).firstOrNull()
             }
         } finally {
             lookingUp = false
+            logEvent("recipe.lookup", mapOf(
+                "ingredients" to lookupTotal.toString(),
+                "lines" to app.diurna.data.RecipeSaveCheck.blockers(lines.map { it.toEntity(initial.id, 0) }).size.toString(),
+                "parallel" to RecipeLookups.MAX_PARALLEL.toString(),
+                "unique" to unique.toString(),
+            ), (System.nanoTime() - start) / 1_000_000)
         }
     }
+    val blockers = app.diurna.data.RecipeSaveCheck.blockers(lines.mapIndexed { i, d -> d.toEntity(initial.id, i) })
 
     val yield = yieldStr.toDoubleOrNull()?.takeIf { it > 0 } ?: 1.0
     val totals = remember(lines.toList(), yield) {
@@ -203,6 +234,17 @@ fun RecipeDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Pinned above the scrolling list, so why Save is waiting or stopped is always in view.
+            if (lookingUp) {
+                Text(
+                    if (saving) "Saving once ingredient weights are looked up (${lookupDone} of ${lookupTotal})…"
+                    else "Looking up ingredient weights and nutrition (${lookupDone} of ${lookupTotal})…",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            val stopped = if (triedSave && !lookingUp) app.diurna.data.RecipeSaveCheck.message(blockers) ?: problem else problem
+            stopped?.let { Text(it, Modifier.testTag("recipeSaveProblem"), color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
             Column(
                 Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -276,6 +318,8 @@ fun RecipeDialog(
                         app.diurna.data.DecisionLog.fromJson(line.captured?.decisionLogJson)?.let { log ->
                             TextButton(onClick = { decisionsFor = log }) { Text("Decisions") }
                         }
+                        val blocked = line.grams == null && (line.unit.needsDensity || line.unit.needsGramsPerEach)
+                        if (blocked && !lookingUp) TextButton(onClick = { weighing = line }) { Text("Weight") }
                         TextButton(onClick = { lines.removeAt(i) }) { Text("Remove") }
                     }
                 }
@@ -286,13 +330,37 @@ fun RecipeDialog(
                     TextButton(onClick = { addMode = "photo" }) { Text("Package photo") }
                     TextButton(onClick = { addMode = "meal" }) { Text("Saved item") }
                 }
-                problem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
             }
+          }
         },
         confirmButton = {
             TextButton(
-                enabled = name.isNotBlank() && lines.isNotEmpty(),
-                onClick = {
+                enabled = name.isNotBlank() && lines.isNotEmpty() && !saving,
+                onClick = { scope.launch {
+                    saving = true
+                    triedSave = true
+                    problem = null
+                    try {
+                    // Tapped while lookups run: wait for them rather than refuse lines about to resolve.
+                    lookupJob?.takeIf { it.isActive }?.let {
+                        logEvent("recipe.save_waited", mapOf("reason" to "looking_up", "ingredients" to (lookupTotal - lookupDone).toString()), null)
+                        it.join()
+                    }
+                    val stillBlocked = app.diurna.data.RecipeSaveCheck.blockers(lines.mapIndexed { i, d -> d.toEntity(initial.id, i) })
+                    if (stillBlocked.isNotEmpty()) {
+                        logEvent("recipe.save_blocked", mapOf(
+                            "reason" to app.diurna.data.RecipeSaveCheck.REASON_NEEDS_WEIGHT,
+                            "ingredients" to stillBlocked.size.toString(),
+                            "outcome" to (stillBlocked.map { it.need.token }.distinct().singleOrNull() ?: "mixed"),
+                        ), null)
+                        return@launch
+                    }
+                    val totals = RecipeMath.perServing(
+                        lines.map {
+                            it.nutrition.copy(kcal = RecipeMath.explicitKcal(it.kcal, it.nutrition.proteinG, it.nutrition.carbsG, it.nutrition.fatG))
+                        },
+                        yield,
+                    )
                     val meal = initial.copy(
                         name = name,
                         kind = MealEntity.KIND_RECIPE,
@@ -332,14 +400,18 @@ fun RecipeDialog(
                         aminoTotal = totals.aminoTotal,
                     )
                     val entities = lines.mapIndexed { i, d -> d.toEntity(initial.id, i) }
-                    scope.launch {
-                        when (val r = onSave(meal, entities)) {
-                            Result.Ok -> onDismiss()
-                            is Result.Problem -> problem = r.message
+                    when (val r = onSave(meal, entities)) {
+                        Result.Ok -> onDismiss()
+                        is Result.Problem -> {
+                            problem = r.message
+                            logEvent("recipe.save_blocked", mapOf("reason" to "save_problem", "ingredients" to entities.size.toString()), null)
                         }
                     }
-                },
-            ) { Text("Save") }
+                    } finally {
+                        saving = false
+                    }
+                } },
+            ) { Text(if (saving) "Saving…" else "Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
@@ -383,6 +455,53 @@ fun RecipeDialog(
         )
     }
     decisionsFor?.let { DecisionLogDialog(it, onDismiss = { decisionsFor = null }) }
+    weighing?.let { draft ->
+        IngredientWeightDialog(
+            draft,
+            onDismiss = { weighing = null },
+            onWeight = { g ->
+                weighing = null
+                val at = lines.indexOfFirst { it === draft }
+                if (at >= 0) {
+                    val weighed = app.diurna.data.RecipeSaveCheck.withWeight(draft.toEntity(initial.id, at), g).toDraft()
+                    lines[at] = weighed
+                    // With grams known, the usual lookup can fill this line's nutrition.
+                    fillDensities?.let { filler ->
+                        scope.launch {
+                            val filled = filler(listOf(weighed.toEntity(initial.id, 0))).firstOrNull() ?: return@launch
+                            val now = lines.indexOfFirst { it === weighed }
+                            if (now >= 0) lines[now] = filled.toDraft()
+                        }
+                    }
+                }
+            },
+        )
+    }
+}
+
+/** The weight of one ingredient line as written ("2 cloves garlic"), typed in grams. */
+@Composable
+private fun IngredientWeightDialog(line: IngredientDraft, onDismiss: () -> Unit, onWeight: (Double) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val grams = text.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 && it.isFinite() && it <= 100_000 }
+    val amount = if (line.amount % 1.0 == 0.0) line.amount.toLong().toString() else line.amount.toString()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Weight of ${line.name.ifBlank { "this ingredient" }}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val what = if (line.unit == IngredientUnit.EACH) "$amount \u00d7 ${line.name}" else "$amount ${line.unit.label} of ${line.name}"
+                Hint("How many grams is $what, in all? A scale or the package label tells you. Nutrition is then looked up for that weight.")
+                OutlinedTextField(
+                    text, { text = it }, Modifier.fillMaxWidth().testTag("ingredientWeight"),
+                    label = { Text("Grams") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                )
+            }
+        },
+        confirmButton = { TextButton(enabled = grams != null, onClick = { grams?.let(onWeight) }) { Text("Set") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

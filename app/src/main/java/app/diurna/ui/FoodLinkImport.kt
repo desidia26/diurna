@@ -112,6 +112,7 @@ internal fun FoodLinkFlow(
                 loadFdcNutrition = vm::loadFdcNutrition,
                 scanBarcode = vm::scanBarcode,
                 fillDensities = vm::resolveDensities,
+                logEvent = vm::logRecipeEditor,
                 // The editor closes itself after a good save; then it's on to servings.
                 onDismiss = { saved?.let(onRecipeReady) ?: onDismiss() },
                 onSave = { meal, lines ->
