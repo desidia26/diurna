@@ -266,6 +266,11 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     suspend fun saveImportedRecipe(meal: MealEntity, lines: List<app.diurna.data.RecipeIngredientEntity>) =
         c.library.saveRecipeReturning(meal, lines)
 
+    /** Recipe editor debug events (lookup, a Save that waited or was stopped): fixed tokens and counts only. */
+    fun logRecipeEditor(name: String, details: Map<String, String>, latencyMs: Long?) =
+        c.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.DAY, name,
+            result = app.diurna.debug.Action.Result.OK, latencyMs = latencyMs, details = details))
+
     /** Debug log for the food box's link route: a fixed [outcome] token only, never the link or text. */
     fun logFoodLink(outcome: String) = c.actions.dispatch(app.diurna.debug.Action.Event(
         app.diurna.debug.Screen.DAY, "day.food_link", result = app.diurna.debug.Action.Result.OK,

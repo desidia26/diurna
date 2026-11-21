@@ -44,6 +44,13 @@ logs `day.food_link` with a fixed `outcome`: `routed` when a link sends the entr
 `fallback_estimate` when a failed import is estimated from the link's words instead, and
 `fallback_none` when there were no words to estimate. The estimate itself is then the usual
 `day.add_food` with only those words as its text.
+The recipe editor (Library and the food box's link import) logs `recipe.lookup` when its automatic
+weight/nutrition lookup ends (`ingredients` looked up, `lines` still without a weight, latency);
+`recipe.save_waited` (`reason` `looking_up`, `ingredients` still pending) when Save was tapped
+during the lookup and waited for it; and `recipe.save_blocked` when Save was stopped, with `reason`
+`needs_weight` (`ingredients` = how many lines, `outcome` `needs_density`, `needs_grams_each` or
+`mixed`) or `save_problem` (the repository refused, e.g. a duplicate name). Counts and fixed tokens
+only; never ingredient names or amounts.
 Food estimates (`ai.food`) carry `photos` on STARTED: how many of the entry's photos went to the
 model (all of them, in gallery order, up to 5). Only the count is logged, never the photos.
 An edit that re-estimates an entry logs `food.reestimate` with `reason` (`text`, `photos` or

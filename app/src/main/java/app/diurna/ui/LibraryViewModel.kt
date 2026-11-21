@@ -130,6 +130,11 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
         return lines.map { line -> resolver.enrichLine(line) }
     }
 
+    /** Recipe editor debug events (lookup, a Save that waited or was stopped): fixed tokens and counts only. */
+    fun logRecipeEditor(name: String, details: Map<String, String>, latencyMs: Long?) =
+        c.actions.dispatch(app.diurna.debug.Action.Event(app.diurna.debug.Screen.LIBRARY, name,
+            result = app.diurna.debug.Action.Result.OK, latencyMs = latencyMs, details = details))
+
     /** Kick a WorkManager pass for blocked lines on a saved recipe (or all recipes when id=0). */
     fun enqueueDensityLookup(mealId: Long = 0L) {
         DensityLookupWorker.enqueue(c.appContext, mealId)

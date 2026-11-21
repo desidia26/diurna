@@ -1,0 +1,3 @@
+Imported recipes save
+
+An imported recipe could refuse to save without saying why while its ingredient weights were still being looked up, or when a line like "2 cloves garlic" or "1 cup heavy cream" couldn't be converted to grams. Now Save waits for the lookups to finish, and the recipe editor shows its progress at the top. If an ingredient still has no weight, the top of the editor names it, and its new Weight button lets you type the grams (or you can Remove it). Nutrition is then looked up for that weight. This applies to Import URL on the Meals page and to recipe links typed in the food box.
