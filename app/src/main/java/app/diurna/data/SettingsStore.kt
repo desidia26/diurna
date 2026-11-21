@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import app.diurna.domain.Activity
+import app.diurna.domain.DvBasis
 import app.diurna.domain.Goal
 import app.diurna.domain.Metrics
 import app.diurna.domain.Profile
@@ -79,6 +80,21 @@ class SettingsStore(private val context: Context) : StepStateStore {
 
     suspend fun setDetailedNutrition(enabled: Boolean) {
         context.dataStore.edit { it[detailedNutritionKey] = enabled }
+    }
+
+    // What the Day drill-down's % Daily Value is measured against, and whether it opens on % or amounts.
+    private val dvBasisKey = stringPreferencesKey("dv_basis")
+    val dvBasis: Flow<DvBasis> = context.dataStore.data.map { DvBasis.fromWire(it[dvBasisKey]) ?: DvBasis.FDA }.distinctUntilChanged()
+
+    suspend fun setDvBasis(basis: DvBasis) {
+        context.dataStore.edit { it[dvBasisKey] = basis.wire }
+    }
+
+    private val dvViewKey = booleanPreferencesKey("dv_view_percent")
+    val dvViewPercent: Flow<Boolean> = context.dataStore.data.map { it[dvViewKey] ?: true }.distinctUntilChanged()
+
+    suspend fun setDvViewPercent(percent: Boolean) {
+        context.dataStore.edit { it[dvViewKey] = percent }
     }
 
     // ---- What's new ----

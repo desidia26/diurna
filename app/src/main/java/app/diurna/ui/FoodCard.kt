@@ -33,6 +33,8 @@ import app.diurna.ui.theme.LocalStatusColors
 import app.diurna.domain.Targets
 import app.diurna.domain.NutritionTotals
 import app.diurna.data.FoodEntryEntity
+import app.diurna.domain.DvNutrient
+import app.diurna.domain.MicronutrientProfile
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.AlertDialog
@@ -131,6 +133,16 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
     SectionCard("Food", chip = { Chip("$n ${if (n == 1) "entry" else "entries"}") }, fold = rememberFold(vm, "food", summary)) {
         if (s.targets != null) IntakeSummary(totals, s.targets)
         else if (totals.estimated > 0) Hint(summary)
+        val micros by vm.entryMicros.collectAsStateWithLifecycle()
+        val dv by vm.dailyValues.collectAsStateWithLifecycle()
+        if (detailed) {
+            val percent by vm.dvPercent.collectAsStateWithLifecycle()
+            val dayDetail = remember(food, micros, dv) { dayNutrition(food, micros, dv) }
+            if (dayDetail != null) {
+                val withMicros = food.count { it.estimatedAt != null && micros[it.id]?.hasAny == true }
+                DayNutritionDetail(dayDetail, totals, withMicros, percent, vm::setDvPercent, resetKey = s.date)
+            }
+        }
       Column(Modifier.keepVisibleWhileTyping(focused, matches.size), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         var attachOpen by remember { mutableStateOf(false) }
         OutlinedTextField(
@@ -196,7 +208,7 @@ fun FoodCard(s: DayUi, vm: DayViewModel) {
                     val gallery by vm.entryPhotos(f.id).collectAsStateWithLifecycle(emptyList())
                     SwipeToDelete(onDelete = { vm.deleteFood(f.id) }) {
                         FoodRow(
-                            f, s.date, online, vm.photos, detailed, gallery,
+                            f, s.date, online, vm.photos, detailed, gallery, micros[f.id], dv,
                             expanded = expandedId == f.id,
                             onToggle = { expandedId = if (expandedId == f.id) null else f.id },
                             onEdit = { editing = f }, onDelete = { vm.deleteFood(f.id) },
@@ -375,12 +387,11 @@ private fun UndoBar(message: String, onUndo: () -> Unit) {
 @Composable
 internal fun FoodRow(
     f: FoodEntryEntity, date: LocalDate, online: Boolean, photos: FoodPhotos, detailed: Boolean,
-    gallery: List<String>, expanded: Boolean, onToggle: () -> Unit,
+    gallery: List<String>, micros: MicronutrientProfile? = null, dv: Map<DvNutrient, Double> = emptyMap(), expanded: Boolean, onToggle: () -> Unit,
     onEdit: () -> Unit, onDelete: () -> Unit, onServings: () -> Unit, onSaveAsMeal: () -> Unit,
 ) {
     val loggedOn = Instant.ofEpochMilli(f.loggedAt).atZone(ZoneId.systemDefault()).toLocalDate()
-    var detail by remember { mutableStateOf(false) }
-    val hasDetail = detailed && f.estimatedAt != null && (
+    val hasDetail = detailed && f.estimatedAt != null && (micros?.hasAny == true ||
         f.fiberG != null || f.sugarsG != null || f.addedSugarsG != null || f.starchG != null ||
             f.satFatG != null || f.monoFatG != null || f.polyFatG != null || f.transFatG != null ||
             f.cholesterolMg != null || f.omega3G != null || f.omega6G != null || f.omega9G != null ||
@@ -424,6 +435,7 @@ internal fun FoodRow(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 when {
+                    hasDetail -> if (!f.estimateNote.isNullOrBlank() && !f.isMeal) Hint("Assumed: ${f.estimateNote}")
                     f.isMeal -> Text(
                         "${f.kcalLow} kcal · P ${f.proteinG} · C ${f.carbsG} · F ${f.fatG}",
                         style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
@@ -446,7 +458,7 @@ internal fun FoodRow(
                     }
                     viewing?.let { name -> PhotoViewDialog(photos, name) { viewing = null } }
                 }
-                if (detail) NutritionDetail(f)
+                if (hasDetail) EntryNutritionDetail(f, micros, dv)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RowAction("Edit", onEdit)
                     if (f.isMeal) {
@@ -454,7 +466,6 @@ internal fun FoodRow(
                     } else if (f.estimatedAt != null) {
                         RowAction("Save as meal", onSaveAsMeal)
                     }
-                    if (hasDetail) RowAction(if (detail) "Hide detail" else "Detail") { detail = !detail }
                     RowAction("Delete", onDelete)
                 }
             }
@@ -466,72 +477,6 @@ internal fun FoodRow(
 private fun RowAction(label: String, onClick: () -> Unit) {
     OutlinedButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 12.dp)) {
         Text(label, style = MaterialTheme.typography.labelLarge)
-    }
-}
-
-@Composable
-private fun NutritionDetail(f: FoodEntryEntity) {
-    fun line(label: String, v: Int?, unit: String = "g") =
-        v?.let { "$label $it$unit" }
-    val carbs = listOfNotNull(
-        line("Fiber", f.fiberG),
-        line("Soluble", f.solubleFiberG),
-        line("Insoluble", f.insolubleFiberG),
-        line("Sugars", f.sugarsG),
-        line("Added sugars", f.addedSugarsG),
-        line("Starch", f.starchG),
-    ).joinToString(" · ")
-    val fats = listOfNotNull(
-        line("Sat", f.satFatG),
-        line("Mono", f.monoFatG),
-        line("Poly", f.polyFatG),
-        line("Trans", f.transFatG),
-        line("Chol", f.cholesterolMg, "mg"),
-        line("Ω3", f.omega3G),
-        line("Ω6", f.omega6G),
-        line("Ω9", f.omega9G),
-    ).joinToString(" · ")
-    val aminos = listOfNotNull(
-        line("His", f.hisMg, "mg"), line("Ile", f.ileMg, "mg"), line("Leu", f.leuMg, "mg"),
-        line("Lys", f.lysMg, "mg"), line("Met", f.metMg, "mg"), line("Phe", f.pheMg, "mg"),
-        line("Thr", f.thrMg, "mg"), line("Trp", f.trpMg, "mg"), line("Val", f.valMg, "mg"),
-        line("Cys", f.cysMg, "mg"), line("Tyr", f.tyrMg, "mg"),
-    ).joinToString(" · ")
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        if (carbs.isNotEmpty()) {
-            Text("Carbs  $carbs", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-        }
-        if (fats.isNotEmpty()) {
-            Text("Fats   $fats", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-        }
-        if (aminos.isNotEmpty()) {
-            Text("Aminos $aminos", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-        }
-        val matched = f.aminoMatched
-        val total = f.aminoTotal
-        if (matched != null && total != null && total > 0) {
-            if (matched < total) {
-                val missed = f.ingredientsJson?.let { app.diurna.data.fdc.IngredientsJson.decode(it) }
-                    ?.filter { it.fdcId == null }
-                    ?.joinToString(", ") { it.name }
-                    .orEmpty()
-                val missBit = if (missed.isNotEmpty()) " — missed: $missed" else ""
-                Hint("Amino acids partial: matched $matched of $total ingredients$missBit")
-            } else {
-                Hint("Amino acids: matched $matched of $total ingredients")
-            }
-        }
-        f.ingredientsJson?.let { raw ->
-            val list = app.diurna.data.fdc.IngredientsJson.decode(raw)
-            if (!list.isNullOrEmpty() && (matched == null || total == null)) {
-                Hint(
-                    "Ingredients: " + list.joinToString("; ") { ing ->
-                        val match = ing.matchedDescription?.let { " → $it" } ?: ""
-                        "${ing.name} (${"%.0f".format(ing.grams)} g)$match"
-                    }
-                )
-            }
-        }
     }
 }
 

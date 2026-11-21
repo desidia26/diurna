@@ -58,6 +58,12 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
     fun setCardio(on: Boolean) = io("library.set_cardio") { c.settings.setCardio(on) }
     fun setDetailedNutrition(on: Boolean) = io("library.set_detailed_nutrition") { c.settings.setDetailedNutrition(on) }
 
+    /** What the Day drill-down's % Daily Value is measured against. */
+    val dvBasis = c.settings.dvBasis.state(app.diurna.domain.DvBasis.FDA)
+    /** By age and sex needs the Targets profile; without it the FDA values are used. */
+    val hasProfile = c.settings.profile.map { it != null }.state(false)
+    fun setDvBasis(basis: app.diurna.domain.DvBasis) = io("library.set_dv_basis") { c.settings.setDvBasis(basis) }
+
     // Suspend so dialogs can show a problem (e.g. a duplicate name) instead of closing.
     suspend fun saveMeal(meal: MealEntity): Result =
         c.library.saveMeal(meal.copy(kind = if (meal.kind.isBlank()) MealEntity.KIND_SIMPLE else meal.kind))

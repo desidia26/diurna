@@ -731,6 +731,13 @@ interface NutrientValueDao {
     )
     suspend fun forOwners(kind: String, ownerIds: List<Long>): List<NutrientValueEntity>
 
+    /** A day's food-entry rows; re-emits when either table changes, so a late OFF/FDC fill shows up. */
+    @Query(
+        "SELECT nv.* FROM nutrient_value nv JOIN food_entry f ON nv.owner_id = f.id " +
+            "WHERE nv.owner_kind = 'food_entry' AND f.date = :date",
+    )
+    fun observeFoodEntriesOn(date: String): Flow<List<NutrientValueEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(rows: List<NutrientValueEntity>)
 

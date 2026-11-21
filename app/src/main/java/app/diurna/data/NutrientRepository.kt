@@ -146,6 +146,10 @@ class NutrientRepository(private val db: AppDatabase) {
         return DailyMicros.forEntries(profiles)
     }
 
+    /** Each entry's micronutrients on [date], by entry id; entries with no rows are absent. */
+    fun observeByEntry(date: String): Flow<Map<Long, MicronutrientProfile>> =
+        dao.observeFoodEntriesOn(date).map { rows -> rows.groupBy { it.ownerId }.mapValues { NutrientValues.toProfile(it.value) } }
+
     fun observeDaily(date: String): Flow<DailyMicros?> =
         food.observe(date).map { entries ->
             if (entries.isEmpty()) return@map null
