@@ -37,7 +37,10 @@ import androidx.compose.ui.unit.dp
 import app.diurna.data.LibraryRepository.Result
 import app.diurna.data.MealEntity
 import app.diurna.data.RecipeIngredientEntity
+import app.diurna.data.density.RecipeLookups
 import app.diurna.data.fdc.FdcSearchHit
+import app.diurna.domain.DensityUnitKind
+import app.diurna.domain.IngredientDensity
 import app.diurna.domain.IngredientDensities
 import app.diurna.domain.IngredientUnit
 import app.diurna.domain.IngredientUnits
@@ -181,7 +184,7 @@ fun RecipeDialog(
     var saving by remember { mutableStateOf(false) }
     var weighing by remember { mutableStateOf<IngredientDraft?>(null) }
 
-    // Auto-resolve blocked volume/each lines (USDA → builtin → AI) once on open, one line at a time
+    // Auto-resolve blocked volume/each lines (USDA → builtin → AI) once on open, several at a time
     // so each shows up as it resolves, and Save can wait for the rest instead of failing.
     androidx.compose.runtime.LaunchedEffect(initial.id, initialLines) {
         val filler = fillDensities ?: return@LaunchedEffect
@@ -191,20 +194,27 @@ fun RecipeDialog(
         lookingUp = true
         lookupTotal = todo.size
         lookupDone = 0
+        val unique = todo.map { d ->
+            val kind = DensityUnitKind.of(d.unit) ?: DensityUnitKind.VOLUME
+            IngredientDensity.cacheKey(d.name, kind)
+        }.toSet().size
         val start = System.nanoTime()
         try {
-            for (draft in todo) {
-                val filled = filler(listOf(draft.toEntity(initial.id, 0))).firstOrNull()
+            RecipeLookups.forEachParallel(todo, onEach = { _, draft, filled ->
                 // Lines can be removed meanwhile, so find this one again by identity.
                 val at = lines.indexOfFirst { it === draft }
                 if (filled != null && at >= 0) lines[at] = filled.toDraft()
                 lookupDone++
+            }) { draft ->
+                filler(listOf(draft.toEntity(initial.id, 0))).firstOrNull()
             }
         } finally {
             lookingUp = false
             logEvent("recipe.lookup", mapOf(
                 "ingredients" to lookupTotal.toString(),
                 "lines" to app.diurna.data.RecipeSaveCheck.blockers(lines.map { it.toEntity(initial.id, 0) }).size.toString(),
+                "parallel" to RecipeLookups.MAX_PARALLEL.toString(),
+                "unique" to unique.toString(),
             ), (System.nanoTime() - start) / 1_000_000)
         }
     }

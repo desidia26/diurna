@@ -261,7 +261,7 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     suspend fun searchFdc(query: String) = c.fdcClient.search(query)
     suspend fun loadFdcNutrition(fdcId: Int) = c.fdcClient.nutritionProfile(fdcId)
     suspend fun resolveDensities(lines: List<app.diurna.data.RecipeIngredientEntity>) =
-        lines.map { c.densityResolver.enrichLine(it) }
+        app.diurna.data.density.RecipeLookups.mapParallel(lines) { c.densityResolver.enrichLine(it) }
     /** Saves the confirmed recipe to the Library and returns it, so the servings step can log it. */
     suspend fun saveImportedRecipe(meal: MealEntity, lines: List<app.diurna.data.RecipeIngredientEntity>) =
         c.library.saveRecipeReturning(meal, lines)

@@ -45,7 +45,8 @@ logs `day.food_link` with a fixed `outcome`: `routed` when a link sends the entr
 `fallback_none` when there were no words to estimate. The estimate itself is then the usual
 `day.add_food` with only those words as its text.
 The recipe editor (Library and the food box's link import) logs `recipe.lookup` when its automatic
-weight/nutrition lookup ends (`ingredients` looked up, `lines` still without a weight, latency);
+weight/nutrition lookup ends (`ingredients` looked up, `lines` still without a weight, `parallel`
+concurrency cap, `unique` distinct name+unit queries, latency);
 `recipe.save_waited` (`reason` `looking_up`, `ingredients` still pending) when Save was tapped
 during the lookup and waited for it; and `recipe.save_blocked` when Save was stopped, with `reason`
 `needs_weight` (`ingredients` = how many lines, `outcome` `needs_density`, `needs_grams_each` or

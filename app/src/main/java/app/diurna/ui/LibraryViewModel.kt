@@ -10,6 +10,7 @@ import app.diurna.data.MealEntity
 import app.diurna.data.RecipeIngredientEntity
 import app.diurna.data.recipe.RecipeImportResult
 import app.diurna.data.density.DensityLookupWorker
+import app.diurna.data.density.RecipeLookups
 import app.diurna.data.fdc.FdcNutritionProfile
 import app.diurna.data.fdc.FdcSearchHit
 import app.diurna.domain.Cardio
@@ -127,7 +128,7 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
      */
     suspend fun resolveDensities(lines: List<RecipeIngredientEntity>): List<RecipeIngredientEntity> {
         val resolver = c.densityResolver
-        return lines.map { line -> resolver.enrichLine(line) }
+        return RecipeLookups.mapParallel(lines) { resolver.enrichLine(it) }
     }
 
     /** Recipe editor debug events (lookup, a Save that waited or was stopped): fixed tokens and counts only. */
