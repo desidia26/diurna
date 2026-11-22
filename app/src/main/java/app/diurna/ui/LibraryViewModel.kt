@@ -60,7 +60,7 @@ class LibraryViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
 
     /** What the Day drill-down's % Daily Value is measured against. */
     val dvBasis = c.settings.dvBasis.state(app.diurna.domain.DvBasis.FDA)
-    /** By age and sex needs the Targets profile; without it the FDA values are used. */
+    /** By age and sex needs the Targets profile and age 19+; otherwise the FDA values are used. */
     val hasProfile = c.settings.profile.map { it != null }.state(false)
     fun setDvBasis(basis: app.diurna.domain.DvBasis) = io("library.set_dv_basis") { c.settings.setDvBasis(basis) }
 

@@ -76,6 +76,24 @@ class NutritionDetailTest {
         compose.onNodeWithText("3300 mg").assertIsDisplayed()
     }
 
+    @Test fun anOpenEntryFlagsEveryKeepUnderThatIsAlreadyHalfTheDay() {
+        val photos = FoodPhotos(ApplicationProvider.getApplicationContext<Context>().cacheDir.resolve("nutrition-detail-heavy-test"))
+        val heavy = bowl.copy(satFatG = 12, addedSugarsG = 30, cholesterolMg = 200)
+        compose.setContent {
+            DiurnaTheme {
+                FoodRow(
+                    heavy, day, online = true, photos = photos, detailed = true, gallery = emptyList(),
+                    micros = bowlMicros, dv = dv, expanded = true, onToggle = {},
+                    onEdit = {}, onDelete = {}, onServings = {}, onSaveAsMeal = {},
+                )
+            }
+        }
+        compose.onNodeWithText("Sodium is 64% of a day's limit in this one entry.").assertIsDisplayed()
+        compose.onNodeWithText("Saturated fat is 60% of a day's limit in this one entry.").assertIsDisplayed()
+        compose.onNodeWithText("Added sugars is 60% of a day's limit in this one entry.").assertIsDisplayed()
+        compose.onNodeWithText("Cholesterol is 67% of a day's limit in this one entry.").assertIsDisplayed()
+    }
+
     @Test fun theDayDrillsDownOneLevelPerTap() {
         val food = listOf(bowl, entry(2, "21:00", "Beer"))
         val micros = mapOf(1L to bowlMicros)
@@ -101,10 +119,16 @@ class NutritionDetailTest {
         compose.onNodeWithText("Keep under").performClick()
         compose.onNodeWithText("Sodium").assertIsDisplayed()
         compose.onNodeWithText("64%").assertIsDisplayed()
+        compose.onNodeWithText("Cholesterol").assertIsDisplayed()
+        compose.onNodeWithText("37%").assertIsDisplayed()
         assertEquals(0, compose.count("Chicken burrito bowl"))
 
         compose.onNodeWithText("Sodium").performClick()
         compose.onNodeWithText("Chicken burrito bowl").assertIsDisplayed()
+
+        compose.onNodeWithText("Cholesterol").performClick()
+        compose.onNodeWithText("Chicken burrito bowl").assertIsDisplayed()
+        compose.onNodeWithText("110 mg").assertIsDisplayed()
 
         compose.onNodeWithText("Amounts").performClick()
         assertEquals(false, percentSet)

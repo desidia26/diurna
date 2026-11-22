@@ -20,8 +20,10 @@ enum class DvKind { GOAL, LIMIT }
 
 /**
  * Nutrients with a Daily Value. [micro] names the nutrient_value row it comes from; null means a
- * food_entry column (fiber, saturated fat, added sugars). Cholesterol has no limit in current US
- * guidelines, so it stays an amount in the breakdown rather than a row here.
+ * food_entry column (fiber, saturated fat, added sugars, cholesterol).
+ *
+ * Cholesterol uses the FDA label Daily Value of 300 mg on every basis. There is no age-or-sex
+ * recommended amount, and it is not calorie-linked, so Scaled and By age and sex keep 300 mg too.
  */
 enum class DvNutrient(
     val label: String,
@@ -47,6 +49,7 @@ enum class DvNutrient(
     SODIUM("Sodium", "sodium", "mg", DvKind.LIMIT, 2300.0, micro = NutrientId.SODIUM),
     SAT_FAT("Saturated fat", "sat fat", "g", DvKind.LIMIT, 20.0, scalesWithKcal = true),
     ADDED_SUGARS("Added sugars", "added sugars", "g", DvKind.LIMIT, 50.0, scalesWithKcal = true),
+    CHOLESTEROL("Cholesterol", "cholesterol", "mg", DvKind.LIMIT, 300.0),
 }
 
 object DailyValues {
@@ -97,7 +100,7 @@ object DailyValues {
             DvNutrient.VITAMIN_D -> if (age <= 70) 15.0 else 20.0
             DvNutrient.VITAMIN_B12 -> 2.4
             DvNutrient.FOLATE -> 400.0
-            DvNutrient.SODIUM, DvNutrient.SAT_FAT, DvNutrient.ADDED_SUGARS -> n.fda
+            DvNutrient.SODIUM, DvNutrient.SAT_FAT, DvNutrient.ADDED_SUGARS, DvNutrient.CHOLESTEROL -> n.fda
         }
     }
 }

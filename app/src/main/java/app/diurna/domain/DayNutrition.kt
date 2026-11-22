@@ -84,13 +84,33 @@ data class DayNutrition(
             return DayNutrition(goals, limits, entries.size)
         }
 
-        /** One entry's amounts: fiber, sat fat and added sugars from its columns, the rest from its nutrient rows. */
-        fun amounts(fiberG: Int?, satFatG: Int?, addedSugarsG: Int?, micros: MicronutrientProfile): Map<DvNutrient, Double> =
+        /** One entry's amounts: fiber, sat fat, added sugars and cholesterol from its columns, the rest from its nutrient rows. */
+        fun amounts(
+            fiberG: Int?,
+            satFatG: Int?,
+            addedSugarsG: Int?,
+            cholesterolMg: Int?,
+            micros: MicronutrientProfile,
+        ): Map<DvNutrient, Double> =
             buildMap {
                 fiberG?.let { put(DvNutrient.FIBER, it.toDouble()) }
                 satFatG?.let { put(DvNutrient.SAT_FAT, it.toDouble()) }
                 addedSugarsG?.let { put(DvNutrient.ADDED_SUGARS, it.toDouble()) }
+                cholesterolMg?.let { put(DvNutrient.CHOLESTEROL, it.toDouble()) }
                 DvNutrient.entries.forEach { n -> n.micro?.let { id -> micros[id]?.let { put(n, it) } } }
+            }
+
+        /**
+         * Keep-under nutrients in [amounts] that already reach half the day's limit. Unknown stays
+         * out (it is not treated as zero). Order follows [DvNutrient].
+         */
+        const val ENTRY_LIMIT_WARN = 0.5
+
+        fun heavyLimits(amounts: Map<DvNutrient, Double>, dv: Map<DvNutrient, Double>): List<Pair<DvNutrient, Double>> =
+            DvNutrient.entries.filter { it.kind == DvKind.LIMIT }.mapNotNull { n ->
+                val v = amounts[n] ?: return@mapNotNull null
+                val limit = dv[n] ?: n.fda
+                if (limit > 0 && v / limit >= ENTRY_LIMIT_WARN) n to v else null
             }
     }
 }

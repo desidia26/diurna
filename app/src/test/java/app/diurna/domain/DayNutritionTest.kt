@@ -86,7 +86,7 @@ class DayNutritionTest {
         )
         assertTrue(day.goals.drop(3).all { it.amount == null })
         assertEquals(DvNutrient.entries.count { it.kind == DvKind.GOAL }, day.goals.size)
-        assertEquals(listOf(DvNutrient.SODIUM, DvNutrient.SAT_FAT, DvNutrient.ADDED_SUGARS), day.limits.map { it.nutrient })
+        assertEquals(listOf(DvNutrient.SODIUM, DvNutrient.SAT_FAT, DvNutrient.ADDED_SUGARS, DvNutrient.CHOLESTEROL), day.limits.map { it.nutrient })
     }
 
     @Test fun summaryNamesWhatIsMetAndOver() {
@@ -123,17 +123,54 @@ class DayNutritionTest {
 
     @Test fun entryAmountsFromColumnsAndNutrientRows() {
         val amounts = DayNutrition.amounts(
-            fiberG = 14, satFatG = 6, addedSugarsG = null,
+            fiberG = 14, satFatG = 6, addedSugarsG = null, cholesterolMg = 110,
             micros = MicronutrientProfile.of(NutrientId.SODIUM to 1480.0, NutrientId.VITAMIN_D to 0.1),
         )
         assertEquals(
             mapOf(
                 DvNutrient.FIBER to 14.0,
                 DvNutrient.SAT_FAT to 6.0,
+                DvNutrient.CHOLESTEROL to 110.0,
                 DvNutrient.SODIUM to 1480.0,
                 DvNutrient.VITAMIN_D to 0.1,
             ),
             amounts,
         )
+    }
+
+    @Test fun cholesterolOverTheLimitShowsInTheSummary() {
+        val day = DayNutrition.of(
+            listOf(entry(1, "12:00", "Cheese", DvNutrient.CHOLESTEROL to 400.0, DvNutrient.SODIUM to 100.0)),
+            dv,
+        )!!
+        val chol = day.row(DvNutrient.CHOLESTEROL)
+        assertEquals(400.0, chol.amount!!, 0.0)
+        assertEquals(133, chol.pct)
+        assertEquals(1, chol.known)
+        assertEquals("0 of 11 met · cholesterol over", day.summary)
+        assertEquals(listOf(1L), chol.sources.map { it.entryId })
+    }
+
+    @Test fun heavyLimitsAreKeepUnderItemsAtLeastHalfTheDaysValue() {
+        // Just under, at, and over the half-day mark; a goal (fiber) is ignored; a missing value is not zero.
+        val under = mapOf(
+            DvNutrient.SODIUM to 1149.0,
+            DvNutrient.SAT_FAT to 10.0,
+            DvNutrient.ADDED_SUGARS to 25.0,
+            DvNutrient.CHOLESTEROL to 149.0,
+            DvNutrient.FIBER to 40.0,
+        )
+        assertEquals(
+            listOf(DvNutrient.SAT_FAT, DvNutrient.ADDED_SUGARS),
+            DayNutrition.heavyLimits(under, dv).map { it.first },
+        )
+        val at = mapOf(DvNutrient.SODIUM to 1150.0, DvNutrient.CHOLESTEROL to 150.0)
+        assertEquals(listOf(DvNutrient.SODIUM, DvNutrient.CHOLESTEROL), DayNutrition.heavyLimits(at, dv).map { it.first })
+        assertTrue(DayNutrition.heavyLimits(emptyMap(), dv).isEmpty())
+
+        // The active basis is used: at 2,400 kcal, sat fat's limit is 24 g, so 12 g is half.
+        val scaled = DailyValues.forDay(DvBasis.SCALED, kcalTarget = 2400, sex = null, age = null)
+        assertEquals(listOf(DvNutrient.SAT_FAT), DayNutrition.heavyLimits(mapOf(DvNutrient.SAT_FAT to 12.0), scaled).map { it.first })
+        assertTrue(DayNutrition.heavyLimits(mapOf(DvNutrient.SAT_FAT to 11.0), scaled).isEmpty())
     }
 }
