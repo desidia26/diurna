@@ -12,6 +12,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.semantics.Role
+import app.diurna.domain.DvBasis
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -63,6 +69,7 @@ fun MealEntity.macroLine(): String = "%,d kcal · P %d · C %d · F %d".format(k
 fun LibraryCard(
     mealCount: Int, exerciseCount: Int, cardio: Boolean, onCardio: (Boolean) -> Unit,
     detailedNutrition: Boolean, onDetailedNutrition: (Boolean) -> Unit,
+    dvBasis: DvBasis, hasProfile: Boolean, onDvBasis: (DvBasis) -> Unit,
     onMeals: () -> Unit, onExercises: () -> Unit,
 ) {
     SectionCard("Library") {
@@ -81,9 +88,37 @@ fun LibraryCard(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f)) {
                 Text("Detailed nutrition", fontWeight = FontWeight.SemiBold)
-                Hint("Fiber, sugars, starch and fat breakdown on meals and Day food rows. Off keeps the basic protein / carbs / fat view.")
+                Hint("Fiber, sugars, starch, fats, vitamins and minerals on meals and Day food rows, and a day's % Daily Value. Off keeps the basic protein / carbs / fat view.")
             }
             Switch(checked = detailedNutrition, onCheckedChange = onDetailedNutrition)
+        }
+        if (detailedNutrition) DvBasisChoice(dvBasis, hasProfile, onDvBasis)
+    }
+}
+
+@Composable
+private fun DvBasisChoice(selected: DvBasis, hasProfile: Boolean, onPick: (DvBasis) -> Unit) {
+    Column(Modifier.selectableGroup()) {
+        Text("Daily Values from", fontWeight = FontWeight.SemiBold)
+        listOf(
+            DvBasis.FDA to ("FDA label, 2,000 kcal" to "The numbers on US food packaging. The same for everyone."),
+            DvBasis.SCALED to ("Scaled to my calorie target" to "Fiber, saturated fat and added sugars scale with each day's kcal target. Vitamins and minerals stay put."),
+            DvBasis.AGE_SEX to ("By age and sex" to
+                if (hasProfile) "US recommended amounts for the age and sex in Targets. Iron, zinc and magnesium differ most."
+                else "Needs the Targets profile; until then the FDA values are used."),
+        ).forEach { (basis, text) ->
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                    .selectable(selected = basis == selected, role = Role.RadioButton, onClick = { onPick(basis) })
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                RadioButton(selected = basis == selected, onClick = null)
+                Column(Modifier.weight(1f)) {
+                    Text(text.first)
+                    Hint(text.second)
+                }
+            }
         }
     }
 }

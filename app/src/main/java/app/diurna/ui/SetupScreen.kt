@@ -127,9 +127,12 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, contentPadd
             val catalog by library.catalog.collectAsStateWithLifecycle()
             val cardio by library.cardio.collectAsStateWithLifecycle()
             val detailed by library.detailedNutrition.collectAsStateWithLifecycle()
+            val dvBasis by library.dvBasis.collectAsStateWithLifecycle()
+            val hasProfile by library.hasProfile.collectAsStateWithLifecycle()
             LibraryCard(
                 meals.size, catalog.size, cardio, onCardio = library::setCardio,
                 detailed, onDetailedNutrition = library::setDetailedNutrition,
+                dvBasis = dvBasis, hasProfile = hasProfile, onDvBasis = library::setDvBasis,
                 onMeals = { onOpen("meals") }, onExercises = { onOpen("exercises") },
             )
         }
