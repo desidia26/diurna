@@ -65,7 +65,7 @@ internal fun dayNutrition(food: List<FoodEntryEntity>, micros: Map<Long, Micronu
         food.filter { it.estimatedAt != null }.map { f ->
             DayNutrition.Entry(
                 f.id, f.time, f.text.lines().first(),
-                DayNutrition.amounts(f.fiberG, f.satFatG, f.addedSugarsG, micros[f.id] ?: MicronutrientProfile()),
+                DayNutrition.amounts(f.fiberG, f.satFatG, f.addedSugarsG, f.cholesterolMg, micros[f.id] ?: MicronutrientProfile()),
             )
         },
         dv,
@@ -105,6 +105,18 @@ private fun pair(a: Int?, b: Int?, unit: String): String? = when {
 internal fun EntryNutritionDetail(f: FoodEntryEntity, micros: MicronutrientProfile?, dv: Map<DvNutrient, Double>) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         MacroTiles(f)
+        val amounts = DayNutrition.amounts(f.fiberG, f.satFatG, f.addedSugarsG, f.cholesterolMg, micros ?: MicronutrientProfile())
+        val heavy = DayNutrition.heavyLimits(amounts, dv).toMap()
+        val warn = LocalStatusColors.current.warn
+        fun tone(n: DvNutrient) = if (n in heavy) warn else Color.Unspecified
+        @Composable
+        fun limitHints(vararg nutrients: DvNutrient) {
+            nutrients.forEach { n ->
+                val v = heavy[n] ?: return@forEach
+                val limit = dv[n] ?: n.fda
+                Hint("${n.label} is ${(v / limit * 100).roundToInt()}% of a day's limit in this one entry.")
+            }
+        }
         val carbs = buildList {
             f.fiberG?.let { add(Triple("Fiber", "$it g", false)) }
             pair(f.solubleFiberG, f.insolubleFiberG, "g")?.let { add(Triple("Soluble · Insoluble", it, true)) }
@@ -134,36 +146,44 @@ internal fun EntryNutritionDetail(f: FoodEntryEntity, micros: MicronutrientProfi
             divider()
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 GroupLabel("CARBS")
-                carbs.forEach { (l, v, indent) -> AmountLine(l, v, indent) }
+                carbs.forEach { (l, v, indent) ->
+                    val added = l == "Added" || l == "Added sugars"
+                    AmountLine(l, v, indent, color = if (added) tone(DvNutrient.ADDED_SUGARS) else Color.Unspecified)
+                }
+                limitHints(DvNutrient.ADDED_SUGARS)
             }
         }
         if (fats.isNotEmpty()) {
             divider()
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 GroupLabel("FATS")
-                fats.forEach { (l, v) -> AmountLine(l, v) }
+                fats.forEach { (l, v) ->
+                    val n = when (l) {
+                        "Saturated" -> DvNutrient.SAT_FAT
+                        "Cholesterol" -> DvNutrient.CHOLESTEROL
+                        else -> null
+                    }
+                    AmountLine(l, v, color = n?.let { tone(it) } ?: Color.Unspecified)
+                }
+                limitHints(DvNutrient.SAT_FAT, DvNutrient.CHOLESTEROL)
             }
         }
         if (minerals.isNotEmpty()) {
             divider()
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 GroupLabel("VITAMINS & MINERALS")
-                // Two columns; a limit that one entry already half-fills is flagged.
-                val warn = LocalStatusColors.current.warn
-                val heavy = minerals.filter { (n, v) -> n.kind == DvKind.LIMIT && (dv[n] ?: 0.0) > 0 && v / dv.getValue(n) >= 0.5 }
+                // Two columns; a keep-under nutrient that one entry already half-fills is flagged.
                 minerals.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         row.forEach { (n, v) ->
                             Box(Modifier.weight(1f)) {
-                                AmountLine(n.label, "${nutrientAmount(v)} ${n.unit}", color = if (heavy.any { it.first == n }) warn else Color.Unspecified)
+                                AmountLine(n.label, "${nutrientAmount(v)} ${n.unit}", color = tone(n))
                             }
                         }
                         if (row.size == 1) Box(Modifier.weight(1f))
                     }
                 }
-                heavy.forEach { (n, v) ->
-                    Hint("${n.label} is ${(v / dv.getValue(n) * 100).roundToInt()}% of a day's limit in this one entry.")
-                }
+                limitHints(*DvNutrient.entries.filter { it.kind == DvKind.LIMIT && it.micro != null }.toTypedArray())
             }
         }
         val aminos = listOfNotNull(
@@ -476,7 +496,7 @@ private fun NutrientRow(r: DayNutrition.Row, percent: Boolean, open: Boolean, on
     }
 }
 
-/** Amount-only lines with no Daily Value; cholesterol lives here (no current US limit). */
+/** Amount-only lines with no Daily Value. Cholesterol lives in Keep under. */
 private fun breakdown(t: NutritionTotals): List<Pair<String, String>> = listOfNotNull(
     t.sugarsG?.let { "Sugars" to "$it g" },
     t.starchG?.let { "Starch" to "$it g" },
@@ -485,7 +505,6 @@ private fun breakdown(t: NutritionTotals): List<Pair<String, String>> = listOfNo
     t.monoFatG?.let { "Mono fat" to "$it g" },
     t.polyFatG?.let { "Poly fat" to "$it g" },
     t.transFatG?.let { "Trans fat" to "$it g" },
-    t.cholesterolMg?.let { "Cholesterol" to "$it mg" },
     t.omega3G?.let { "Omega-3" to "$it g" },
     t.omega6G?.let { "Omega-6" to "$it g" },
 )

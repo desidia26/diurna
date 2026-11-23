@@ -102,10 +102,10 @@ private fun DvBasisChoice(selected: DvBasis, hasProfile: Boolean, onPick: (DvBas
         Text("Daily Values from", fontWeight = FontWeight.SemiBold)
         listOf(
             DvBasis.FDA to ("FDA label, 2,000 kcal" to "The numbers on US food packaging. The same for everyone."),
-            DvBasis.SCALED to ("Scaled to my calorie target" to "Fiber, saturated fat and added sugars scale with each day's kcal target. Vitamins and minerals stay put."),
+            DvBasis.SCALED to ("Scaled to my calorie target" to "Fiber, saturated fat and added sugars scale with each day's kcal target. Cholesterol, sodium, vitamins and minerals stay put."),
             DvBasis.AGE_SEX to ("By age and sex" to
-                if (hasProfile) "US recommended amounts for the age and sex in Targets. Iron, zinc and magnesium differ most."
-                else "Needs the Targets profile; until then the FDA values are used."),
+                if (hasProfile) "US recommended amounts for the age and sex in Targets, for ages 19 and up; under 19 the FDA values are used. Iron, zinc and magnesium differ most."
+                else "Needs the Targets profile and age 19 or older; until then the FDA values are used."),
         ).forEach { (basis, text) ->
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 56.dp)

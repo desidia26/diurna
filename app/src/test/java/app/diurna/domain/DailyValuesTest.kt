@@ -14,6 +14,7 @@ class DailyValuesTest {
         assertEquals(20.0, dv.getValue(DvNutrient.SAT_FAT), 0.0)
         assertEquals(50.0, dv.getValue(DvNutrient.ADDED_SUGARS), 0.0)
         assertEquals(2300.0, dv.getValue(DvNutrient.SODIUM), 0.0)
+        assertEquals(300.0, dv.getValue(DvNutrient.CHOLESTEROL), 0.0)
         assertEquals(4700.0, dv.getValue(DvNutrient.POTASSIUM), 0.0)
         assertEquals(1300.0, dv.getValue(DvNutrient.CALCIUM), 0.0)
         assertEquals(18.0, dv.getValue(DvNutrient.IRON), 0.0)
@@ -28,17 +29,17 @@ class DailyValuesTest {
     }
 
     @Test fun everyNutrientMapsToOneSource() {
-        // Fiber, sat fat and added sugars come from entry columns; the rest from nutrient rows.
+        // Fiber, sat fat, added sugars and cholesterol come from entry columns; the rest from nutrient rows.
         DvNutrient.entries.forEach { n ->
-            val fromColumn = n in setOf(DvNutrient.FIBER, DvNutrient.SAT_FAT, DvNutrient.ADDED_SUGARS)
+            val fromColumn = n in setOf(DvNutrient.FIBER, DvNutrient.SAT_FAT, DvNutrient.ADDED_SUGARS, DvNutrient.CHOLESTEROL)
             assertEquals(n.name, fromColumn, n.micro == null)
         }
         assertEquals(NutrientId.entries.toSet(), DvNutrient.entries.mapNotNull { it.micro }.toSet())
     }
 
-    @Test fun limitsAreSodiumSatFatAndAddedSugarsOnly() {
+    @Test fun limitsAreSodiumSatFatAddedSugarsAndCholesterol() {
         assertEquals(
-            setOf(DvNutrient.SODIUM, DvNutrient.SAT_FAT, DvNutrient.ADDED_SUGARS),
+            setOf(DvNutrient.SODIUM, DvNutrient.SAT_FAT, DvNutrient.ADDED_SUGARS, DvNutrient.CHOLESTEROL),
             DvNutrient.entries.filter { it.kind == DvKind.LIMIT }.toSet(),
         )
     }
@@ -49,6 +50,7 @@ class DailyValuesTest {
         assertEquals(24.0, dv.getValue(DvNutrient.SAT_FAT), 1e-9)
         assertEquals(60.0, dv.getValue(DvNutrient.ADDED_SUGARS), 1e-9)
         assertEquals(2300.0, dv.getValue(DvNutrient.SODIUM), 0.0)
+        assertEquals(300.0, dv.getValue(DvNutrient.CHOLESTEROL), 0.0)
         assertEquals(18.0, dv.getValue(DvNutrient.IRON), 0.0)
     }
 
@@ -72,6 +74,7 @@ class DailyValuesTest {
         assertEquals(2300.0, dv.getValue(DvNutrient.SODIUM), 0.0)
         assertEquals(20.0, dv.getValue(DvNutrient.SAT_FAT), 0.0)
         assertEquals(50.0, dv.getValue(DvNutrient.ADDED_SUGARS), 0.0)
+        assertEquals(300.0, dv.getValue(DvNutrient.CHOLESTEROL), 0.0)
     }
 
     @Test fun ageSexForAWomanByBand() {
@@ -112,6 +115,15 @@ class DailyValuesTest {
         assertEquals(fda(), DailyValues.forDay(DvBasis.AGE_SEX, 2400, sex = null, age = 40))
         assertEquals(fda(), DailyValues.forDay(DvBasis.AGE_SEX, 2400, sex = Sex.MALE, age = null))
         assertEquals(fda(), DailyValues.forDay(DvBasis.AGE_SEX, 2400, sex = Sex.MALE, age = 17))
+    }
+
+    @Test fun cholesterolStays300OnEveryBasis() {
+        // No age/sex recommended amount, and it is not calorie-linked, so every basis uses the FDA 300 mg DV.
+        assertEquals(300.0, DailyValues.forDay(DvBasis.FDA, 2400, Sex.MALE, 40).getValue(DvNutrient.CHOLESTEROL), 0.0)
+        assertEquals(300.0, DailyValues.forDay(DvBasis.SCALED, 2400, Sex.MALE, 40).getValue(DvNutrient.CHOLESTEROL), 0.0)
+        assertEquals(300.0, DailyValues.forDay(DvBasis.SCALED, 1600, Sex.FEMALE, 30).getValue(DvNutrient.CHOLESTEROL), 0.0)
+        assertEquals(300.0, DailyValues.forDay(DvBasis.AGE_SEX, 2400, Sex.MALE, 40).getValue(DvNutrient.CHOLESTEROL), 0.0)
+        assertEquals(300.0, DailyValues.forDay(DvBasis.AGE_SEX, 2400, Sex.FEMALE, 17).getValue(DvNutrient.CHOLESTEROL), 0.0)
     }
 
     @Test fun basisWireRoundTripsAndUnknownIsNull() {
