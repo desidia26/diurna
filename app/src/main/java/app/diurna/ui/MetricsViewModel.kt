@@ -45,6 +45,8 @@ data class DailyMetricCard(
     val logged: Int,
     val days: Int,
     val smoothed: Boolean,
+    /** Log metrics only: entries in the range. Their [series] is entries per day, or per week past 4 weeks. */
+    val entries: Int = 0,
 )
 
 data class MacroCard(
@@ -292,6 +294,20 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
 
         val smoothed = range != Metrics.Range.W4
         val checkIn = s.checkIn.filter { it.kind != DailyMetrics.Kind.TEXT }.mapNotNull { def ->
+            if (def.kind == DailyMetrics.Kind.LOG) {
+                val entryDates = s.checkInEntries.filter { it.metricId == def.id }.map { LocalDate.parse(it.date) }.filter { it in s.from..s.to }
+                if (def.archived && entryDates.isEmpty()) return@mapNotNull null
+                return@mapNotNull DailyMetricCard(
+                    def = def,
+                    series = (if (smoothed) DailyMetrics.weeklyCounts(entryDates, s.from, s.to) else DailyMetrics.dailyCounts(entryDates, s.from, s.to))
+                        .map { it.toDouble() },
+                    average = entryDates.size * 7.0 / dates.size.coerceAtLeast(1),
+                    logged = entryDates.distinct().size,
+                    days = dates.size,
+                    smoothed = smoothed,
+                    entries = entryDates.size,
+                )
+            }
             val values = s.checkInValues.filter { it.metricId == def.id && it.value != null }
                 .associate { LocalDate.parse(it.date) to it.value!! }
             val inRange = dates.mapNotNull { values[it] }

@@ -639,6 +639,26 @@ data class DailyMetricValueEntity(
 )
 
 /**
+ * One entry of a log metric (a headache, a symptom): any number a day, each with its own time.
+ * Editable after the day is finalized, like the other check-in values, so a late entry can go in.
+ */
+@Entity(
+    tableName = "metric_log_entry",
+    foreignKeys = [
+        ForeignKey(DailyMetricEntity::class, ["id"], ["metric_id"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index(value = ["metric_id", "date"]), Index(value = ["date"])],
+)
+data class MetricLogEntryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "metric_id") val metricId: Long,
+    val date: String,
+    /** HH:mm, local. */
+    val time: String,
+    val note: String? = null,
+)
+
+/**
  * One micronutrient amount attached to a meal, food entry, recipe ingredient, or FDC food id.
  * Amounts are in [unit] (canonical: mg or ug). Missing nutrients have no row (≠ zero).
  * Unique on (owner_kind, owner_id, nutrient_id); snapshots are replaced only by explicit writes.

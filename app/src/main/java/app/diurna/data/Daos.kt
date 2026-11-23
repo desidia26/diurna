@@ -717,6 +717,34 @@ interface DailyMetricDao {
 
     @Query("DELETE FROM daily_metric_value WHERE date = :date AND metric_id = :id")
     suspend fun deleteValue(date: String, id: Long)
+
+    @Insert
+    suspend fun insertEntry(entry: MetricLogEntryEntity): Long
+
+    @Query("SELECT * FROM metric_log_entry WHERE id = :id")
+    suspend fun entry(id: Long): MetricLogEntryEntity?
+
+    @Query("UPDATE metric_log_entry SET time = :time, note = :note WHERE id = :id")
+    suspend fun updateEntry(id: Long, time: String, note: String?)
+
+    @Query("DELETE FROM metric_log_entry WHERE id = :id")
+    suspend fun deleteEntry(id: Long)
+
+    @Query("DELETE FROM metric_log_entry WHERE metric_id = :id")
+    suspend fun deleteEntries(id: Long)
+
+    @Query("SELECT * FROM metric_log_entry WHERE date = :date ORDER BY time, id")
+    fun observeEntries(date: String): Flow<List<MetricLogEntryEntity>>
+
+    @Query("SELECT * FROM metric_log_entry WHERE date BETWEEN :from AND :to ORDER BY date, time, id")
+    fun observeEntriesRange(from: String, to: String): Flow<List<MetricLogEntryEntity>>
+
+    /** Days with at least one entry, per log metric: Setup's "logged on n days". */
+    @Query("SELECT metric_id, COUNT(DISTINCT date) AS days FROM metric_log_entry GROUP BY metric_id")
+    fun observeEntryDayCounts(): Flow<List<Count>>
+
+    @Query("SELECT COUNT(*) FROM metric_log_entry WHERE metric_id = :id")
+    suspend fun entryCount(id: Long): Int
 }
 
 @Dao

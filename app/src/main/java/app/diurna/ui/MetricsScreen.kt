@@ -142,14 +142,29 @@ private fun WeightCardView(w: WeightCard, showDots: Boolean, from: LocalDate, to
 private fun DailyMetricCardView(card: DailyMetricCard, from: LocalDate, to: LocalDate) {
     val def = card.def
     val verb = if (def.kind == DailyMetrics.Kind.SCALE) "rated" else "logged"
-    SectionCard(def.name, chip = { Hint("${card.logged} of ${card.days} $verb") }) {
+    val log = def.kind == DailyMetrics.Kind.LOG
+    SectionCard(def.name, chip = { Hint("${card.logged} of ${card.days} " + if (log) "days" else verb) }) {
         if (card.logged == 0) {
-            Hint("Nothing $verb in this range. Fill it in on the Day screen's Check-in card in the evening.")
+            Hint(
+                if (log) "Nothing logged in this range. Tap Log now on the Day screen's Check-in card when it happens."
+                else "Nothing $verb in this range. Fill it in on the Day screen's Check-in card in the evening."
+            )
             return@SectionCard
         }
         val c = MaterialTheme.colorScheme
         val avg = card.average
         val range = "from ${from.short()} to ${to.short()}"
+        if (def.kind == DailyMetrics.Kind.LOG) {
+            Stat(avg?.let { "%.1f".format(it) } ?: "—", "a week · ${card.entries} ${if (card.entries == 1) "entry" else "entries"}", c.primary)
+            // Counts are whole, but the middle gridline can fall at 1.5: rounding it would mislabel it.
+            BarChart(
+                card.series.map { it ?: 0.0 }, description = "${def.name}, entries per ${if (card.smoothed) "week" else "day"}, $range",
+                label = { DailyMetrics.number(it) },
+            )
+            ChartDates(from.short(), to.short())
+            Hint(if (card.smoothed) "One bar per week" else "One bar per day")
+            return@SectionCard
+        }
         if (def.kind == DailyMetrics.Kind.YES_NO) {
             Stat(avg?.let { "${it.roundToInt()}%" } ?: "—", "of answered days yes", c.primary)
             BarChart(card.series.map { it ?: 0.0 }, description = "${def.name}, percent yes per week, $range", label = { "${it.roundToInt()}%" })

@@ -33,8 +33,9 @@ import app.diurna.domain.DailyMetrics
         DailyMetricValueEntity::class,
         NutrientValueEntity::class,
         DeloadWeekEntity::class,
+        MetricLogEntryEntity::class,
     ],
-    version = 22,
+    version = 23,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -75,6 +76,8 @@ import app.diurna.domain.DailyMetrics
         AutoMigration(from = 20, to = 21),
         // v22: deload weeks, one row per marked Monday.
         AutoMigration(from = 21, to = 22),
+        // v23: log metrics' timed entries.
+        AutoMigration(from = 22, to = 23),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -31,13 +31,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import java.time.LocalDate
+import java.time.LocalTime
 
 sealed interface CardioPhotoResult {
     data class Read(val reading: CardioReading) : CardioPhotoResult
@@ -145,14 +148,39 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     fun clearMorning() = io("day.clear_morning") { c.days.clearMorning(date) }
 
     // Check-in
-    data class CheckInUi(val metrics: List<DailyMetrics.Def>, val values: Map<Long, DailyMetrics.Value>) {
+    data class CheckInUi(
+        val metrics: List<DailyMetrics.Def>,
+        val values: Map<Long, DailyMetrics.Value>,
+        /** Log metrics' entries for the day, earliest first. */
+        val entries: Map<Long, List<DailyMetrics.LogEntry>> = emptyMap(),
+    ) {
         val done: Boolean get() = DailyMetrics.complete(metrics, values)
-        val summary: String get() = DailyMetrics.summary(metrics, values)
+        val summary: String get() = DailyMetrics.summary(metrics, values, entries.mapValues { it.value.size })
     }
 
     val checkIn: StateFlow<CheckInUi?> = c.selectedDate.value.flatMapLatest { d ->
-        combine(c.dailyMetrics.definitions.map { all -> all.filter { !it.archived } }, c.dailyMetrics.observeValues(d), ::CheckInUi)
+        combine(
+            c.dailyMetrics.definitions.map { all -> all.filter { !it.archived } },
+            c.dailyMetrics.observeValues(d),
+            c.dailyMetrics.observeEntries(d),
+            ::CheckInUi,
+        )
     }.state(null)
+
+    /** A one-tap log just landed: the Day screen offers a note or an undo. */
+    data class Logged(val metric: DailyMetrics.Def, val entryId: Long, val time: String)
+    private val _logged = MutableSharedFlow<Logged>(extraBufferCapacity = 1)
+    val logged: SharedFlow<Logged> = _logged
+
+    /** Logs the current minute on the selected day; only offered when that day is today. */
+    fun logNow(m: DailyMetrics.Def) {
+        val d = date
+        val time = LocalTime.now().format(HourMinute)
+        io("day.log_entry") { c.dailyMetrics.addEntry(d, m.id, time, null)?.let { _logged.tryEmit(Logged(m, it, time)) } }
+    }
+    fun addEntry(metricId: Long, time: String, note: String?) { val d = date; io("day.add_entry") { c.dailyMetrics.addEntry(d, metricId, time, note) } }
+    fun updateEntry(id: Long, time: String, note: String?) = io("day.update_entry") { c.dailyMetrics.updateEntry(id, time, note) }
+    fun deleteEntry(id: Long) = io("day.delete_entry") { c.dailyMetrics.deleteEntry(id) }
 
     // Text saves on every keystroke; the lock is first-come-first-served, so writes land in typing order.
     private val checkInWrites = Mutex()
@@ -299,3 +327,5 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     fun setServings(entryId: Long, servings: Double) = io("day.set_servings") { c.library.setServings(entryId, servings) }
     suspend fun saveEntryAsMeal(entryId: Long, meal: MealEntity) = c.library.saveEntryAsMeal(entryId, meal)
 }
+
+private val HourMinute = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
