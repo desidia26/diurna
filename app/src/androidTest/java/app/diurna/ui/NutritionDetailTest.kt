@@ -133,8 +133,11 @@ class NutritionDetailTest {
         compose.onNodeWithText("Amounts").performClick()
         assertEquals(false, percentSet)
         // Amounts lead and the percentage moves to the subtitle; the open source line shows the same amount.
+        // Only one nutrient stays open, so after tapping Cholesterol the duplicate amount is 110 mg.
         compose.onNodeWithText("64% DV · 1 of 2 entries").assertIsDisplayed()
-        assertEquals(2, compose.count("1,480 mg"))
+        compose.onNodeWithText("37% DV · 1 of 2 entries").assertIsDisplayed()
+        assertEquals(1, compose.count("1,480 mg"))
+        assertEquals(2, compose.count("110 mg"))
     }
 
     private fun ComposeContentTestRule.count(text: String) = onAllNodes(hasText(text)).fetchSemanticsNodes().size
