@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.RadioButton
@@ -426,9 +428,12 @@ fun MealDialog(
     fun opt(s: String): Int? = s.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.formDialogWidth(),
+        properties = FormDialogProperties,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Scrolls: with detailed nutrition on, the fields run past the screen.
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Name") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -486,64 +491,50 @@ fun MealDialog(
                     )
                 }
                 OutlinedTextField(kcal, { kcal = it }, Modifier.fillMaxWidth(), label = { Text("Calories") }, suffix = { Text("kcal") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(Triple("Protein", p) { v: String -> p = v }, Triple("Carbs", c) { v: String -> c = v }, Triple("Fat", f) { v: String -> f = v }).forEach { (label, value, set) ->
-                        OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, placeholder = { Text("0") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    }
-                }
+                NumberInputRows(listOf(
+                    NumberInput("Protein", p, "g", placeholder = "0") { p = it },
+                    NumberInput("Carbs", c, "g", placeholder = "0") { c = it },
+                    NumberInput("Fat", f, "g", placeholder = "0") { f = it },
+                ))
                 OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), label = { Text("Serving (optional)") }, placeholder = { Text("1 bottle, 11 oz") }, singleLine = true)
                 if (detailed) {
                     Hint("Leave a field blank when unknown (distinct from 0). Carbs are total carbs including fiber.")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            Triple("Fiber", fiber) { v: String -> fiber = v },
-                            Triple("Soluble", solFiber) { v: String -> solFiber = v },
-                            Triple("Insoluble", insolFiber) { v: String -> insolFiber = v },
-                        ).forEach { (label, value, set) ->
-                            OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            Triple("Sugars", sugars) { v: String -> sugars = v },
-                            Triple("Added", addedSugars) { v: String -> addedSugars = v },
-                            Triple("Starch", starch) { v: String -> starch = v },
-                        ).forEach { (label, value, set) ->
-                            OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            Triple("Sat", sat) { v: String -> sat = v },
-                            Triple("Mono", mono) { v: String -> mono = v },
-                            Triple("Poly", poly) { v: String -> poly = v },
-                            Triple("Trans", trans) { v: String -> trans = v },
-                        ).forEach { (label, value, set) ->
-                            OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(chol, { chol = it }, Modifier.weight(1f), label = { Text("Chol") }, suffix = { Text("mg") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        listOf(
-                            Triple("Ω3", o3) { v: String -> o3 = v },
-                            Triple("Ω6", o6) { v: String -> o6 = v },
-                            Triple("Ω9", o9) { v: String -> o9 = v },
-                        ).forEach { (label, value, set) ->
-                            OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        }
-                    }
+                    NumberInputRows(listOf(
+                        NumberInput("Fiber", fiber, "g") { fiber = it },
+                        NumberInput("Soluble", solFiber, "g") { solFiber = it },
+                        NumberInput("Insol.", insolFiber, "g") { insolFiber = it },
+                    ))
+                    NumberInputRows(listOf(
+                        NumberInput("Sugars", sugars, "g") { sugars = it },
+                        NumberInput("Added", addedSugars, "g") { addedSugars = it },
+                        NumberInput("Starch", starch, "g") { starch = it },
+                    ))
+                    NumberInputRows(listOf(
+                        NumberInput("Sat", sat, "g") { sat = it },
+                        NumberInput("Mono", mono, "g") { mono = it },
+                        NumberInput("Poly", poly, "g") { poly = it },
+                        NumberInput("Trans", trans, "g") { trans = it },
+                        NumberInput("Chol", chol, "mg") { chol = it },
+                    ))
+                    NumberInputRows(listOf(
+                        NumberInput("Ω3", o3, "g") { o3 = it },
+                        NumberInput("Ω6", o6, "g") { o6 = it },
+                        NumberInput("Ω9", o9, "g") { o9 = it },
+                    ))
                     Hint("Amino acids (mg). Optional; blank = unknown.")
-                    listOf(
-                        listOf(Triple("His", his) { v: String -> his = v }, Triple("Ile", ile) { v: String -> ile = v }, Triple("Leu", leu) { v: String -> leu = v }, Triple("Lys", lys) { v: String -> lys = v }),
-                        listOf(Triple("Met", met) { v: String -> met = v }, Triple("Phe", phe) { v: String -> phe = v }, Triple("Thr", thr) { v: String -> thr = v }, Triple("Trp", trp) { v: String -> trp = v }),
-                        listOf(Triple("Val", valA) { v: String -> valA = v }, Triple("Cys", cys) { v: String -> cys = v }, Triple("Tyr", tyr) { v: String -> tyr = v }),
-                    ).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            row.forEach { (label, value, set) ->
-                                OutlinedTextField(value, set, Modifier.weight(1f), label = { Text(label) }, suffix = { Text("mg") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                            }
-                        }
-                    }
+                    NumberInputRows(listOf(
+                        NumberInput("His", his, "mg") { his = it },
+                        NumberInput("Ile", ile, "mg") { ile = it },
+                        NumberInput("Leu", leu, "mg") { leu = it },
+                        NumberInput("Lys", lys, "mg") { lys = it },
+                        NumberInput("Met", met, "mg") { met = it },
+                        NumberInput("Phe", phe, "mg") { phe = it },
+                        NumberInput("Thr", thr, "mg") { thr = it },
+                        NumberInput("Trp", trp, "mg") { trp = it },
+                        NumberInput("Val", valA, "mg") { valA = it },
+                        NumberInput("Cys", cys, "mg") { cys = it },
+                        NumberInput("Tyr", tyr, "mg") { tyr = it },
+                    ))
                 }
                 problem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
             }

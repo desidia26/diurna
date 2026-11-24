@@ -232,6 +232,8 @@ fun RecipeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.formDialogWidth(),
+        properties = FormDialogProperties,
         title = { Text(title) },
         text = {
           Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -526,6 +528,8 @@ private fun ManualIngredientDialog(
     val grams = IngredientUnits.toGrams(amount, unit, density, gEach.toDoubleOrNull())
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.formDialogWidth(),
+        properties = FormDialogProperties,
         title = { Text("Manual ingredient") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -557,11 +561,11 @@ private fun ManualIngredientDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(p, { p = it }, Modifier.weight(1f), label = { Text("P") }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    OutlinedTextField(c, { c = it }, Modifier.weight(1f), label = { Text("C") }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    OutlinedTextField(f, { f = it }, Modifier.weight(1f), label = { Text("F") }, suffix = { Text("g") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                }
+                NumberInputRows(listOf(
+                    NumberInput("Protein", p, "g") { p = it },
+                    NumberInput("Carbs", c, "g") { c = it },
+                    NumberInput("Fat", f, "g") { f = it },
+                ))
                 OutlinedTextField(kcal, { kcal = it }, Modifier.fillMaxWidth(), label = { Text("kcal (optional)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 grams?.let { Hint("Resolved: %.1f g".format(it)) }
                 problem?.let { Text(it, color = LocalStatusColors.current.warn, style = MaterialTheme.typography.bodySmall) }
