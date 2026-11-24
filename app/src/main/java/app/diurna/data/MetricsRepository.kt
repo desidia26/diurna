@@ -36,6 +36,8 @@ class MetricsRepository(db: AppDatabase) {
         val checkIn: List<DailyMetrics.Def> = emptyList(),
         /** Check-in values over the same days as [days]. */
         val checkInValues: List<DailyMetricValueEntity> = emptyList(),
+        /** Log metrics' entries over the same days as [checkInValues]. */
+        val checkInEntries: List<MetricLogEntryEntity> = emptyList(),
         /** Mondays of deload weeks touching the range. */
         val deloads: Set<LocalDate> = emptySet(),
     )
@@ -55,7 +57,8 @@ class MetricsRepository(db: AppDatabase) {
             val checkIn = combine(
                 dailyMetrics.observeAll(),
                 dailyMetrics.observeValuesRange(from.minusDays(6).key(), today.key()),
-            ) { defs, values -> defs.map { it.def() } to values }
+                dailyMetrics.observeEntriesRange(from.key(), today.key()),
+            ) { defs, values, entries -> Triple(defs.map { it.def() }, values, entries) }
             val deloadWeeks = deloads.observeRange(Metrics.weekOf(from).key(), today.key())
                 .map { w -> w.mapTo(mutableSetOf(), LocalDate::parse) }
             combine(
@@ -92,6 +95,7 @@ class MetricsRepository(db: AppDatabase) {
                     hasEstimatedFood = foodCount > 0,
                     checkIn = checkIn.first,
                     checkInValues = checkIn.second,
+                    checkInEntries = checkIn.third,
                     deloads = deloadSet,
                 )
             }

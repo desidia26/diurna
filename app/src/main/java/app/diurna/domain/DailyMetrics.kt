@@ -8,7 +8,9 @@ import kotlin.math.roundToLong
 /** The evening check-in's metrics: what a definition and a value may be, and how they read. */
 object DailyMetrics {
     enum class Kind(val key: String, val label: String) {
-        SCALE("scale", "Scale"), NUMBER("number", "Number"), YES_NO("yesno", "Yes / no"), TEXT("text", "Text");
+        SCALE("scale", "Scale"), NUMBER("number", "Number"), YES_NO("yesno", "Yes / no"), TEXT("text", "Text"),
+        /** Any number of timed entries a day (headaches, symptoms): logged as they happen, not rated. */
+        LOG("log", "Log");
 
         companion object {
             // An unknown kind is shown as text: never charted, never holding up the reminder.
@@ -29,10 +31,16 @@ object DailyMetrics {
 
     data class Value(val value: Double? = null, val text: String? = null)
 
+    /** One entry of a log metric: when it happened that day, and an optional note. */
+    data class LogEntry(val id: Long, val time: String, val note: String? = null)
+
     const val NAME_MAX = 40
     const val WORD_MAX = 16
     const val UNIT_MAX = 12
     const val TEXT_MAX = 2000
+    /** A line or two about one entry; a log isn't a journal. */
+    const val NOTE_MAX = 280
+    private val TIME = Regex("([01]\\d|2[0-3]):[0-5]\\d")
     const val DEFAULT_STEPS = 5
     val SCALE_STEPS = 3..10
     /** Bigger than anything a person tracks daily; stops a stray paste becoming a chart's whole y-axis. */
@@ -76,7 +84,7 @@ object DailyMetrics {
             Kind.SCALE -> v.roundToInt().takeIf { it in 1..def.scaleMax }?.toDouble()
             Kind.NUMBER -> v.takeIf { abs(it) <= NUMBER_LIMIT }
             Kind.YES_NO -> v.takeIf { it == 0.0 || it == 1.0 }
-            Kind.TEXT -> null
+            Kind.TEXT, Kind.LOG -> null
         }
     }
 
@@ -105,19 +113,45 @@ object DailyMetrics {
         }
     }
 
+    /** "HH:mm" on the 24-hour clock, or null. */
+    fun cleanTime(s: String?): String? = s?.trim()?.takeIf { TIME.matches(it) }
+
+    /** Trimmed and capped at [NOTE_MAX]; null when blank. */
+    fun cleanNote(s: String?): String? = s?.trim()?.take(NOTE_MAX)?.trimEnd()?.ifEmpty { null }
+
+    /** Earliest first; entries at the same minute keep the order they were logged in. */
+    fun ordered(entries: List<LogEntry>): List<LogEntry> = entries.sortedWith(compareBy({ it.time }, { it.id }))
+
+    /** "09:12 · after coffee", or "14:40" with no note. */
+    fun entryLine(e: LogEntry): String = listOfNotNull(e.time, e.note).joinToString(" · ")
+
+    /** Entries per day across [from]..[to], zero on days with none; dates outside don't count. */
+    fun dailyCounts(dates: List<LocalDate>, from: LocalDate, to: LocalDate): List<Int> {
+        val byDay = dates.groupingBy { it }.eachCount()
+        return generateSequence(from) { it.plusDays(1) }.takeWhile { it <= to }.map { byDay[it] ?: 0 }.toList()
+    }
+
+    /** Entries per Monday-to-Sunday week touching [from]..[to]; days outside the range don't count. */
+    fun weeklyCounts(dates: List<LocalDate>, from: LocalDate, to: LocalDate): List<Int> {
+        val byWeek = dates.filter { it in from..to }.groupingBy { Metrics.weekOf(it) }.eachCount()
+        return generateSequence(Metrics.weekOf(from)) { it.plusWeeks(1) }.takeWhile { it <= to }.map { byWeek[it] ?: 0 }.toList()
+    }
+
     /** Active metrics still waiting for a value. Text is optional, so it never holds the check-in open. */
     fun missing(defs: List<Def>, values: Map<Long, Value>): List<Def> =
-        defs.filter { !it.archived && it.kind != Kind.TEXT && !filled(it, values[it.id]) }
+        defs.filter { !it.archived && it.kind != Kind.TEXT && it.kind != Kind.LOG && !filled(it, values[it.id]) }
 
     fun complete(defs: List<Def>, values: Map<Long, Value>): Boolean = missing(defs, values).isEmpty()
 
-    /** The folded card: "Mood 4 good · Energy not rated", or "Not rated yet". */
-    fun summary(defs: List<Def>, values: Map<Long, Value>): String {
+    /** The folded card: "Mood 4 good · Energy not rated · Headache 2", or "Not rated yet". */
+    fun summary(defs: List<Def>, values: Map<Long, Value>, logCounts: Map<Long, Int> = emptyMap()): String {
         val active = defs.filter { !it.archived }
-        if (active.none { filled(it, values[it.id]) }) return "Not rated yet"
+        fun count(d: Def) = if (d.kind == Kind.LOG) logCounts[d.id] ?: 0 else 0
+        if (active.none { filled(it, values[it.id]) || count(it) > 0 }) return "Not rated yet"
         return active.mapNotNull { d ->
             val v = values[d.id]
             when {
+                d.kind == Kind.LOG -> "${d.name} ${count(d)}".takeIf { count(d) > 0 }
                 d.kind == Kind.TEXT -> "${d.name} written".takeIf { filled(d, v) }
                 filled(d, v) -> "${d.name} ${display(d, v)}"
                 else -> "${d.name} not rated"

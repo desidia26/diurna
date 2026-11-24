@@ -30,6 +30,19 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.SuggestionChip
 import java.time.LocalDate
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.LocalTextStyle
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.material3.rememberModalBottomSheetState
 import app.diurna.ui.theme.LocalStatusColors
 import app.diurna.domain.Targets
 import app.diurna.domain.NutritionTotals
@@ -94,6 +107,28 @@ fun DayScreen(
     val s = ui ?: return
     // Keyed on the date alone: logging the last set later doesn't refold, and a reopened card stays open.
     LaunchedEffect(s.date) { vm.arrive(s) }
+    val snackbar = remember { SnackbarHostState() }
+    var editing by remember { mutableStateOf<EntryEdit?>(null) }
+    var lastLogged by remember { mutableStateOf<DayViewModel.Logged?>(null) }
+    // A one-tap log offers a note straight away, or takes itself back. A newer log replaces the offer.
+    LaunchedEffect(vm) {
+        vm.logged.collectLatest { l ->
+            lastLogged = l
+            snackbar.showSnackbar("${l.metric.name} logged at ${l.time}", duration = SnackbarDuration.Long)
+        }
+    }
+    editing?.let { e ->
+        EntrySheet(
+            e, s.date,
+            onDismiss = { editing = null },
+            onSave = { time, note ->
+                if (e.entry == null) vm.addEntry(e.metric.id, time, note) else vm.updateEntry(e.entry.id, time, note)
+                editing = null
+            },
+            onDelete = { id -> vm.deleteEntry(id); editing = null },
+        )
+    }
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         contentPadding = PaddingValues(
             start = 16.dp, end = 16.dp, top = contentPadding.calculateTopPadding() + 16.dp,
@@ -115,7 +150,26 @@ fun DayScreen(
         item { MorningCard(s, vm) }
         item { WorkoutCard(s, vm, tracked, onViewMetrics) }
         item { FoodCard(s, vm) }
-        if (s.date <= s.today) item { CheckInCard(s, vm) }
+        if (s.date <= s.today) item { CheckInCard(s, vm) { editing = it } }
+    }
+    SnackbarHost(
+        snackbar,
+        Modifier.align(Alignment.BottomCenter).padding(bottom = contentPadding.calculateBottomPadding()).padding(12.dp),
+    ) { data ->
+        Snackbar(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            action = {
+                Row {
+                    TextButton(onClick = {
+                        lastLogged?.let { editing = EntryEdit(it.metric, DailyMetrics.LogEntry(it.entryId, it.time)) }
+                        data.dismiss()
+                    }) { Text("Add note") }
+                    TextButton(onClick = { lastLogged?.let { vm.deleteEntry(it.entryId) }; data.dismiss() }) { Text("Undo") }
+                }
+            },
+        ) { Text(data.visuals.message) }
+    }
     }
 }
 
@@ -594,7 +648,7 @@ fun rememberFold(vm: DayViewModel, section: String, summary: String): Fold {
 }
 
 @Composable
-private fun CheckInCard(s: DayUi, vm: DayViewModel) {
+private fun CheckInCard(s: DayUi, vm: DayViewModel, onEdit: (EntryEdit) -> Unit) {
     val ui by vm.checkIn.collectAsStateWithLifecycle()
     val ci = ui ?: return
     // Everything archived: nothing to check in.
@@ -611,6 +665,10 @@ private fun CheckInCard(s: DayUi, vm: DayViewModel) {
                 DailyMetrics.Kind.NUMBER -> NumberMetricRow(s.date, m, v?.value) { vm.setMetric(m.id, it) }
                 DailyMetrics.Kind.YES_NO -> YesNoRow(m, v?.value) { vm.setMetric(m.id, it) }
                 DailyMetrics.Kind.TEXT -> TextMetricRow(s.date, m, v?.text) { vm.setMetricText(m.id, it) }
+                DailyMetrics.Kind.LOG -> LogMetricRow(
+                    m, ci.entries[m.id].orEmpty(), today = s.date == s.today,
+                    onLogNow = { vm.logNow(m) }, onEdit = { e -> onEdit(EntryEdit(m, e)) },
+                )
             }
         }
     }
@@ -690,3 +748,99 @@ private fun TextMetricRow(date: LocalDate, m: DailyMetrics.Def, value: String?, 
         )
     }
 }
+
+/** A log entry being edited, or a new one ([entry] null) on a day that isn't today. */
+internal data class EntryEdit(val metric: DailyMetrics.Def, val entry: DailyMetrics.LogEntry?)
+
+/**
+ * A log metric: the day's entries, each opening the editor, and one tap to log. "Log now" is only
+ * for today; another day's entry needs a time picked, so it goes through the editor.
+ */
+@Composable
+internal fun LogMetricRow(
+    m: DailyMetrics.Def, entries: List<DailyMetrics.LogEntry>, today: Boolean,
+    onLogNow: () -> Unit, onEdit: (DailyMetrics.LogEntry?) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        MetricLabel(m.name, if (entries.isEmpty()) (if (today) "none yet" else "none") else "${entries.size}" + if (today) " today" else "")
+        if (entries.isNotEmpty()) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            ) {
+                Column {
+                    entries.forEachIndexed { i, e ->
+                        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                                .clickable(onClickLabel = "Edit entry") { onEdit(e) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(e.time, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"))
+                            Text(
+                                e.note ?: "no note", Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (e.note == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                            Icon(
+                                painterResource(R.drawable.ic_chevron_right), contentDescription = null,
+                                Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        OutlinedButton(onClick = { if (today) onLogNow() else onEdit(null) }, Modifier.fillMaxWidth().height(44.dp)) {
+            Icon(painterResource(R.drawable.ic_add), contentDescription = null, Modifier.size(18.dp))
+            Text(if (today) "Log now" else "Add entry", Modifier.padding(start = 6.dp))
+        }
+    }
+}
+
+/** Time and note for one entry; it stays on its day. A new entry on a past day starts with no time. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun EntrySheet(
+    e: EntryEdit, date: LocalDate,
+    onDismiss: () -> Unit, onSave: (time: String, note: String?) -> Unit, onDelete: (Long) -> Unit,
+) {
+    var time by remember(e) { mutableStateOf(e.entry?.time) }
+    var note by remember(e) { mutableStateOf(e.entry?.note ?: "") }
+    var picking by remember { mutableStateOf(false) }
+    if (picking) TimePickerDialog(time ?: "12:00", onDismiss = { picking = false }) { time = it; picking = false }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(e.metric.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(date.format(WeekdayName) + " · " + date.short(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            OutlinedButton(onClick = { picking = true }, Modifier.fillMaxWidth().height(52.dp)) {
+                Text(time ?: "Pick a time", Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"))
+                Text("Time", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            Column {
+                OutlinedTextField(
+                    note, { note = it.take(DailyMetrics.NOTE_MAX) }, Modifier.fillMaxWidth(),
+                    label = { Text("Note") }, minLines = 2, maxLines = 5,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                )
+                Hint("${note.length} / ${DailyMetrics.NOTE_MAX}", Modifier.align(Alignment.End).padding(top = 4.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (e.entry != null) {
+                    TextButton(onClick = { onDelete(e.entry.id) }) { Text("Delete", color = LocalStatusColors.current.warn) }
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+                Button(onClick = { time?.let { onSave(it, note) } }, enabled = time != null) { Text("Save") }
+            }
+        }
+    }
+}
+

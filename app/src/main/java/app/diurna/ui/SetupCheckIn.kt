@@ -55,6 +55,7 @@ private fun DailyMetricRow.detail(): String = listOfNotNull(
         Kind.NUMBER -> "number" + (def.unit?.let { " ($it)" } ?: "")
         Kind.YES_NO -> "yes / no"
         Kind.TEXT -> "text"
+        Kind.LOG -> "log"
     },
     "archived".takeIf { def.archived },
     if (days > 0) "logged on $days ${if (days == 1) "day" else "days"}" else "nothing logged",
@@ -70,7 +71,7 @@ fun DailyMetricsPage(vm: SetupViewModel, onBack: () -> Unit) {
         item { PageHeader("Daily metrics", onBack) }
         item {
             Hint(
-                "Each one is a row on the Day screen's Check-in card and a chart on Metrics. The 9pm reminder waits until all of them are filled in; text ones are optional. " +
+                "Each one is a row on the Day screen's Check-in card and a chart on Metrics. The 9pm reminder waits until all of them are filled in; text and log ones are optional. " +
                     "Once a metric has values its type and steps stay fixed, so old days mean what they meant. Archive one to take it off the Day screen and keep its history."
             )
         }
@@ -154,6 +155,7 @@ private fun MetricEditor(
                         Kind.NUMBER -> "Any number, like hours slept (7.5) or glasses of water."
                         Kind.YES_NO -> "Did it happen today, like taking meds or meditating."
                         Kind.TEXT -> "A few words or more, like what went well. Optional in the reminder."
+                        Kind.LOG -> "Each time it happens, with the time and a note, like a headache. Never holds up the reminder."
                     }
                 )
                 if (kind == Kind.SCALE) {

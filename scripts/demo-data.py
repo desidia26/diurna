@@ -168,6 +168,25 @@ alarm, _ = ROUTINE[today.isoweekday()]
 cur.execute("INSERT INTO day (date, scanned_at, morning_source, body_weight) VALUES (?, ?, 'scan', ?)",
             (today.isoformat(), clock(alarm, 3), round(weight - 0.1, 1)))
 
+# A Headache log: a few days a week, sometimes twice, with a note now and then. Its own random
+# stream, so adding it didn't reshuffle the history above.
+log_rng = random.Random(today_text + "-log")
+position = cur.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM daily_metric").fetchone()[0]
+cur.execute("INSERT INTO daily_metric (name, kind, position, archived) VALUES ('Headache', 'log', ?, 0)", (position,))
+headache = cur.lastrowid
+notes = ["behind the eyes", "after lunch, left side", "screen time", "woke up with it", None, None, None]
+d = today - timedelta(weeks=weeks)
+while d <= today:
+    count = 0 if log_rng.random() < 0.7 else log_rng.choice((1, 1, 2, 3))
+    times = sorted("%02d:%02d" % (log_rng.randint(7, 21), log_rng.randint(0, 59)) for _ in range(count))
+    if d == today:
+        times = ["09:12", "14:40"]
+    for i, t in enumerate(times):
+        note = log_rng.choice(notes) if d != today else ("behind the eyes" if i == 0 else None)
+        cur.execute("INSERT INTO metric_log_entry (metric_id, date, time, note) VALUES (?, ?, ?, ?)",
+                    (headache, d.isoformat(), t, note))
+    d += timedelta(days=1)
+
 con.commit()
 con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 con.close()

@@ -772,4 +772,29 @@ class MigrationTest {
         db.execSQL("INSERT INTO deload_week (monday) VALUES ('2026-10-12')")
         db.close()
     }
+
+    @Test fun v22ToV23AddsLogEntriesAndKeepsCheckInValues() {
+        helper.createDatabase(dbName + "-23", 22).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-11-20', 1)")
+            db.execSQL("INSERT INTO daily_metric (id, name, kind, scale_max, `key`, position, archived) VALUES (1, 'Mood', 'scale', 5, 'mood', 0, 0)")
+            db.execSQL("INSERT INTO daily_metric_value (date, metric_id, value) VALUES ('2026-11-20', 1, 4)")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-23", 23, true)
+        db.query("SELECT COUNT(*) FROM metric_log_entry").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("starts with no entries", 0, it.getInt(0))
+        }
+        db.query("SELECT value FROM daily_metric_value WHERE date = '2026-11-20' AND metric_id = 1").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(4.0, it.getDouble(0), 0.0)
+        }
+        db.execSQL("INSERT INTO daily_metric (id, name, kind, position, archived) VALUES (2, 'Headache', 'log', 1, 0)")
+        db.execSQL("INSERT INTO metric_log_entry (metric_id, date, time, note) VALUES (2, '2026-11-20', '09:12', NULL)")
+        db.execSQL("INSERT INTO metric_log_entry (metric_id, date, time, note) VALUES (2, '2026-11-20', '14:40', 'after lunch')")
+        db.query("SELECT COUNT(*) FROM metric_log_entry WHERE metric_id = 2 AND date = '2026-11-20'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("many a day", 2, it.getInt(0))
+        }
+        db.close()
+    }
 }

@@ -16,6 +16,7 @@ class DailyMetricsTest {
     private val sleep = Def(3, "Sleep", Kind.NUMBER, unit = "h")
     private val meds = Def(4, "Meds", Kind.YES_NO)
     private val journal = Def(5, "Journal", Kind.TEXT)
+    private val headache = Def(6, "Headache", Kind.LOG)
 
     @Test fun summaryReadsLikeTheOldCheckIn() {
         val defs = listOf(mood, energy)
@@ -104,5 +105,75 @@ class DailyMetricsTest {
     @Test fun unknownKindReadsAsText() {
         assertEquals(Kind.TEXT, Kind.of("mystery"))
         assertEquals(Kind.YES_NO, Kind.of("yesno"))
+    }
+
+    // Log metrics: any number of timed entries a day.
+
+    @Test fun logKindRoundTripsItsKey() {
+        assertEquals(Kind.LOG, Kind.of("log"))
+        assertEquals("Log", Kind.LOG.label)
+    }
+
+    @Test fun aLogNeverHoldsTheCheckInOpen() {
+        assertEquals("nothing logged is a real answer", listOf(mood), DailyMetrics.missing(listOf(mood, headache), emptyMap()))
+        assertTrue(DailyMetrics.complete(listOf(headache), emptyMap()))
+        assertNull("a log takes entries, not a value", DailyMetrics.cleanValue(headache, 1.0))
+    }
+
+    @Test fun summaryCountsLogEntriesAndSkipsEmptyLogs() {
+        val defs = listOf(mood, headache)
+        assertEquals("Not rated yet", DailyMetrics.summary(defs, emptyMap(), mapOf(6L to 0)))
+        assertEquals("Mood 4 good", DailyMetrics.summary(defs, mapOf(1L to Value(4.0))))
+        assertEquals("Mood 4 good · Headache 2", DailyMetrics.summary(defs, mapOf(1L to Value(4.0)), mapOf(6L to 2)))
+        assertEquals("entries alone fill the card", "Mood not rated · Headache 1", DailyMetrics.summary(defs, emptyMap(), mapOf(6L to 1)))
+        assertEquals(
+            "archived logs stay off the card",
+            "Not rated yet",
+            DailyMetrics.summary(listOf(headache.copy(archived = true)), emptyMap(), mapOf(6L to 3)),
+        )
+    }
+
+    @Test fun timesAreTwentyFourHourHHmm() {
+        assertEquals("09:05", DailyMetrics.cleanTime("09:05"))
+        assertEquals("23:59", DailyMetrics.cleanTime(" 23:59 "))
+        assertEquals("00:00", DailyMetrics.cleanTime("00:00"))
+        assertNull(DailyMetrics.cleanTime("24:00"))
+        assertNull(DailyMetrics.cleanTime("9:05"))
+        assertNull(DailyMetrics.cleanTime("12:60"))
+        assertNull(DailyMetrics.cleanTime("noon"))
+        assertNull(DailyMetrics.cleanTime(null))
+    }
+
+    @Test fun notesAreTrimmedAndCapped() {
+        assertNull(DailyMetrics.cleanNote(null))
+        assertNull(DailyMetrics.cleanNote("  \n "))
+        assertEquals("behind the eyes", DailyMetrics.cleanNote("  behind the eyes \n"))
+        assertEquals("line breaks kept inside", "left side\nafter screen time", DailyMetrics.cleanNote("left side\nafter screen time"))
+        assertEquals(DailyMetrics.NOTE_MAX, DailyMetrics.cleanNote("x".repeat(1000))!!.length)
+    }
+
+    @Test fun entriesReadEarliestFirstAndTiesKeepLoggedOrder() {
+        val e = listOf(
+            DailyMetrics.LogEntry(3, "14:40"),
+            DailyMetrics.LogEntry(1, "09:12", "after coffee"),
+            DailyMetrics.LogEntry(4, "09:12"),
+            DailyMetrics.LogEntry(2, "21:00"),
+        )
+        assertEquals(listOf(1L, 4L, 3L, 2L), DailyMetrics.ordered(e).map { it.id })
+        assertEquals("09:12 · after coffee", DailyMetrics.entryLine(e[1]))
+        assertEquals("14:40", DailyMetrics.entryLine(e[0]))
+    }
+
+    @Test fun dailyCountsFillEveryDayInRange() {
+        val mon = LocalDate.of(2026, 10, 12)
+        val dates = listOf(mon.minusDays(1), mon, mon, mon.plusDays(2), mon.plusDays(2), mon.plusDays(2), mon.plusDays(9))
+        assertEquals(listOf(2, 0, 3, 0), DailyMetrics.dailyCounts(dates, mon, mon.plusDays(3)))
+        assertEquals(listOf(0), DailyMetrics.dailyCounts(emptyList(), mon, mon))
+    }
+
+    @Test fun weeklyCountsTotalEachMondayToSundayWeek() {
+        val mon = LocalDate.of(2026, 10, 12)
+        val dates = listOf(mon.minusDays(1), mon, mon.plusDays(6), mon.plusDays(6), mon.plusDays(15), mon.plusDays(30))
+        assertEquals("the day before the range doesn't count", listOf(3, 0, 1), DailyMetrics.weeklyCounts(dates, mon, mon.plusDays(15)))
     }
 }

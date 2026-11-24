@@ -28,8 +28,9 @@ class DailyMetricRepository(private val db: AppDatabase) {
 
     val definitions: Flow<List<DailyMetrics.Def>> = dao.observeAll().map { all -> all.map { it.def() } }
 
-    val rows: Flow<List<DailyMetricRow>> = combine(dao.observeAll(), dao.observeCounts()) { all, counts ->
-        val byId = counts.associate { it.metricId to it.days }
+    val rows: Flow<List<DailyMetricRow>> = combine(dao.observeAll(), dao.observeCounts(), dao.observeEntryDayCounts()) { all, counts, logs ->
+        // A metric has values or entries, never both: its kind is locked once either exists.
+        val byId = counts.associate { it.metricId to it.days } + logs.associate { it.metricId to it.days }
         all.map { DailyMetricRow(it.def(), byId[it.id] ?: 0) }
     }
 
@@ -61,6 +62,41 @@ class DailyMetricRepository(private val db: AppDatabase) {
         onValueChanged(date)
     }
 
+    /**
+     * Logs an entry for a log metric on [date]; its id, or null when the metric isn't a log or
+     * [time] isn't HH:mm. Finalized days take entries too.
+     */
+    suspend fun addEntry(date: LocalDate, metricId: Long, time: String, note: String?): Long? {
+        if (dao.get(metricId)?.def()?.kind != DailyMetrics.Kind.LOG) return null
+        val clean = DailyMetrics.cleanTime(time) ?: return null
+        return db.withTransaction {
+            days.insertIgnore(DayEntity(date.key()))
+            dao.insertEntry(MetricLogEntryEntity(metricId = metricId, date = date.key(), time = clean, note = DailyMetrics.cleanNote(note)))
+        }
+    }
+
+    /** New time and note; the entry stays on its day. False when it's gone or the time isn't HH:mm. */
+    suspend fun updateEntry(id: Long, time: String, note: String?): Boolean {
+        val clean = DailyMetrics.cleanTime(time) ?: return false
+        return db.withTransaction {
+            if (dao.entry(id) == null) return@withTransaction false
+            dao.updateEntry(id, clean, DailyMetrics.cleanNote(note))
+            true
+        }
+    }
+
+    suspend fun deleteEntry(id: Long) = dao.deleteEntry(id)
+
+    /** [date]'s entries by log metric, earliest first. */
+    fun observeEntries(date: LocalDate): Flow<Map<Long, List<DailyMetrics.LogEntry>>> =
+        dao.observeEntries(date.key()).map { rows ->
+            rows.groupBy({ it.metricId }, { DailyMetrics.LogEntry(it.id, it.time, it.note) })
+                .mapValues { DailyMetrics.ordered(it.value) }
+        }
+
+    fun observeEntryRange(from: LocalDate, to: LocalDate): Flow<List<MetricLogEntryEntity>> =
+        dao.observeEntriesRange(from.key(), to.key())
+
     /** Active metrics still waiting for [date]'s value; empty when the check-in is done. */
     suspend fun missing(date: LocalDate): List<DailyMetrics.Def> =
         DailyMetrics.missing(dao.all().map { it.def() }, dao.values(date.key()).associate { it.metricId to it.value() })
@@ -76,7 +112,7 @@ class DailyMetricRepository(private val db: AppDatabase) {
     /** Renames and rewords; the kind and step count change only while nothing is logged. */
     suspend fun update(def: DailyMetrics.Def): Result = db.withTransaction {
         val old = dao.get(def.id) ?: return@withTransaction Result.Problem("That metric is gone.")
-        val logged = dao.valueCount(def.id) > 0
+        val logged = dao.valueCount(def.id) > 0 || dao.entryCount(def.id) > 0
         val oldDef = old.def()
         if (logged && (def.kind != oldDef.kind || (def.kind == DailyMetrics.Kind.SCALE && def.scaleMax != oldDef.scaleMax))) {
             return@withTransaction Result.Problem("It has values logged, so its type and steps stay as they are.")
@@ -111,6 +147,7 @@ class DailyMetricRepository(private val db: AppDatabase) {
     suspend fun delete(id: Long, today: LocalDate) {
         db.withTransaction {
             dao.deleteValues(id)
+            dao.deleteEntries(id)
             dao.delete(id)
         }
         onValueChanged(today)
