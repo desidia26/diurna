@@ -32,6 +32,8 @@ val TEST_FAILED: LocalDateTime = LocalDateTime.MIN
 class SetupViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
     val porchSecret = c.settings.porchSecret.state(null)
     val porchConfirmed = c.settings.porchConfirmed.state(false)
+    /** Null until read, so Needs attention doesn't flash "scan your porch code" on every open. */
+    val porchConfirmedKnown = c.settings.porchConfirmed.map<Boolean, Boolean?> { it }.state(null)
     val armed = c.scheduler.state
     val lockWallpaper = c.settings.lockWallpaper.state(false)
 

@@ -66,33 +66,30 @@ import kotlinx.coroutines.launch
 fun MealEntity.macroLine(): String = "%,d kcal · P %d · C %d · F %d".format(kcal, proteinG, carbsG, fatG)
 
 @Composable
-fun LibraryCard(
-    mealCount: Int, exerciseCount: Int, cardio: Boolean, onCardio: (Boolean) -> Unit,
-    detailedNutrition: Boolean, onDetailedNutrition: (Boolean) -> Unit,
-    dvBasis: DvBasis, hasProfile: Boolean, onDvBasis: (DvBasis) -> Unit,
-    onMeals: () -> Unit, onExercises: () -> Unit,
-) {
-    SectionCard("Library") {
-        Hint("Saved meals log with exact numbers and no AI call. Exercises are the names workouts and suggestions draw from.")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onMeals) { Text("Meals ($mealCount)") }
-            OutlinedButton(onClick = onExercises) { Text("Exercises ($exerciseCount)") }
-        }
+fun CardioCard(cardio: Boolean, onCardio: (Boolean) -> Unit) {
+    SectionCard("Cardio exercises") {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text("Cardio exercises", fontWeight = FontWeight.SemiBold)
-                Hint("Runs, rides, rows and machines like the elliptical, logged by distance, time and pace instead of weight × reps. Off keeps them out of suggestions and Library.")
-            }
+            Hint("Runs, rides, rows and machines like the elliptical, logged by distance, time and pace instead of weight × reps. Off keeps them out of suggestions and Exercises.", Modifier.weight(1f))
             Switch(checked = cardio, onCheckedChange = onCardio)
         }
+    }
+}
+
+@Composable
+fun DetailedNutritionCard(
+    detailedNutrition: Boolean, onDetailedNutrition: (Boolean) -> Unit,
+    dvBasis: DvBasis, hasProfile: Boolean, onDvBasis: (DvBasis) -> Unit,
+    onBackfill: () -> Unit,
+) {
+    SectionCard("Detailed nutrition") {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text("Detailed nutrition", fontWeight = FontWeight.SemiBold)
-                Hint("Fiber, sugars, starch, fats, vitamins and minerals on meals and Day food rows, and a day's % Daily Value. Off keeps the basic protein / carbs / fat view.")
-            }
+            Hint("Fiber, sugars, starch, fats, vitamins and minerals on meals and Day food rows, and a day's % Daily Value. Off keeps the basic protein / carbs / fat view.", Modifier.weight(1f))
             Switch(checked = detailedNutrition, onCheckedChange = onDetailedNutrition)
         }
-        if (detailedNutrition) DvBasisChoice(dvBasis, hasProfile, onDvBasis)
+        if (detailedNutrition) {
+            DvBasisChoice(dvBasis, hasProfile, onDvBasis)
+            OutlinedButton(onClick = onBackfill) { Text("Fill in past entries") }
+        }
     }
 }
 
@@ -124,15 +121,18 @@ private fun DvBasisChoice(selected: DvBasis, hasProfile: Boolean, onPick: (DvBas
 }
 
 @Composable
-fun PageHeader(title: String, onBack: () -> Unit) {
+fun PageHeader(title: String?, onBack: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = onBack, contentPadding = PaddingValues(start = 10.dp, end = 16.dp)) {
             Icon(painterResource(R.drawable.ic_chevron_left), contentDescription = null, Modifier.size(22.dp))
-            Text("Setup")
+            Text(LocalBackLabel.current)
         }
-        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        if (title != null) Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
     }
 }
+
+/** Where a page's back button goes, by name; Setup's pages nest one or two deep. */
+val LocalBackLabel = androidx.compose.runtime.staticCompositionLocalOf { "Setup" }
 
 @Composable
 fun MealsPage(vm: LibraryViewModel, onBack: () -> Unit) {
