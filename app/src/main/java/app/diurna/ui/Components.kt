@@ -13,6 +13,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -254,3 +257,36 @@ fun OutlinedButton(
     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
     contentPadding = contentPadding, content = content,
 )
+
+/**
+ * Edge-to-edge (16 dp gutter, Material's 560 dp cap) instead of the platform's narrow dialog width,
+ * for forms that put number fields side by side. Pass both to an AlertDialog.
+ */
+val FormDialogProperties = DialogProperties(usePlatformDefaultWidth = false)
+fun Modifier.formDialogWidth(): Modifier = fillMaxWidth().padding(horizontal = 16.dp)
+
+class NumberInput(
+    val label: String, val value: String, val unit: String,
+    val placeholder: String? = null, val onChange: (String) -> Unit,
+)
+
+/**
+ * Number fields in rows of at most [perRow], so labels like "Protein" and "Soluble" fit on one line
+ * on a phone. A short last row keeps the same column widths.
+ */
+@Composable
+fun NumberInputRows(fields: List<NumberInput>, perRow: Int = 3) {
+    fields.chunked(perRow).forEach { row ->
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            row.forEach { f ->
+                OutlinedTextField(
+                    f.value, f.onChange, Modifier.weight(1f),
+                    label = { Text(f.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    suffix = { Text(f.unit) }, placeholder = f.placeholder?.let { { Text(it) } }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+            repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
+        }
+    }
+}
