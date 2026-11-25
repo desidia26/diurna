@@ -179,6 +179,17 @@ private fun NumberField(
     )
 }
 
+/** The Food estimates chip, also shown on the Food page's row. */
+fun aiStatus(provider: AiProvider, openAiBase: String, openAiModel: String, lastFour: String?): Pair<String, Tone> {
+    val gatewayReady = provider == AiProvider.OPENAI_COMPAT && openAiBase.isNotBlank() && openAiModel.isNotBlank()
+    return when {
+        gatewayReady -> (if (lastFour != null) "Ready" else "Ready (no key)") to Tone.Good
+        lastFour != null -> "Key set" to Tone.Good
+        provider.keyOptional -> "No key" to Tone.Neutral
+        else -> "No key" to Tone.Warn
+    }
+}
+
 @Composable
 fun FoodEstimatesCard(vm: SetupViewModel) {
     val provider by vm.aiProvider.collectAsStateWithLifecycle()
@@ -203,19 +214,7 @@ fun FoodEstimatesCard(vm: SetupViewModel) {
     val cleartextBlocked = GatewayUrl.cleartextBlockedHint(baseUrlForCleartext)
     val cleartextLocalOk = cleartextBlocked == null && baseUrlForCleartext.isNotBlank() &&
         GatewayUrl.isCleartextUrl(baseUrlForCleartext)
-    val chipLabel = when {
-        provider == AiProvider.OPENAI_COMPAT && openAiBase.isNotBlank() && openAiModel.isNotBlank() ->
-            if (lastFour != null) "Ready" else "Ready (no key)"
-        lastFour != null -> "Key set"
-        provider.keyOptional -> "No key"
-        else -> "No key"
-    }
-    val chipTone = when {
-        provider == AiProvider.OPENAI_COMPAT && openAiBase.isNotBlank() && openAiModel.isNotBlank() -> Tone.Good
-        lastFour != null -> Tone.Good
-        provider.keyOptional -> Tone.Neutral
-        else -> Tone.Warn
-    }
+    val (chipLabel, chipTone) = aiStatus(provider, openAiBase, openAiModel, lastFour)
     SectionCard("Food estimates", chip = { Chip(chipLabel, chipTone) }) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AiProvider.entries.forEach { p ->
@@ -425,7 +424,7 @@ fun BackupsCard(vm: SetupViewModel) {
     }
     SectionCard("Backups") {
         if (imported) {
-            Text("Imported. API keys and AI provider settings aren't part of an export, so set them up again under Food estimates.", color = MaterialTheme.colorScheme.primary)
+            Text("Imported. API keys and AI provider settings aren't part of an export, so set them up again under Food → Food estimates.", color = MaterialTheme.colorScheme.primary)
             TextButton(onClick = vm::dismissImported) { Text("OK") }
         }
         Hint("Diurna backs itself up once a day (the last 14 are kept) to its folder on this phone, where a computer can copy them with scripts/backup-db.")
