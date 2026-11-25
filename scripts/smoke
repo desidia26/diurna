@@ -60,6 +60,8 @@ at="$(find_view "Got it")"; [[ -n "$at" ]] && adb shell input tap $at
 echo "== Test alarm"
 tap "Setup"
 sleep 1
+tap "Alarm" # Setup opens on its index; the test button is on the Alarm page
+sleep 1
 tap "Test alarm in 1 minute"
 sleep 2
 adb shell dumpsys alarm | grep -q "app.diurna.alarm.AlarmReceiver" || die "the test alarm wasn't set"
