@@ -72,7 +72,7 @@ private val GroupTitles = mapOf(
 /** Every page key [SetupScreen] opens; a test checks each makes a valid debug event name. */
 internal val SetupPages = listOf(
     "alarm", "food", "food/meals", "food/targets", "food/estimates", "food/usda", "food/backfill",
-    "training", "training/exercises", "checkin", "checkin/metrics", "data", "data/changes",
+    "training", "training/exercises", "checkin", "checkin/metrics", "data", "data/changes", "data/health",
 )
 
 /** Event names allow no "/", so "food/targets" logs as setup.page.food.targets. */
@@ -125,10 +125,12 @@ fun SetupScreen(vm: SetupViewModel, library: LibraryViewModel, contentPadding: P
             "data" -> GroupPage("Data", contentPadding, up) {
                 item { BackupsCard(vm) }
                 item { LockScreenCard(vm) }
+                item { LinkList(listOf(LinkRow("Health Connect", "What your ring or watch writes there") { open("data/health") })) }
                 item { WhatsNewCard(vm.changelog, onAll = { open("data/changes") }) }
                 item { app.diurna.debug.DebugCard(context.container.debug) }
             }
             "data/changes" -> ChangesPage(vm.changelog, up)
+            "data/health" -> CardPage(contentPadding, up) { HealthConnectCard() }
             else -> SetupMain(vm, library, checks, contentPadding, open)
         }
     }

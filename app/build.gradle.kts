@@ -139,6 +139,7 @@ dependencies {
         implementation(libs.kotlinx.serialization.core)
     }
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.health.connect.client)
     // Declared so the app and its device tests share one version; otherwise the app gets whatever
     // AndroidX pulls in, and kotlinx-coroutines-test calls methods that version lacks.
     implementation(libs.kotlinx.coroutines.android)
