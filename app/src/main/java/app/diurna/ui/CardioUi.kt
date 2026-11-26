@@ -23,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,7 +34,6 @@ import app.diurna.data.piece
 import app.diurna.domain.Cardio
 import app.diurna.domain.CardioPiece
 import app.diurna.ui.theme.LocalStatusColors
-import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -89,19 +87,14 @@ fun CardioPieces(ex: ExerciseUi, vm: DayViewModel, collapsed: Boolean) {
 private fun PieceRow(n: Int, set: ExerciseSetEntity, style: Cardio.Style, showNumber: Boolean, vm: DayViewModel, onDelete: () -> Unit) {
     val provider by vm.aiProvider.collectAsStateWithLifecycle()
     val providerLabel = provider.label
-    val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf<CardioEdit?>(null) }
-    var reading by remember { mutableStateOf(false) }
     var photoMenu by remember { mutableStateOf(false) }
     val vision = vm.supportsImages()
+    val photo by vm.cardioPhoto.session.collectAsStateWithLifecycle()
+    val reading = photo?.setId == set.id && photo?.reading == true
+    // Import and AI run in the ViewModel scope so leaving composition mid-read doesn't drop the result.
     val attacher = rememberPhotoAttacher(vm) { name ->
-        reading = true
-        scope.launch {
-            val r = vm.readCardioPhoto(name)
-            reading = false
-            // Fall back to typing on Problem: same dialog, the problem shown at the top.
-            editing = PhotoAiReads.cardioEditFrom(r, set.piece())
-        }
+        vm.startCardioPhotoRead(set.id, style, set.piece(), name)
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (showNumber) Text("$n", Modifier.width(18.dp), fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)

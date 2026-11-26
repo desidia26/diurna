@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.viewModelScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +60,7 @@ import app.diurna.data.FoodPhotos
 import app.diurna.domain.PhotoCapture
 import app.diurna.domain.PhotoSizing
 import app.diurna.ui.theme.LocalStatusColors
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -93,12 +95,16 @@ interface PhotoImportHost {
 /** [onAttached] gets the stored photo's name once it's imported. */
 @Composable
 fun rememberPhotoAttacher(vm: DayViewModel, onAttached: (String) -> Unit): PhotoAttacher =
-    rememberPhotoAttacher(vm as PhotoImportHost, onAttached)
+    // Day's ViewModel outlives a rotation or a folded card; a composition scope does not.
+    rememberPhotoAttacher(vm as PhotoImportHost, onAttached, vm.viewModelScope)
 
 @Composable
-fun rememberPhotoAttacher(host: PhotoImportHost, onAttached: (String) -> Unit): PhotoAttacher {
+fun rememberPhotoAttacher(host: PhotoImportHost, onAttached: (String) -> Unit): PhotoAttacher =
+    rememberPhotoAttacher(host, onAttached, rememberCoroutineScope())
+
+@Composable
+fun rememberPhotoAttacher(host: PhotoImportHost, onAttached: (String) -> Unit, scope: CoroutineScope): PhotoAttacher {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     fun import(block: suspend () -> String?) {
