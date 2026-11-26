@@ -25,6 +25,8 @@
     <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE" />
     <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
     <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <!-- The hourly sleep read runs in the background; asked for only where Health Connect supports it. -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
     <!-- Android 13 and older: Health Connect is an app, so it has to be visible to us. -->
     <queries>

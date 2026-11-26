@@ -34,7 +34,7 @@ private val Context.dataStore by preferencesDataStore("settings")
  * printed code has been scanned once ([porchConfirmed]), so an alarm can't ring with no
  * way to stop it.
  */
-class SettingsStore(private val context: Context) : StepStateStore {
+class SettingsStore(private val context: Context) : StepStateStore, SleepSyncStore {
     private val secretKey = stringPreferencesKey("porch_secret")
     private val confirmedKey = booleanPreferencesKey("porch_confirmed")
 
@@ -70,6 +70,47 @@ class SettingsStore(private val context: Context) : StepStateStore {
 
     suspend fun setCardio(enabled: Boolean) {
         context.dataStore.edit { it[cardioKey] = enabled }
+    }
+
+    // ---- Sleep (Health Connect) ----
+    // Off by default: with it off no screen changes and nothing is read.
+    private val sleepKey = booleanPreferencesKey("sleep_enabled")
+    val sleep: Flow<Boolean> = context.dataStore.data.map { it[sleepKey] ?: false }.distinctUntilChanged()
+
+    suspend fun setSleep(enabled: Boolean) {
+        context.dataStore.edit { it[sleepKey] = enabled }
+    }
+
+    /** The app whose sleep shows; null picks automatically (SleepRules.pickOrigin). */
+    private val sleepOriginKey = stringPreferencesKey("sleep_origin")
+    val sleepOrigin: Flow<String?> = context.dataStore.data.map { it[sleepOriginKey] }.distinctUntilChanged()
+
+    suspend fun setSleepOrigin(origin: String?) {
+        context.dataStore.edit { if (origin == null) it.remove(sleepOriginKey) else it[sleepOriginKey] = origin }
+    }
+
+    private val sleepLastReadKey = stringPreferencesKey("sleep_last_read")
+
+    override suspend fun sleepLastRead(): LocalDate? =
+        context.dataStore.data.first()[sleepLastReadKey]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
+    override suspend fun setSleepLastRead(date: LocalDate) {
+        context.dataStore.edit { it[sleepLastReadKey] = date.toString() }
+    }
+
+    /** The last read attempt, for Setup: when, and why it failed (null when it worked). */
+    data class SleepStatus(val at: Long, val problem: String?)
+    private val sleepTriedKey = longPreferencesKey("sleep_tried_at")
+    private val sleepProblemKey = stringPreferencesKey("sleep_problem")
+    val sleepStatus: Flow<SleepStatus?> = context.dataStore.data.map { p ->
+        p[sleepTriedKey]?.let { SleepStatus(it, p[sleepProblemKey]) }
+    }.distinctUntilChanged()
+
+    suspend fun setSleepStatus(at: Long, problem: String?) {
+        context.dataStore.edit {
+            it[sleepTriedKey] = at
+            if (problem == null) it.remove(sleepProblemKey) else it[sleepProblemKey] = problem.take(200)
+        }
     }
 
     // ---- Detailed nutrition ----

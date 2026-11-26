@@ -72,9 +72,10 @@ class MainActivity : ComponentActivity() {
         showDayRequests++
     }
 
-    /** If the alarm is ringing (say its notification was swiped away), opening the app leads back to it. */
+    /** If the alarm is ringing (say its notification was swiped away), opening the app leads back to it. Sleep reads here too. */
     override fun onResume() {
         super.onResume()
+        app.diurna.sleep.SleepSync.onAppOpen(container)
         if (AlarmService.ringing.value != null) {
             startActivity(Intent(this, AlarmActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }

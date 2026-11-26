@@ -684,3 +684,56 @@ data class NutrientValueEntity(
     val contributing: Int? = null,
     @ColumnInfo(name = "total_items") val totalItems: Int? = null,
 )
+
+/**
+ * One sleep session read from a source (Health Connect for now), worked out by `SleepRules`.
+ * Unique on (source, source_id) so re-reads update it in place; rows from every app are kept and
+ * Setup's source choice picks which one shows, so a night is never counted twice. A row can
+ * change until 3 days after [date], then it's frozen. Unknown values stay null, never 0.
+ */
+@Entity(
+    tableName = "sleep_period",
+    indices = [Index(value = ["source", "source_id"], unique = true), Index(value = ["date"])],
+)
+data class SleepPeriodEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** "health_connect"; later "oura". */
+    val source: String,
+    /** Package name of the app that wrote it, e.g. com.ouraring.oura. */
+    val origin: String,
+    @ColumnInfo(name = "source_id") val sourceId: String,
+    /** Wake day, yyyy-MM-dd. */
+    val date: String,
+    /** "main" or "nap". */
+    val type: String,
+    /** yyyy-MM-dd HH:mm, local. */
+    @ColumnInfo(name = "bed_start") val bedStart: String,
+    /** End of the last sleep stage, yyyy-MM-dd HH:mm local; null without stages. */
+    @ColumnInfo(name = "woke_at") val wokeAt: String? = null,
+    /** Session end (out of bed), yyyy-MM-dd HH:mm local. */
+    @ColumnInfo(name = "bed_end") val bedEnd: String,
+    /** Bed start to woke (to bed end without stages). */
+    @ColumnInfo(name = "time_in_bed_s") val timeInBedS: Long,
+    @ColumnInfo(name = "total_sleep_s") val totalSleepS: Long? = null,
+    @ColumnInfo(name = "awake_s") val awakeS: Long? = null,
+    @ColumnInfo(name = "light_s") val lightS: Long? = null,
+    @ColumnInfo(name = "deep_s") val deepS: Long? = null,
+    @ColumnInfo(name = "rem_s") val remS: Long? = null,
+    @ColumnInfo(name = "latency_s") val latencyS: Long? = null,
+    /** Asleep ÷ time in bed, 0–1. */
+    val efficiency: Double? = null,
+    val awakenings: Int? = null,
+    @ColumnInfo(name = "avg_hr") val avgHr: Double? = null,
+    @ColumnInfo(name = "lowest_hr") val lowestHr: Double? = null,
+    @ColumnInfo(name = "avg_hrv") val avgHrv: Double? = null,
+    @ColumnInfo(name = "avg_breath") val avgBreath: Double? = null,
+    @ColumnInfo(name = "avg_spo2") val avgSpo2: Double? = null,
+    /** JSON [[start_s, end_s, code], …] from bed start, Health Connect stage codes; capped. */
+    val stages: String? = null,
+    /** JSON [[offset_s, bpm], …], 5-minute averages from bed start; capped. */
+    @ColumnInfo(name = "hr_samples") val hrSamples: String? = null,
+    /** JSON [[offset_s, ms], …], 5-minute averages from bed start; capped. */
+    @ColumnInfo(name = "hrv_samples") val hrvSamples: String? = null,
+    /** Epoch millis of the read that last wrote this row. */
+    @ColumnInfo(name = "fetched_at") val fetchedAt: Long,
+)

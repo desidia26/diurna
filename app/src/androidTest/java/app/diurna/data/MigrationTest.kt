@@ -797,4 +797,37 @@ class MigrationTest {
         }
         db.close()
     }
+
+    @Test fun v23ToV24AddsSleepPeriodsAndKeepsDays() {
+        helper.createDatabase(dbName + "-24", 23).use { db ->
+            db.execSQL("INSERT INTO day (date, finalized) VALUES ('2026-11-26', 0)")
+        }
+        val db = helper.runMigrationsAndValidate(dbName + "-24", 24, true)
+        db.query("SELECT COUNT(*) FROM sleep_period").use {
+            assertTrue(it.moveToFirst())
+            assertEquals("starts with no sleep", 0, it.getInt(0))
+        }
+        db.query("SELECT finalized FROM day WHERE date = '2026-11-26'").use {
+            assertTrue(it.moveToFirst())
+            assertEquals(0, it.getInt(0))
+        }
+        // Unknown values stay null; only what every night has is required.
+        db.execSQL(
+            "INSERT INTO sleep_period (source, origin, source_id, date, type, bed_start, bed_end, time_in_bed_s, fetched_at) " +
+                "VALUES ('health_connect', 'com.ouraring.oura', 'abc', '2026-11-26', 'main', '2026-11-25 22:10', '2026-11-26 06:50', 29100, 1)",
+        )
+        db.query("SELECT total_sleep_s, woke_at, avg_hr FROM sleep_period WHERE source_id = 'abc'").use {
+            assertTrue(it.moveToFirst())
+            assertTrue(it.isNull(0) && it.isNull(1) && it.isNull(2))
+        }
+        // One row per source record.
+        val duplicate = runCatching {
+            db.execSQL(
+                "INSERT INTO sleep_period (source, origin, source_id, date, type, bed_start, bed_end, time_in_bed_s, fetched_at) " +
+                    "VALUES ('health_connect', 'com.ouraring.oura', 'abc', '2026-11-26', 'main', '2026-11-25 22:10', '2026-11-26 06:50', 29100, 2)",
+            )
+        }
+        assertTrue(duplicate.isFailure)
+        db.close()
+    }
 }

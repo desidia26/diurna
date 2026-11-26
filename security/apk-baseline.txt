@@ -28,6 +28,7 @@ permission android.permission.USE_EXACT_ALARM
 permission android.permission.USE_FULL_SCREEN_INTENT
 permission android.permission.VIBRATE
 permission android.permission.WAKE_LOCK
+permission android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND
 permission android.permission.health.READ_HEART_RATE
 permission android.permission.health.READ_HEART_RATE_VARIABILITY
 permission android.permission.health.READ_OXYGEN_SATURATION
