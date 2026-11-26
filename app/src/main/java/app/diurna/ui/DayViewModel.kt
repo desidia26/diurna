@@ -5,6 +5,7 @@ import app.diurna.debug.operation
 import app.diurna.AppContainer
 import app.diurna.data.LibraryRepository
 import app.diurna.ai.CardioReading
+import app.diurna.domain.Cardio
 import app.diurna.domain.CardioPiece
 import app.diurna.data.DayEntity
 import app.diurna.data.FoodEntryEntity
@@ -197,12 +198,21 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     fun updatePiece(id: Long, piece: CardioPiece) = io("day.update_piece") { c.days.updatePiece(id, piece) }
 
     /**
-     * Reads a cardio machine's summary screen from an imported photo for the confirm step. The photo is only
-     * needed for the call, so it's deleted straight after reading. Nothing is saved here.
+     * Reads a cardio machine's summary screen from an imported photo for the confirm step. The
+     * photo is only needed for the call, so it's deleted straight after reading. Nothing is saved
+     * here. The work runs in the ViewModel scope so a recomposition can't cancel it mid-read.
      */
-    suspend fun readCardioPhoto(name: String): CardioPhotoResult = withContext(Dispatchers.IO) {
-        PhotoAiReads.readCardioPhoto(name, c.foodPhotos, c.cardioReader, c.supportsImages())
+    val cardioPhoto = CardioPhotoRead()
+
+    fun startCardioPhotoRead(setId: Long, style: Cardio.Style, fallback: CardioPiece, name: String) {
+        cardioPhoto.start(viewModelScope, setId, style, fallback) {
+            withContext(Dispatchers.IO) {
+                PhotoAiReads.readCardioPhoto(name, c.foodPhotos, c.cardioReader, c.supportsImages())
+            }
+        }
     }
+
+    fun dismissCardioPhoto() = cardioPhoto.dismiss()
 
     /** Reads a Nutrition Facts label into meal fields for confirm-before-save. Temp photo deleted after. */
     suspend fun readLabelPhoto(name: String): LabelPhotoResult = withContext(Dispatchers.IO) {
