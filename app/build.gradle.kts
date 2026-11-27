@@ -36,6 +36,7 @@ android {
         versionCode = commitCount
         versionName = "0.$commitCount"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["appLabel"] = "Diurna"
     }
 
     signingConfigs {
@@ -50,6 +51,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // -Ppreview: a separate app beside the real one (own package, data and Health Connect
+            // access), to try unmerged work on a phone. Debug-signed, so it can never update app.daybook.
+            if (providers.gradleProperty("preview").isPresent) {
+                applicationIdSuffix = ".preview"
+                manifestPlaceholders["appLabel"] = "Diurna preview"
+            }
+        }
         release {
             // Shrinking makes the app much smaller and faster; proguard-rules.pro keeps the parts
             // that are only reached by reflection.
