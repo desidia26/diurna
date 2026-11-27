@@ -11,6 +11,7 @@ import androidx.work.WorkerParameters
 import app.diurna.AppContainer
 import app.diurna.container
 import app.diurna.data.health.HealthConnectMissing
+import app.diurna.data.health.HealthConnectNeedsUpdate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -54,6 +55,8 @@ object SleepSync {
             null
         } catch (e: CancellationException) {
             throw e
+        } catch (_: HealthConnectNeedsUpdate) {
+            "Health Connect needs an update from the Play Store"
         } catch (_: HealthConnectMissing) {
             "Health Connect isn't on this phone"
         } catch (_: SecurityException) {

@@ -95,7 +95,7 @@ fun SleepRow(ui: DayViewModel.SleepUi, date: LocalDate, onOpen: () -> Unit) {
         Text("Sleep", Modifier.width(88.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (ui.day.empty) {
-                Hint(row.title + if (date >= ui.today.minusDays(1)) ". ${source(ui.origin)} sends last night after its app syncs." else "")
+                Hint(row.title + if (SleepView.syncPending(date, ui.today)) ". ${source(ui.origin)} sends last night after its app syncs." else "")
             } else {
                 Text(row.title, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium)
                 if (main != null && main.stages != null) StageStrip(main, Modifier.fillMaxWidth().height(8.dp))
@@ -382,8 +382,9 @@ private fun BedChart(bars: List<SleepMetrics.Bed?>) {
         if (known.isEmpty()) return@Canvas
         val marks = known.flatMap { listOfNotNull(it.bed, it.woke, it.up, it.alarm, it.scan) }
         // Whole hours either side, so the labels land on round times.
-        val lo = (marks.min() / 60) * 60
-        val hi = (marks.max() / 60 + 1) * 60
+        // Floored, not truncated: a bed before 18:00 the evening before is negative.
+        val lo = Math.floorDiv(marks.min(), 60) * 60
+        val hi = (Math.floorDiv(marks.max(), 60) + 1) * 60
         val gutter = 40.dp.toPx()
         val plotW = size.width - gutter
         val top = 6.dp.toPx()

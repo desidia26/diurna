@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import app.diurna.domain.SleepJson
 import app.diurna.domain.SleepRules
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
@@ -19,8 +20,8 @@ interface SleepSyncStore {
 }
 
 /**
- * Owns every write to `sleep_period`. A read covers from two days before the last one to now,
- * because sources sync late, and stored nights only change while [SleepRules.updatable].
+ * Owns every write to `sleep_period`. A read starts where [SleepRules.readFrom] says, because
+ * sources sync late, and stored nights only change while [SleepRules.updatable].
  */
 class SleepRepository(
     private val db: AppDatabase,
@@ -36,14 +37,20 @@ class SleepRepository(
 
     fun observe(from: LocalDate, to: LocalDate): Flow<List<SleepPeriodEntity>> = dao.observeRange(from.toString(), to.toString())
 
-    fun observeOrigins(from: LocalDate): Flow<List<SleepOriginCount>> = dao.observeOrigins(from.toString())
+    /** Apps that wrote sleep in the last 30 days, most nights first. One window for every screen, so they agree. */
+    fun observeOrigins(): Flow<List<SleepOriginCount>> =
+        dao.observeOrigins(LocalDateTime.ofInstant(now(), zone()).toLocalDate().minusDays(SleepRules.HISTORY_DAYS).toString())
+
+    /** Whose sleep shows, given the app picked in Setup ([SleepRules.pickOrigin]). */
+    fun observeOrigin(chosen: Flow<String?>): Flow<String?> =
+        combine(chosen, observeOrigins()) { c, origins -> SleepRules.pickOrigin(c, origins.map { it.origin to it.nights }) }
 
     /** Reads and stores. Throws what the source throws; nothing is written then. */
     suspend fun sync(): Result = mutex.withLock {
         val z = zone()
         val at = now()
         val today = LocalDateTime.ofInstant(at, z).toLocalDate()
-        val from = SleepRules.readFrom(store.sleepLastRead(), today)
+        val from = SleepRules.readFrom(store.sleepLastRead(), dao.newestDate(source.key)?.let(LocalDate::parse), today)
         // A night ending on [from] started the evening before.
         val read = source.read(from.minusDays(1).atStartOfDay(z).toInstant(), at)
         val nights = SleepRules.nights(read.sessions, read.hr, read.hrv, read.breath, read.spo2, z)
@@ -59,11 +66,14 @@ class SleepRepository(
                     SleepRules.updatable(LocalDate.parse(existing.date), today) -> { dao.update(row.copy(id = existing.id)); updated++ }
                 }
             }
-            // A night the source no longer has (deleted, or merged into another) goes too, while it can still change.
-            val seen = nights.map { it.sourceId }.toSet()
-            dao.range(from.toString(), today.toString())
-                .filter { it.source == source.key && it.sourceId !in seen && SleepRules.updatable(LocalDate.parse(it.date), today) }
-                .forEach { dao.delete(it.id); removed++ }
+            // A night the source no longer has (deleted, or merged into another) goes too, while it can
+            // still change. Not after a capped read: a session left out isn't gone.
+            if (read.complete) {
+                val seen = nights.map { it.sourceId }.toSet()
+                dao.range(from.toString(), today.toString())
+                    .filter { it.source == source.key && it.sourceId !in seen && SleepRules.updatable(LocalDate.parse(it.date), today) }
+                    .forEach { dao.delete(it.id); removed++ }
+            }
         }
         store.setSleepLastRead(today)
         Result(added, updated, removed)

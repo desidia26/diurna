@@ -212,11 +212,45 @@ class SleepRulesTest {
     @Test fun readsGoBackTwoDaysBeforeTheLastReadOr30DaysTheFirstTime() {
         val today = LocalDate.parse("2026-11-26")
         // Health Connect allows 30 days back without the history permission.
-        assertEquals(LocalDate.parse("2026-10-27"), SleepRules.readFrom(null, today))
-        assertEquals(LocalDate.parse("2026-11-24"), SleepRules.readFrom(today, today))
+        assertEquals(LocalDate.parse("2026-10-27"), SleepRules.readFrom(null, null, today))
+        assertEquals(LocalDate.parse("2026-11-24"), SleepRules.readFrom(today, today, today))
         // A gap reads everything since, up to the same 30 days.
-        assertEquals(LocalDate.parse("2026-10-30"), SleepRules.readFrom(LocalDate.parse("2026-11-01"), today))
-        assertEquals(LocalDate.parse("2026-10-27"), SleepRules.readFrom(LocalDate.parse("2026-09-01"), today))
+        assertEquals(LocalDate.parse("2026-10-30"), SleepRules.readFrom(LocalDate.parse("2026-11-01"), today, today))
+        assertEquals(LocalDate.parse("2026-10-27"), SleepRules.readFrom(LocalDate.parse("2026-09-01"), today, today))
+        // Nothing stored yet: everything Health Connect has.
+        assertEquals(LocalDate.parse("2026-10-27"), SleepRules.readFrom(today, null, today))
+    }
+
+    @Test fun aRingThatHasntSyncedForDaysIsReadFromItsNewestStoredNight() {
+        val today = LocalDate.parse("2026-11-26")
+        // Read hourly, but the newest night is from the 21st: those days may still arrive.
+        assertEquals(LocalDate.parse("2026-11-21"), SleepRules.readFrom(today, LocalDate.parse("2026-11-21"), today))
+        // A restored backup from long ago reads the full 30 days.
+        assertEquals(LocalDate.parse("2026-10-27"), SleepRules.readFrom(today, LocalDate.parse("2026-08-01"), today))
+    }
+
+    @Test fun unknownStagesCountAsNeitherSleepNorAwake() {
+        val s = night("2026-11-25T22:10", typical)
+        // A 40-minute stage the source couldn't classify, after the last real one.
+        val unknown = s.copy(end = s.end.plusSeconds(2400), stages = s.stages + Stage(s.end, s.end.plusSeconds(2400), 0))
+        val n = one(unknown)
+        assertEquals(LocalDateTime.parse("2026-11-26T06:15"), n.wokeAt)
+        assertEquals(420 * 60L, n.totalSleepS)
+        assertEquals(485 * 60L, n.timeInBedS)
+        assertTrue(n.stages.none { it.code == 0 })
+    }
+
+    @Test fun theMainNightIsTheLongestInRealTimeWhenTheClocksChange() {
+        val edt = ZoneOffset.ofHours(-4)
+        // Fall back: 22:00 EDT to 07:00 EST is 10 real hours, 9 on the clock.
+        val t0 = LocalDateTime.parse("2026-10-31T22:00").toInstant(edt)
+        val long = Session("long", oura, t0, t0.plusSeconds(10 * 3600), edt, est, listOf(Stage(t0, t0.plusSeconds(10 * 3600), 4)))
+        // 01:30 EST to 11:00 EST, after the change: 9h 30m, longer on the clock but shorter in real time.
+        val t1 = LocalDateTime.parse("2026-11-01T01:30").toInstant(est)
+        val short = Session("short", oura, t1, t1.plusSeconds(9 * 3600 + 30 * 60), est, est, listOf(Stage(t1, t1.plusSeconds(9 * 3600 + 30 * 60), 4)))
+        val nights = SleepRules.nights(listOf(long, short), emptyList(), emptyList(), emptyList(), emptyList(), est)
+        assertEquals("main", nights.single { it.sourceId == "long" }.type.key)
+        assertEquals("nap", nights.single { it.sourceId == "short" }.type.key)
     }
 
     @Test fun ouraIsTheDefaultSourceThenWhicheverHasTheMostNights() {

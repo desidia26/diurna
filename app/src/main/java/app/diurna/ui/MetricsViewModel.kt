@@ -239,8 +239,7 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
     val sleep: StateFlow<app.diurna.domain.SleepMetrics.Card?> = c.settings.sleep.flatMapLatest { on ->
         if (!on) kotlinx.coroutines.flow.flowOf(null)
         else snapshot.flatMapLatest { (range, s) ->
-            combine(c.sleep.observe(s.from, s.to), c.settings.sleepOrigin, c.sleep.observeOrigins(s.to.minusDays(30))) { rows, chosen, origins ->
-                val origin = app.diurna.domain.SleepRules.pickOrigin(chosen, origins.map { it.origin to it.nights })
+            combine(c.sleep.observe(s.from, s.to), c.sleep.observeOrigin(c.settings.sleepOrigin)) { rows, origin ->
                 val mornings = s.days.associate { LocalDate.parse(it.date) to app.diurna.domain.SleepMetrics.Morning(it.scheduledAlarm, it.scannedAt) }
                 app.diurna.domain.SleepMetrics.card(rows, origin, s.from, s.to, mornings, s.deloads, daily = range == Metrics.Range.W4)
             }

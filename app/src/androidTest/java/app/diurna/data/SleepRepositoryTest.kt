@@ -32,11 +32,12 @@ class SleepRepositoryTest {
         var sessions = listOf<Session>()
         var hr = listOf<Sample>()
         var failure: Exception? = null
+        var complete = true
         val reads = mutableListOf<Pair<Instant, Instant>>()
         override suspend fun read(from: Instant, to: Instant): SleepRead {
             reads += from to to
             failure?.let { throw it }
-            return SleepRead(sessions.filter { it.end >= from && it.start <= to }, hr = hr)
+            return SleepRead(sessions.filter { it.end >= from && it.start <= to }, hr = hr, complete = complete)
         }
     }
     private val store = object : SleepSyncStore {
@@ -79,6 +80,7 @@ class SleepRepositoryTest {
     }
 
     @Test fun firstReadGoesBack30DaysAndLaterReadsTwoDaysBeforeTheLast() = runTest {
+        source.sessions = listOf(night("2026-11-26"))
         repo.sync()
         assertEquals(LocalDate.parse("2026-10-26").atStartOfDay(est).toInstant(), source.reads.last().first)
         now = at("2026-11-28T08:00")
@@ -117,6 +119,28 @@ class SleepRepositoryTest {
         val r = repo.sync()
         assertEquals(1, r.removed)
         assertEquals(listOf("b"), rows().map { it.sourceId })
+    }
+
+    @Test fun aNightTheRingSendsDaysLateIsStillStored() = runTest {
+        source.sessions = listOf(night("2026-11-20"))
+        now = at("2026-11-20T08:00")
+        repo.sync()
+        // Read every hour for days with nothing new, then the ring catches up all at once.
+        for (d in 21..26) { now = at("2026-11-${d}T08:00"); repo.sync() }
+        source.sessions = (20..26).map { night("2026-11-$it") }
+        val r = repo.sync()
+        assertEquals(6, r.added)
+        assertEquals(7, rows().size)
+    }
+
+    @Test fun aCappedReadRemovesNothing() = runTest {
+        source.sessions = listOf(night("2026-11-25", id = "a"), night("2026-11-26", id = "b"))
+        repo.sync()
+        source.sessions = listOf(night("2026-11-26", id = "b"))
+        source.complete = false
+        val r = repo.sync()
+        assertEquals(0, r.removed)
+        assertEquals(2, rows().size)
     }
 
     @Test fun aFailedReadWritesNothingAndKeepsTheLastRead() = runTest {

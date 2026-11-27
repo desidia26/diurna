@@ -43,6 +43,7 @@ import app.diurna.data.health.sleepPermissions
 import app.diurna.domain.HealthInventory
 import app.diurna.domain.HealthInventory.Kind
 import app.diurna.domain.SleepRules
+import app.diurna.domain.SleepView
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
@@ -186,8 +187,7 @@ private fun SourcePicker(chosen: String?, picked: String?, seen: List<String>, o
 @Composable
 private fun LastNight(n: SleepPeriodEntity?) {
     if (n == null) return
-    val asleep = n.totalSleepS?.let { "${it / 3600}h ${(it % 3600 / 60).toString().padStart(2, '0')}m asleep" }
-        ?: "${n.timeInBedS / 3600}h ${(n.timeInBedS % 3600 / 60).toString().padStart(2, '0')}m in bed"
+    val asleep = SleepView.asleep(n)
     val times = n.bedStart.takeLast(5) + " → " + (n.wokeAt?.let { "woke " + it.takeLast(5) + " · up " } ?: "") + n.bedEnd.takeLast(5)
     Column {
         Text("Night to ${n.date}: $asleep", fontWeight = FontWeight.SemiBold)

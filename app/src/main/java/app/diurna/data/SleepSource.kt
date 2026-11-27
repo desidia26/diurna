@@ -21,4 +21,6 @@ data class SleepRead(
     val hrv: List<SleepRules.Sample> = emptyList(),
     val breath: List<SleepRules.Sample> = emptyList(),
     val spo2: List<SleepRules.Sample> = emptyList(),
+    /** False when a cap cut sessions off, so a missing session may still be there. */
+    val complete: Boolean = true,
 )

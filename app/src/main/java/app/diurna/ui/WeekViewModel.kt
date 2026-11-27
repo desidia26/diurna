@@ -6,7 +6,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
-import app.diurna.domain.SleepRules
 import app.diurna.domain.SleepView
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -40,8 +39,7 @@ class WeekViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
         val start = d.with(DayOfWeek.MONDAY)
         return c.settings.sleep.flatMapLatest { on ->
             if (!on) flowOf(emptyMap())
-            else combine(c.sleep.observe(start, start.plusDays(6)), c.settings.sleepOrigin, c.sleep.observeOrigins(start.minusDays(30))) { rows, chosen, origins ->
-                val origin = SleepRules.pickOrigin(chosen, origins.map { it.origin to it.nights })
+            else combine(c.sleep.observe(start, start.plusDays(6)), c.sleep.observeOrigin(c.settings.sleepOrigin)) { rows, origin ->
                 (0L..6L).map { start.plusDays(it) }
                     .mapNotNull { day -> SleepView.chip(SleepView.day(rows, day, origin))?.let { day to it } }
                     .toMap()

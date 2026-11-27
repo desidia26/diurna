@@ -73,7 +73,7 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
     val sleepOrigin = c.settings.sleepOrigin.state(null)
     val sleepStatus = c.settings.sleepStatus.state(null)
     /** Apps that wrote sleep in the last 30 days, most nights first. */
-    val sleepOrigins = c.sleep.observeOrigins(LocalDate.now().minusDays(30))
+    val sleepOrigins = c.sleep.observeOrigins()
         .map { list -> list.map { it.origin to it.nights } }.state(emptyList())
     /** The last three days' nights, for Setup's "last night" line. */
     val recentSleep = minuteTicker.map { it.toLocalDate() }.distinctUntilChanged()

@@ -810,6 +810,9 @@ interface SleepDao {
     @Query("SELECT * FROM sleep_period WHERE source = :source AND source_id = :sourceId")
     suspend fun bySourceId(source: String, sourceId: String): SleepPeriodEntity?
 
+    @Query("SELECT MAX(date) FROM sleep_period WHERE source = :source")
+    suspend fun newestDate(source: String): String?
+
     @Query("SELECT origin, COUNT(*) AS nights FROM sleep_period WHERE date >= :from GROUP BY origin ORDER BY nights DESC")
     fun observeOrigins(from: String): Flow<List<SleepOriginCount>>
 

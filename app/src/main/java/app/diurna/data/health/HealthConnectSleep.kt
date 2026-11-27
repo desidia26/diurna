@@ -29,13 +29,19 @@ class HealthConnectSleep(private val context: Context) : SleepSource {
     private val client by lazy { HealthConnectClient.getOrCreate(context) }
 
     override suspend fun read(from: Instant, to: Instant): SleepRead {
-        if (HealthConnect.availability(context) != HealthConnect.Availability.AVAILABLE) throw HealthConnectMissing()
+        when (HealthConnect.availability(context)) {
+            HealthConnect.Availability.AVAILABLE -> Unit
+            HealthConnect.Availability.NEEDS_UPDATE -> throw HealthConnectNeedsUpdate()
+            HealthConnect.Availability.MISSING -> throw HealthConnectMissing()
+        }
         val granted = client.permissionController.getGrantedPermissions()
         if (HealthConnect.permission(Kind.SLEEP) !in granted) throw SecurityException("Sleep isn't allowed in Health Connect")
         val filter = TimeRangeFilter.between(from, to)
         fun allowed(kind: Kind) = HealthConnect.permission(kind) in granted
 
-        val sessions = readAll(SleepSessionRecord::class, filter, MAX_SESSIONS).map { r ->
+        // Newest first, so a cap drops the oldest nights, which are frozen anyway.
+        val records = readAll(SleepSessionRecord::class, filter, MAX_SESSIONS + 1, newestFirst = true)
+        val sessions = records.take(MAX_SESSIONS).map { r ->
             SleepRules.Session(
                 id = r.metadata.id.take(MAX_ID),
                 origin = origin(r),
@@ -47,7 +53,8 @@ class HealthConnectSleep(private val context: Context) : SleepSource {
             )
         }
         // Samples only inside each session, from the app that wrote it: a watch's all-day heart
-        // rate would otherwise fill the caps long before last night.
+        // rate would otherwise fill the caps long before last night. Capped per session by sample,
+        // not record, since one heart rate record can hold any number of samples.
         val hr = mutableListOf<SleepRules.Sample>()
         val hrv = mutableListOf<SleepRules.Sample>()
         val breath = mutableListOf<SleepRules.Sample>()
@@ -56,7 +63,10 @@ class HealthConnectSleep(private val context: Context) : SleepSource {
             val window = TimeRangeFilter.between(s.start, s.end)
             val from = setOf(DataOrigin(s.origin))
             if (allowed(Kind.HEART_RATE)) readAll(HeartRateRecord::class, window, MAX_PER_NIGHT, from)
-                .flatMapTo(hr) { r -> r.samples.map { SleepRules.Sample(origin(r), it.time, it.beatsPerMinute.toDouble()) } }
+                .asSequence()
+                .flatMap { r -> r.samples.asSequence().map { SleepRules.Sample(origin(r), it.time, it.beatsPerMinute.toDouble()) } }
+                .take(MAX_PER_NIGHT)
+                .toCollection(hr)
             if (allowed(Kind.HRV)) readAll(HeartRateVariabilityRmssdRecord::class, window, MAX_PER_NIGHT, from)
                 .mapTo(hrv) { SleepRules.Sample(origin(it), it.time, it.heartRateVariabilityMillis) }
             if (allowed(Kind.BREATHING)) readAll(RespiratoryRateRecord::class, window, MAX_PER_NIGHT, from)
@@ -64,7 +74,9 @@ class HealthConnectSleep(private val context: Context) : SleepSource {
             if (allowed(Kind.SPO2)) readAll(OxygenSaturationRecord::class, window, MAX_PER_NIGHT, from)
                 .mapTo(spo2) { SleepRules.Sample(origin(it), it.time, it.percentage.value) }
         }
-        return SleepRead(sessions, hr, hrv, breath, spo2)
+        // A nap inside the main night from the same app reads the same samples twice.
+        fun List<SleepRules.Sample>.once() = distinctBy { it.origin to it.at }
+        return SleepRead(sessions, hr.once(), hrv.once(), breath.once(), spo2.once(), complete = records.size <= MAX_SESSIONS)
     }
 
     /** Whether reads from the hourly job will work: the phone supports it and it's allowed. */
@@ -76,12 +88,12 @@ class HealthConnectSleep(private val context: Context) : SleepSource {
     private fun origin(r: Record) = r.metadata.dataOrigin.packageName.take(MAX_ID)
 
     private suspend fun <T : Record> readAll(
-        type: KClass<T>, filter: TimeRangeFilter, cap: Int, origins: Set<DataOrigin> = emptySet(),
+        type: KClass<T>, filter: TimeRangeFilter, cap: Int, origins: Set<DataOrigin> = emptySet(), newestFirst: Boolean = false,
     ): List<T> {
         val out = mutableListOf<T>()
         var token: String? = null
         do {
-            val page = client.readRecords(ReadRecordsRequest(type, filter, dataOriginFilter = origins, pageSize = PAGE, pageToken = token))
+            val page = client.readRecords(ReadRecordsRequest(type, filter, dataOriginFilter = origins, ascendingOrder = !newestFirst, pageSize = PAGE, pageToken = token))
             out += page.records
             token = page.pageToken
         } while (token != null && out.size < cap)
@@ -99,6 +111,8 @@ class HealthConnectSleep(private val context: Context) : SleepSource {
 }
 
 class HealthConnectMissing : Exception("Health Connect isn't available on this phone")
+
+class HealthConnectNeedsUpdate : Exception("Health Connect needs an update")
 
 /** Permissions sleep asks for together: sleep (needed), the rest optional, and background reads when supported. */
 suspend fun sleepPermissions(context: Context): Set<String> {

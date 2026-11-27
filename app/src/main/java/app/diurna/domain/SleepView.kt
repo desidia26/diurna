@@ -43,12 +43,19 @@ object SleepView {
         return "${clock(n.bedStart)} → woke ${clock(woke)}$up"
     }
 
+    /** Last night or the one before, which the source may not have sent yet. */
+    fun syncPending(date: LocalDate, today: LocalDate) = date >= today.minusDays(1) && date <= today
+
     private fun napLength(n: SleepPeriodEntity) = n.totalSleepS ?: n.timeInBedS
 
     fun row(d: Day, date: LocalDate, today: LocalDate): Row {
         if (d.empty) {
             // Oura sends a night after its app syncs, often after the porch scan.
-            return if (date >= today.minusDays(1)) Row("Not synced yet", null) else Row("No sleep recorded", null)
+            return when {
+                date > today -> Row("Not yet", null)
+                syncPending(date, today) -> Row("Not synced yet", null)
+                else -> Row("No sleep recorded", null)
+            }
         }
         val naps = d.naps.sumOf(::napLength).takeIf { it > 0 }?.let { hm(it) + " nap" }
         val title = when {
@@ -75,12 +82,12 @@ object SleepView {
         return Duration.between(woke, up).seconds.takeIf { it > 0 }
     }
 
-    /** Bed to up, for laying out the stage chart. */
-    fun lengthS(n: SleepPeriodEntity): Long {
-        val start = at(n.bedStart) ?: return n.timeInBedS
-        val end = at(n.bedEnd) ?: return n.timeInBedS
-        return Duration.between(start, end).seconds.coerceAtLeast(n.timeInBedS)
-    }
+    /**
+     * Bed to up in real seconds, for laying out the stage chart. Time in bed is real seconds and
+     * woke and up share a zone, so this holds on the night the clocks change, where bed to up in
+     * local clock times is an hour off.
+     */
+    fun lengthS(n: SleepPeriodEntity): Long = n.timeInBedS + (awakeAfterWaking(n) ?: 0)
 
     /** 5-minute slots from bed start; a slot the source sent nothing for is null, so the line breaks. */
     fun slots(points: List<Point>): List<Double?> {

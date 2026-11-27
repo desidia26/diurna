@@ -130,8 +130,7 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
     val sleep: StateFlow<SleepUi?> = combine(c.settings.sleep, c.selectedDate.value) { on, d -> on to d }
         .flatMapLatest { (on, d) ->
             if (!on) kotlinx.coroutines.flow.flowOf(null)
-            else combine(c.sleep.observe(d, d), c.settings.sleepOrigin, c.sleep.observeOrigins(d.minusDays(30)), minuteTicker) { rows, chosen, origins, now ->
-                val origin = app.diurna.domain.SleepRules.pickOrigin(chosen, origins.map { it.origin to it.nights })
+            else combine(c.sleep.observe(d, d), c.sleep.observeOrigin(c.settings.sleepOrigin), minuteTicker) { rows, origin, now ->
                 SleepUi(app.diurna.domain.SleepView.day(rows, d, origin), origin, now.toLocalDate())
             }
         }.state(null)

@@ -80,6 +80,7 @@ object SleepRules {
     const val REM = 6
     const val AWAKE_IN_BED = 7
     private val AwakeCodes = setOf(AWAKE, OUT_OF_BED, AWAKE_IN_BED)
+    private val SleepCodes = setOf(SLEEPING, LIGHT, DEEP, REM)
 
     val MIN_WAKE: Duration = Duration.ofMinutes(10)
     val MAX_SESSION: Duration = Duration.ofHours(24)
@@ -107,10 +108,12 @@ object SleepRules {
         fallbackZone: ZoneId,
     ): List<Night> {
         val nights = sessions.mapNotNull { night(it, hr, hrv, breath, spo2, fallbackZone) }
+        // Real length, not local clock times: those differ on the night the clocks change.
+        val length = sessions.associate { it.id to Duration.between(it.start, it.end) }
         val mains = nights
             .filter { it.bedEnd.toLocalTime() in MainEndsFrom..MainEndsBy }
             .groupBy { it.origin to it.date }
-            .mapNotNull { (_, list) -> list.maxByOrNull { Duration.between(it.bedStart, it.bedEnd) }?.sourceId }
+            .mapNotNull { (_, list) -> list.maxByOrNull { length.getValue(it.sourceId) }?.sourceId }
             .toSet()
         return nights.map { if (it.sourceId in mains) it else it.copy(type = Type.NAP) }
     }
@@ -126,7 +129,7 @@ object SleepRules {
         fun sec(t: Instant) = Duration.between(s.start, t).seconds
 
         val stages = cleanStages(s)
-        val sleep = stages.filter { it.code !in AwakeCodes }
+        val sleep = stages.filter { it.code in SleepCodes }
         val onset = sleep.firstOrNull()?.start
         val woke = sleep.lastOrNull()?.end
         val inBedEnd = woke ?: s.end
@@ -171,8 +174,9 @@ object SleepRules {
         )
     }
 
-    /** In order, inside the session, no empty or backwards stages, capped. */
+    /** In order, inside the session, no empty or backwards stages, capped. Unknown codes are dropped, so they count as neither sleep nor awake. */
     private fun cleanStages(s: Session): List<Stage> = s.stages
+        .filter { it.code in SleepCodes || it.code in AwakeCodes }
         .map { Stage(maxOf(it.start, s.start), minOf(it.end, s.end), it.code) }
         .filter { it.end > it.start }
         .sortedBy { it.start }
@@ -209,10 +213,15 @@ object SleepRules {
     /** A stored night can still change until 3 days after its wake date, then it's frozen. */
     fun updatable(date: LocalDate, today: LocalDate) = !today.isAfter(date.plusDays(UPDATABLE_DAYS))
 
-    /** Sources sync late, so each read starts two days before the last one, within Health Connect's 30 days. */
-    fun readFrom(lastRead: LocalDate?, today: LocalDate): LocalDate {
+    /**
+     * Sources sync late, so each read starts two days before the last one, or at the newest stored
+     * night when that's earlier: a ring that hasn't synced for days still has those nights to send,
+     * and a restored backup may be missing recent ones. Never before Health Connect's 30 days.
+     */
+    fun readFrom(lastRead: LocalDate?, newestStored: LocalDate?, today: LocalDate): LocalDate {
         val earliest = today.minusDays(HISTORY_DAYS)
-        return lastRead?.minusDays(2)?.let { maxOf(it, earliest) } ?: earliest
+        if (lastRead == null || newestStored == null) return earliest
+        return maxOf(minOf(lastRead.minusDays(2), newestStored), earliest)
     }
 
     /**
