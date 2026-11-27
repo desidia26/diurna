@@ -5,10 +5,13 @@ cleartext 127.0.0.1
 cleartext ::1
 cleartext localhost
 exported activity app.diurna.BackupTriggerActivity guarded-by android.permission.DUMP
+exported activity app.diurna.HealthPermissionsActivity
+exported activity app.diurna.HealthPermissionsUsage guarded-by android.permission.START_VIEW_PERMISSION_USAGE
 exported activity app.diurna.MainActivity
 exported receiver androidx.profileinstaller.ProfileInstallReceiver guarded-by android.permission.DUMP
 exported receiver androidx.work.impl.diagnostics.DiagnosticsReceiver guarded-by android.permission.DUMP
 exported receiver app.diurna.alarm.BootReceiver
+exported service androidx.health.platform.client.impl.sdkservice.HealthDataSdkService
 exported service androidx.work.impl.background.systemjob.SystemJobService guarded-by android.permission.BIND_JOB_SERVICE
 permission android.permission.ACCESS_NETWORK_STATE
 permission android.permission.ACTIVITY_RECOGNITION
@@ -25,4 +28,11 @@ permission android.permission.USE_EXACT_ALARM
 permission android.permission.USE_FULL_SCREEN_INTENT
 permission android.permission.VIBRATE
 permission android.permission.WAKE_LOCK
+permission android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND
+permission android.permission.health.READ_HEART_RATE
+permission android.permission.health.READ_HEART_RATE_VARIABILITY
+permission android.permission.health.READ_OXYGEN_SATURATION
+permission android.permission.health.READ_RESPIRATORY_RATE
+permission android.permission.health.READ_RESTING_HEART_RATE
+permission android.permission.health.READ_SLEEP
 permission app.daybook.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION

@@ -270,6 +270,8 @@ class AppContainer(context: Context) {
     val routine = RoutineRepository(db, days, finalizer)
     val scheduler = AlarmScheduler(context, days, settings)
     val lockWallpaper = LockWallpaper(context, db, days, nutrition, steps, settings)
+    val healthConnectSleep = app.diurna.data.health.HealthConnectSleep(context)
+    val sleep = app.diurna.data.SleepRepository(db, healthConnectSleep, settings)
 
     fun supportsImages(): Boolean = gateway.supportsImages(aiProvider.get())
 
@@ -310,6 +312,7 @@ class DiurnaApp : Application() {
             container.backups.scheduleDaily()
             container.scheduler.reschedule()
             container.food.sweepPhotos() // photos from abandoned drafts or deleted entries
+            app.diurna.sleep.SleepSync.schedule(this@DiurnaApp, container.settings.sleep.first())
         }
     }
 }

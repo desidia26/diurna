@@ -235,6 +235,17 @@ class MetricsViewModel(private val c: AppContainer) : ScreenViewModel(c.actions)
         build(range, s, t?.kcal, mode, detailed, microDay)
     }.state(null)
 
+    /** Null while sleep is off in Setup or nothing is stored for the range. */
+    val sleep: StateFlow<app.diurna.domain.SleepMetrics.Card?> = c.settings.sleep.flatMapLatest { on ->
+        if (!on) kotlinx.coroutines.flow.flowOf(null)
+        else snapshot.flatMapLatest { (range, s) ->
+            combine(c.sleep.observe(s.from, s.to), c.sleep.observeOrigin(c.settings.sleepOrigin)) { rows, origin ->
+                val mornings = s.days.associate { LocalDate.parse(it.date) to app.diurna.domain.SleepMetrics.Morning(it.scheduledAlarm, it.scannedAt) }
+                app.diurna.domain.SleepMetrics.card(rows, origin, s.from, s.to, mornings, s.deloads, daily = range == Metrics.Range.W4)
+            }
+        }
+    }.state(null)
+
     /** Exercises with at least one session, so other screens can offer to open their detail. */
     val tracked: StateFlow<Set<Long>> = c.metrics.training
         .map { t -> (t.lifting.map { it.exerciseId } + t.cardio.map { it.exerciseId }).toSet() }

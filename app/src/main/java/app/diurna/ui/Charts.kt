@@ -154,7 +154,10 @@ fun StackedBarChart(
     yMax: Double? = null,
     reference: Double? = null,
     label: (Double) -> String = { it.roundToInt().toString() },
+    /** Bars drawn with an outline round the whole stack (e.g. deload weeks). */
+    outlined: List<Boolean> = emptyList(),
 ) {
+    val outline = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
     val totals = bars.mapNotNull { it?.segments?.sum() }
     val hi = (yMax ?: (totals.maxOrNull() ?: 0.0).let { t ->
         val ref = reference?.takeIf { it > 0 }
@@ -187,6 +190,16 @@ fun StackedBarChart(
                     cornerRadius = CornerRadius(2.dp.toPx()),
                 )
                 from = to
+            }
+            if (outlined.getOrElse(i) { false } && from > 0) {
+                val stroke = 1.5.dp.toPx()
+                drawRoundRect(
+                    outline,
+                    topLeft = Offset(i * slot + gap / 2 - stroke, y(from) - stroke),
+                    size = Size(slot - gap + stroke * 2, y(0.0) - y(from) + stroke),
+                    cornerRadius = CornerRadius(3.dp.toPx()),
+                    style = Stroke(stroke),
+                )
             }
         }
         reference?.takeIf { it > 0 }?.let { r ->

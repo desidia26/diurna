@@ -798,3 +798,32 @@ interface DeloadDao {
     @Query("DELETE FROM deload_week WHERE monday = :monday")
     suspend fun delete(monday: String)
 }
+
+@Dao
+interface SleepDao {
+    @Query("SELECT * FROM sleep_period WHERE date BETWEEN :from AND :to ORDER BY date, bed_start")
+    fun observeRange(from: String, to: String): Flow<List<SleepPeriodEntity>>
+
+    @Query("SELECT * FROM sleep_period WHERE date BETWEEN :from AND :to ORDER BY date, bed_start")
+    suspend fun range(from: String, to: String): List<SleepPeriodEntity>
+
+    @Query("SELECT * FROM sleep_period WHERE source = :source AND source_id = :sourceId")
+    suspend fun bySourceId(source: String, sourceId: String): SleepPeriodEntity?
+
+    @Query("SELECT MAX(date) FROM sleep_period WHERE source = :source")
+    suspend fun newestDate(source: String): String?
+
+    @Query("SELECT origin, COUNT(*) AS nights FROM sleep_period WHERE date >= :from GROUP BY origin ORDER BY nights DESC")
+    fun observeOrigins(from: String): Flow<List<SleepOriginCount>>
+
+    @Insert
+    suspend fun insert(row: SleepPeriodEntity): Long
+
+    @Update
+    suspend fun update(row: SleepPeriodEntity)
+
+    @Query("DELETE FROM sleep_period WHERE id = :id")
+    suspend fun delete(id: Long)
+}
+
+data class SleepOriginCount(val origin: String, val nights: Int)

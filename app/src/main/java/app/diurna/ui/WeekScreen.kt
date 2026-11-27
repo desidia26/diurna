@@ -82,6 +82,7 @@ private fun WeekRow(d: WeekDayUi, today: LocalDate, deload: Boolean, onClick: ()
                     d.workoutName != null -> Chip("✓ ${d.workoutName}" + if (deload) " · deload" else "", Tone.Sky)
                     d.plannedName != null -> Chip(d.plannedName, if (d.date < today) Tone.Warn else Tone.Neutral) // planned but not logged
                 }
+                d.sleep?.let { Chip("☾ $it") }
             }
             Column(horizontalAlignment = Alignment.End) {
                 d.steps?.let {

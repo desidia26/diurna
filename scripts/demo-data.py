@@ -4,7 +4,7 @@ Run by scripts/demo-data; not meant to be run on its own.
     python3 demo-data.py <daybook.db> <today yyyy-MM-dd> [weeks]
 
 Writes the routine, three workout templates, and one row per day back from yesterday: morning scan,
-weight, steps, mood and energy, food, and on workout days the lifted sets. Past days are written
+weight, steps, mood and energy, food, and on workout days the lifted sets; plus 30 days of sleep. Past days are written
 already finalized, as DayFinalizer would leave them. Today gets only a weigh-in and a porch scan.
 Seeded, so every run with the same date gives the same data.
 """
@@ -186,6 +186,70 @@ while d <= today:
         cur.execute("INSERT INTO metric_log_entry (metric_id, date, time, note) VALUES (?, ?, ?, ?)",
                     (headache, d.isoformat(), t, note))
     d += timedelta(days=1)
+
+# Sleep for the last 30 days, shaped like what Oura writes to Health Connect: one session a night
+# in 5-minute stages, heart rate and HRV every 5 minutes with gaps, and an awake stretch before the
+# session ends. Two nights are missing (ring off). Shown only once Sleep is on in Setup.
+# Its own random stream, so adding it didn't reshuffle the history above.
+sleep_rng = random.Random(today_text + "-sleep")
+AWAKE, LIGHT, DEEP, REM = 1, 4, 5, 6
+missing = set(sleep_rng.sample(range(2, 30), 2))
+for back in range(29, -1, -1):
+    d = today - timedelta(days=back)
+    if back in missing:
+        continue
+    alarm, _ = ROUTINE[d.isoweekday()]
+    bed = datetime.combine(d - timedelta(days=1), datetime.strptime("22:15", "%H:%M").time()) \
+        + timedelta(minutes=5 * round(sleep_rng.gauss(0, 7)))
+    woke_target = datetime.combine(d, datetime.strptime(alarm, "%H:%M").time()) \
+        + timedelta(minutes=5 * sleep_rng.randint(-4, 1))
+    blocks = [AWAKE] * sleep_rng.randint(1, 5)
+    while bed + timedelta(minutes=5 * len(blocks)) < woke_target:
+        cycle = len(blocks) * 5 // 90
+        deep = max(0, 5 - cycle * 2) + sleep_rng.randint(0, 2)
+        rem = 2 + cycle + sleep_rng.randint(0, 2)
+        blocks += [LIGHT] * sleep_rng.randint(3, 6) + [DEEP] * deep + [LIGHT] * sleep_rng.randint(2, 4) + [REM] * rem
+        if sleep_rng.random() < 0.5:
+            blocks += [AWAKE]
+        if sleep_rng.random() < 0.12:
+            blocks += [AWAKE] * sleep_rng.randint(2, 6)
+    n_sleep = int((woke_target - bed).total_seconds() // 300)
+    blocks = blocks[:n_sleep]
+    while blocks and blocks[-1] == AWAKE:
+        blocks.pop()
+    tail = sleep_rng.randint(1, 11)
+    blocks += [AWAKE] * tail
+    # Merge runs into stages, as the app stores them: [start_s, end_s, code] from bed start.
+    stages = []
+    for i, c in enumerate(blocks):
+        if stages and stages[-1][2] == c:
+            stages[-1][1] = (i + 1) * 300
+        else:
+            stages.append([i * 300, (i + 1) * 300, c])
+    sleep_idx = [i for i, c in enumerate(blocks) if c != AWAKE]
+    onset, last = sleep_idx[0], sleep_idx[-1]
+    woke_s = (last + 1) * 300
+    total = len(sleep_idx) * 300
+    awake_s = sum(300 for i, c in enumerate(blocks) if c == AWAKE and i <= last)
+    wakes = sum(1 for st in stages if st[2] == AWAKE and st[0] > onset * 300 and st[1] <= woke_s and st[1] - st[0] >= 600)
+    hr, hrv = [], []
+    for i in range(len(blocks)):
+        if 40 <= i < 46 and sleep_rng.random() < 0.3:
+            continue
+        depth = {AWAKE: 8, LIGHT: 2, REM: 4, DEEP: -3}[blocks[i]]
+        hr.append([i * 300, round(54 + depth - 4 * (i / len(blocks)) + sleep_rng.gauss(0, 1.2), 1)])
+        hrv.append([i * 300, round(max(15, 75 - depth * 3 + sleep_rng.gauss(0, 10)), 1)])
+    fmt = lambda t: t.strftime("%Y-%m-%d %H:%M")
+    js = lambda rows: "[" + ",".join("[" + ",".join(("%g" % v) for v in r) + "]" for r in rows) + "]"
+    cur.execute(
+        "INSERT INTO sleep_period (source, origin, source_id, date, type, bed_start, woke_at, bed_end, time_in_bed_s,"
+        " total_sleep_s, awake_s, light_s, deep_s, rem_s, latency_s, efficiency, awakenings, avg_hr, lowest_hr, avg_hrv,"
+        " stages, hr_samples, hrv_samples, fetched_at) VALUES (?, 'com.ouraring.oura', ?, ?, 'main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("health_connect", "demo-" + d.isoformat(), d.isoformat(), fmt(bed), fmt(bed + timedelta(seconds=woke_s)),
+         fmt(bed + timedelta(seconds=len(blocks) * 300)), woke_s, total, awake_s,
+         blocks.count(LIGHT) * 300, blocks.count(DEEP) * 300, blocks.count(REM) * 300, onset * 300,
+         total / woke_s, wakes, round(sum(v for _, v in hr) / len(hr), 1), min(v for _, v in hr),
+         round(sum(v for _, v in hrv) / len(hrv), 1), js(stages), js(hr), js(hrv), millis(d, "07:02")))
 
 con.commit()
 con.execute("PRAGMA wal_checkpoint(TRUNCATE)")

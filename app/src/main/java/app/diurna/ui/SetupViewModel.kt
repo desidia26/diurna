@@ -68,6 +68,29 @@ class SetupViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
         todaySteps.value = c.steps.stepsOn(java.time.LocalDate.now())
     }
 
+    // Sleep
+    val sleepOn = c.settings.sleep.state(false)
+    val sleepOrigin = c.settings.sleepOrigin.state(null)
+    val sleepStatus = c.settings.sleepStatus.state(null)
+    /** Apps that wrote sleep in the last 30 days, most nights first. */
+    val sleepOrigins = c.sleep.observeOrigins()
+        .map { list -> list.map { it.origin to it.nights } }.state(emptyList())
+    /** The last three days' nights, for Setup's "last night" line. */
+    val recentSleep = minuteTicker.map { it.toLocalDate() }.distinctUntilChanged()
+        .flatMapLatest { c.sleep.observe(it.minusDays(2), it) }.state(emptyList())
+    val sleepReading = MutableStateFlow(false)
+    fun setSleep(on: Boolean) = io("setup.set_sleep") {
+        c.settings.setSleep(on)
+        app.diurna.sleep.SleepSync.schedule(c.appContext, on)
+        if (on) readSleep()
+    }
+    fun setSleepOrigin(origin: String?) = io("setup.set_sleep_origin") { c.settings.setSleepOrigin(origin) }
+    fun readSleepNow() = io("setup.read_sleep") { readSleep() }
+    private suspend fun readSleep() {
+        sleepReading.value = true
+        try { app.diurna.sleep.SleepSync.run(c) } finally { sleepReading.value = false }
+    }
+
     // Check-in metrics
     val dailyMetrics = c.dailyMetrics.rows.state(emptyList())
     suspend fun addMetric(def: DailyMetrics.Def): Result = c.dailyMetrics.add(def)

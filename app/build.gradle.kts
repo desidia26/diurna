@@ -36,6 +36,7 @@ android {
         versionCode = commitCount
         versionName = "0.$commitCount"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["appLabel"] = "Diurna"
     }
 
     signingConfigs {
@@ -50,6 +51,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // -Ppreview: a separate app beside the real one (own package, data and Health Connect
+            // access), to try unmerged work on a phone. Debug-signed, so it can never update app.daybook.
+            if (providers.gradleProperty("preview").isPresent) {
+                applicationIdSuffix = ".preview"
+                manifestPlaceholders["appLabel"] = "Diurna preview"
+            }
+        }
         release {
             // Shrinking makes the app much smaller and faster; proguard-rules.pro keeps the parts
             // that are only reached by reflection.
@@ -134,11 +143,14 @@ dependencies {
         implementation(libs.httpclient5)
         implementation(libs.httpcore5)
         implementation(libs.httpcore5.h2)
+        // Health Connect brings Guava 32.0.0, which has a high advisory (GHSA-xxph-c9ww-hj94).
+        implementation(libs.guava)
         // AndroidX brings in 1.7.3, but room-testing's serializers need 1.8+; device tests run on
         // the app's copy, so it has to be raised here (AbstractMethodError in MigrationTest otherwise).
         implementation(libs.kotlinx.serialization.core)
     }
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.health.connect.client)
     // Declared so the app and its device tests share one version; otherwise the app gets whatever
     // AndroidX pulls in, and kotlinx-coroutines-test calls methods that version lacks.
     implementation(libs.kotlinx.coroutines.android)

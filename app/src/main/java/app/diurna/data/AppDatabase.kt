@@ -34,8 +34,9 @@ import app.diurna.domain.DailyMetrics
         NutrientValueEntity::class,
         DeloadWeekEntity::class,
         MetricLogEntryEntity::class,
+        SleepPeriodEntity::class,
     ],
-    version = 23,
+    version = 24,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDatabase.Migration1To2::class),
@@ -78,6 +79,8 @@ import app.diurna.domain.DailyMetrics
         AutoMigration(from = 21, to = 22),
         // v23: log metrics' timed entries.
         AutoMigration(from = 22, to = 23),
+        // v24: sleep sessions read from Health Connect (#117).
+        AutoMigration(from = 23, to = 24),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -95,6 +98,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun dailyMetricDao(): DailyMetricDao
     abstract fun nutrientValueDao(): NutrientValueDao
     abstract fun deloadDao(): DeloadDao
+    abstract fun sleepDao(): SleepDao
 
     /** v2: food estimates, body weight, finalized-day snapshots. The v1 estimate columns were never written. */
     @DeleteColumn(tableName = "food_entry", columnName = "kcal_estimate")

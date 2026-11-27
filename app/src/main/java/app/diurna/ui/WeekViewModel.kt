@@ -3,7 +3,10 @@ package app.diurna.ui
 import app.diurna.AppContainer
 import app.diurna.domain.AlarmRules
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
+import app.diurna.domain.SleepView
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.mapLatest
@@ -19,6 +22,8 @@ data class WeekDayUi(
     val kcal: Int?,
     val steps: Long? = null,
     val stepGoal: Int = 10_000,
+    /** Asleep in the night ending that morning; null with sleep off or no data. */
+    val sleep: String? = null,
 )
 
 data class WeekUi(val start: LocalDate, val today: LocalDate, val days: List<WeekDayUi>, val deload: Boolean = false) {
@@ -29,7 +34,24 @@ data class WeekUi(val start: LocalDate, val today: LocalDate, val days: List<Wee
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WeekViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
-    val week: StateFlow<WeekUi?> = c.selectedDate.value.flatMapLatest { d ->
+    /** Hours asleep by wake day, for the week holding [d]; empty while sleep is off. */
+    private fun sleepFor(d: LocalDate): Flow<Map<LocalDate, String>> {
+        val start = d.with(DayOfWeek.MONDAY)
+        return c.settings.sleep.flatMapLatest { on ->
+            if (!on) flowOf(emptyMap())
+            else combine(c.sleep.observe(start, start.plusDays(6)), c.sleep.observeOrigin(c.settings.sleepOrigin)) { rows, origin ->
+                (0L..6L).map { start.plusDays(it) }
+                    .mapNotNull { day -> SleepView.chip(SleepView.day(rows, day, origin))?.let { day to it } }
+                    .toMap()
+            }
+        }
+    }
+
+    val week: StateFlow<WeekUi?> = c.selectedDate.value.flatMapLatest { d -> weekOf(d).combine(sleepFor(d)) { ui, sleep ->
+        ui.copy(days = ui.days.map { it.copy(sleep = sleep[it.date]) })
+    } }.state(null)
+
+    private fun weekOf(d: LocalDate): Flow<WeekUi> = run {
         val start = d.with(DayOfWeek.MONDAY)
         combine(
             combine(c.days.observeWeek(start), c.routine.observeRoutine(), c.routine.observeTemplates(), ::Triple),
@@ -55,7 +77,7 @@ class WeekViewModel(private val c: AppContainer) : ScreenViewModel(c.actions) {
                 )
             })
         }
-    }.state(null)
+    }
 
     fun setDeload(on: Boolean) = io("week.set_deload") { c.days.setDeload(c.selectedDate.value.value, on) }
 

@@ -72,7 +72,7 @@ private val GroupTitles = mapOf(
 /** Every page key [SetupScreen] opens; a test checks each makes a valid debug event name. */
 internal val SetupPages = listOf(
     "alarm", "food", "food/meals", "food/targets", "food/estimates", "food/usda", "food/backfill",
-    "training", "training/exercises", "checkin", "checkin/metrics", "data", "data/changes",
+    "training", "training/exercises", "checkin", "checkin/metrics", "sleep", "data", "data/changes", "data/health",
 )
 
 /** Event names allow no "/", so "food/targets" logs as setup.page.food.targets. */
@@ -122,13 +122,16 @@ fun SetupScreen(vm: SetupViewModel, library: LibraryViewModel, contentPadding: P
                 item { StepsCard(vm) }
             }
             "checkin/metrics" -> DailyMetricsPage(vm, up)
+            "sleep" -> CardPage(contentPadding, up) { SleepCard(vm) }
             "data" -> GroupPage("Data", contentPadding, up) {
                 item { BackupsCard(vm) }
                 item { LockScreenCard(vm) }
+                item { LinkList(listOf(LinkRow("Health Connect", "What your ring or watch writes there") { open("data/health") })) }
                 item { WhatsNewCard(vm.changelog, onAll = { open("data/changes") }) }
                 item { app.diurna.debug.DebugCard(context.container.debug) }
             }
             "data/changes" -> ChangesPage(vm.changelog, up)
+            "data/health" -> CardPage(contentPadding, up) { HealthConnectCard() }
             else -> SetupMain(vm, library, checks, contentPadding, open)
         }
     }
@@ -179,6 +182,10 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, checks: Lis
     val metrics by vm.dailyMetrics.collectAsStateWithLifecycle()
     val stepGoal by vm.stepGoal.collectAsStateWithLifecycle()
     val lockOn by vm.lockWallpaper.collectAsStateWithLifecycle()
+    val sleepOn by vm.sleepOn.collectAsStateWithLifecycle()
+    val sleepOrigin by vm.sleepOrigin.collectAsStateWithLifecycle()
+    val sleepOrigins by vm.sleepOrigins.collectAsStateWithLifecycle()
+    val sleepStatus by vm.sleepStatus.collectAsStateWithLifecycle()
 
     val attention = SetupAttention.items(
         porchConfirmed = confirmed ?: true,
@@ -223,6 +230,11 @@ private fun SetupMain(vm: SetupViewModel, library: LibraryViewModel, checks: Lis
                 LinkRow("Food", foodSummary, fix(Group.FOOD)) { onOpen("food") },
                 LinkRow("Training", plural(catalog.size, "exercise") + " · cardio " + if (cardio) "on" else "off", fix(Group.TRAINING)) { onOpen("training") },
                 LinkRow("Check-in & steps", plural(active, "metric") + " · goal %,d steps".format(stepGoal), fix(Group.CHECK_IN)) { onOpen("checkin") },
+                LinkRow(
+                    "Sleep",
+                    sleepSummary(sleepOn, app.diurna.domain.SleepRules.pickOrigin(sleepOrigin, sleepOrigins), sleepStatus),
+                    if (sleepOn && sleepStatus?.problem != null) "Check" to Tone.Warn else null,
+                ) { onOpen("sleep") },
                 LinkRow(
                     "Data",
                     (lastBackup?.let { "Last backup ${it.format(BackupDay)}" } ?: "No backup yet") + " · lock screen " + if (lockOn) "on" else "off",
