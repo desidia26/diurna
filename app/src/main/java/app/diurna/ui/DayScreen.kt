@@ -131,6 +131,19 @@ fun DayScreen(
             onDelete = { id -> vm.deleteEntry(id); editing = null },
         )
     }
+    // Held on the Day screen, not the piece row, so a folded card or a recomposition still shows it.
+    val cardioPhoto by vm.cardioPhoto.session.collectAsStateWithLifecycle()
+    cardioPhoto?.result?.let { result ->
+        val session = cardioPhoto
+        if (session != null) CardioDialog(
+            PhotoAiReads.cardioEditFrom(result, session.fallback),
+            session.style,
+            onDismiss = { vm.dismissCardioPhoto() },
+        ) { piece ->
+            vm.updatePiece(session.setId, piece)
+            vm.dismissCardioPhoto()
+        }
+    }
     val sleep by vm.sleep.collectAsStateWithLifecycle()
     var sleepOpen by remember(s.date) { mutableStateOf(false) }
     val listPadding = PaddingValues(
