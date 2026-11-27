@@ -63,6 +63,7 @@ private const val TOP_LIFTS = 5
 fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues, onClose: () -> Unit) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val detail by vm.detail.collectAsStateWithLifecycle()
+    val sleep by vm.sleep.collectAsStateWithLifecycle()
     val cardioDetail by vm.cardioDetail.collectAsStateWithLifecycle()
     val m = ui ?: return
     BackHandler(enabled = detail != null || cardioDetail != null, onBack = onClose)
@@ -92,6 +93,7 @@ fun MetricsScreen(vm: MetricsViewModel, contentPadding: PaddingValues, onClose: 
         item { TrainingCardView(m.training) }
         // Only once cardio has been logged; lifting-only Metrics is unchanged.
         m.cardio?.let { c -> item { CardioCardView(c, onOpen = vm::openCardio) } }
+        sleep?.let { card -> item { SleepCardView(card, m.from, m.to) } }
         item {
             LiftsCard(if (allLifts) m.lifts else m.lifts.take(TOP_LIFTS), more = m.lifts.size - TOP_LIFTS, expanded = allLifts,
                 onToggle = { allLifts = !allLifts }, onOpen = vm::openExercise)

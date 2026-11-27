@@ -123,6 +123,18 @@ class DayViewModel(private val c: AppContainer) : ScreenViewModel(c.actions), Ph
             }
     }.state(null)
 
+    /** Sleep ending on the selected day, from the source picked in Setup; null while sleep is off. */
+    data class SleepUi(val day: app.diurna.domain.SleepView.Day, val origin: String?, val today: LocalDate)
+
+    val sleep: StateFlow<SleepUi?> = combine(c.settings.sleep, c.selectedDate.value) { on, d -> on to d }
+        .flatMapLatest { (on, d) ->
+            if (!on) kotlinx.coroutines.flow.flowOf(null)
+            else combine(c.sleep.observe(d, d), c.settings.sleepOrigin, c.sleep.observeOrigins(d.minusDays(30)), minuteTicker) { rows, chosen, origins, now ->
+                val origin = app.diurna.domain.SleepRules.pickOrigin(chosen, origins.map { it.origin to it.nights })
+                SleepUi(app.diurna.domain.SleepView.day(rows, d, origin), origin, now.toLocalDate())
+            }
+        }.state(null)
+
     val armed = c.scheduler.state
     val online = c.network.online
     val exerciseNames = c.settings.cardio.flatMapLatest { c.routine.observeExerciseNames(it) }.state(emptyList())

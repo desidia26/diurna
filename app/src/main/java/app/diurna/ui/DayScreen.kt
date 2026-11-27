@@ -1,5 +1,8 @@
 package app.diurna.ui
 
+import androidx.activity.compose.BackHandler
+import app.diurna.domain.SleepView
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -128,12 +131,21 @@ fun DayScreen(
             onDelete = { id -> vm.deleteEntry(id); editing = null },
         )
     }
+    val sleep by vm.sleep.collectAsStateWithLifecycle()
+    var sleepOpen by remember(s.date) { mutableStateOf(false) }
+    val listPadding = PaddingValues(
+        start = 16.dp, end = 16.dp, top = contentPadding.calculateTopPadding() + 16.dp,
+        bottom = contentPadding.calculateBottomPadding() + 16.dp,
+    )
+    val openSleep = sleep?.takeIf { sleepOpen && !it.day.empty }
+    BackHandler(enabled = openSleep != null) { sleepOpen = false }
+    if (openSleep != null) {
+        SleepScreen(openSleep, s.date, listPadding) { sleepOpen = false }
+        return
+    }
     Box(Modifier.fillMaxSize()) {
     LazyColumn(
-        contentPadding = PaddingValues(
-            start = 16.dp, end = 16.dp, top = contentPadding.calculateTopPadding() + 16.dp,
-            bottom = contentPadding.calculateBottomPadding() + 16.dp,
-        ),
+        contentPadding = listPadding,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (armed == ArmedState.NeedsPorchCode) {
@@ -147,7 +159,7 @@ fun DayScreen(
                 }
             }
         }
-        item { MorningCard(s, vm) }
+        item { MorningCard(s, vm, sleep) { sleepOpen = true } }
         item { WorkoutCard(s, vm, tracked, onViewMetrics) }
         item { FoodCard(s, vm) }
         if (s.date <= s.today) item { CheckInCard(s, vm) { editing = it } }
@@ -203,14 +215,15 @@ private fun LabeledRow(label: String, value: @Composable () -> Unit, trailing: @
 }
 
 @Composable
-private fun MorningCard(s: DayUi, vm: DayViewModel) {
+private fun MorningCard(s: DayUi, vm: DayViewModel, sleep: DayViewModel.SleepUi?, onOpenSleep: () -> Unit) {
     var picking by remember { mutableStateOf<String?>(null) } // "alarm" or "manual"
     val off = s.alarm == AlarmRules.OFF
     val override = s.day?.alarmOverride
     val prev = s.date.minusDays(1)
     val cutoff = "10pm ${prev.format(WeekdayShort)} ${prev.short()}"
 
-    val morningSummary = DayText.morning(s.morning, s.alarm, s.day?.scannedAt)
+    val morningSummary = DayText.morning(s.morning, s.alarm, s.day?.scannedAt) +
+        (sleep?.let { SleepView.summary(it.day) }?.let { " · $it" } ?: "")
     SectionCard("Morning", chip = { MorningChip(s.morning) }, fold = rememberFold(vm, "morning", morningSummary)) {
         LabeledRow(
             "Alarm",
@@ -239,6 +252,8 @@ private fun MorningCard(s: DayUi, vm: DayViewModel) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             WeightRow(s, vm)
             StepsRow(vm)
+            // Only with sleep on in Setup; otherwise the card reads as it always has.
+            if (sleep != null) SleepRow(sleep, s.date, onOpenSleep)
         }
         if (s.date <= s.today && !off) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
