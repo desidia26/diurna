@@ -134,6 +134,8 @@ dependencies {
         implementation(libs.httpclient5)
         implementation(libs.httpcore5)
         implementation(libs.httpcore5.h2)
+        // Health Connect brings Guava 32.0.0, which has a high advisory (GHSA-xxph-c9ww-hj94).
+        implementation(libs.guava)
         // AndroidX brings in 1.7.3, but room-testing's serializers need 1.8+; device tests run on
         // the app's copy, so it has to be raised here (AbstractMethodError in MigrationTest otherwise).
         implementation(libs.kotlinx.serialization.core)
